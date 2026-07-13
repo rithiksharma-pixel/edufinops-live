@@ -1,0 +1,163 @@
+/* =========================================================
+   SHARED DESIGN TOKENS — v2, "Ledger" identity
+   Grounded in what this product actually is: a ledger of loans
+   moving through certified checkpoints, not a generic SaaS console.
+   ========================================================= */
+:root {
+  --paper:          #FAFAF7;
+  --paper-raised:   #FFFFFF;
+  --paper-sunken:   #F1EFE7;
+
+  --ink-900:        #15181D;
+  --ink-700:        #454B54;
+  --ink-500:        #767C85;
+  --ink-300:        #C7C4B8;
+
+  --navy:           #1B3A6B;
+  --navy-ink:       #FFFFFF;
+  --navy-soft:      #E8EDF5;
+  --navy-soft-ink:  #1B3A6B;
+
+  --stamp-green:        #2F6B4F;
+  --stamp-green-soft:   #E3EEE8;
+  --stamp-green-soft-ink: #1F4A37;
+
+  --amber:          #B8752B;
+  --amber-soft:     #F5EBDC;
+  --amber-soft-ink: #7A4D1B;
+
+  --rose:           #A83A3A;
+  --rose-soft:      #F5E4E3;
+  --rose-soft-ink:  #7A2A2A;
+
+  --line:           #E2DFD3;
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      14px;
+
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-ui:      'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'JetBrains Mono', monospace;
+
+  --shadow-drawer: -8px 0 24px rgba(21,24,29,0.08);
+  --shadow-modal:  0 12px 32px rgba(21,24,29,0.16);
+
+  /* Legacy variable names kept as aliases so every existing app
+     (which references --bg-page, --accent, --danger, etc.) picks up
+     the new palette automatically with zero per-app code changes. */
+  --bg-page: var(--paper);
+  --bg-surface: var(--paper-raised);
+  --bg-sidebar: var(--navy);
+  --bg-hover: var(--paper-sunken);
+  --accent: var(--navy);
+  --accent-ink: var(--navy-ink);
+  --accent-soft: var(--navy-soft);
+  --accent-soft-ink: var(--navy-soft-ink);
+  --success: var(--stamp-green);
+  --success-soft: var(--stamp-green-soft);
+  --success-soft-ink: var(--stamp-green-soft-ink);
+  --warning: var(--amber);
+  --warning-soft: var(--amber-soft);
+  --warning-soft-ink: var(--amber-soft-ink);
+  --danger: var(--rose);
+  --danger-soft: var(--rose-soft);
+  --danger-soft-ink: var(--rose-soft-ink);
+  --border: var(--line);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-ui);
+  color: var(--ink-900);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  font-weight: 560;
+  letter-spacing: -0.01em;
+}
+
+.mono, .amount, td.amount, .stat-card .value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button, input, select, textarea { font-family: inherit; font-size: inherit; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 14px; font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.btn-primary { background: var(--navy); color: white; }
+.btn-primary:hover { background: #14305A; }
+.btn-ghost { background: transparent; color: var(--ink-700); border-color: var(--line); }
+.btn-ghost:hover { background: var(--paper-sunken); }
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 4px;
+  font-size: 12px; font-weight: 500;
+  font-family: var(--font-mono);
+  position: relative;
+}
+.badge-neutral   { background: var(--paper-sunken); color: var(--ink-700); }
+.badge-accent    { background: var(--navy-soft); color: var(--navy-soft-ink); }
+.badge-success   { background: var(--stamp-green-soft); color: var(--stamp-green-soft-ink); }
+.badge-warning   { background: var(--amber-soft); color: var(--amber-soft-ink); }
+.badge-danger    { background: var(--rose-soft); color: var(--rose-soft-ink); }
+
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--ink-900); color: white;
+  padding: 11px 20px; border-radius: var(--radius-md);
+  font-size: 13px; z-index: 200;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+.toast.error { background: var(--rose); }
+
+/* ---------------------------------------------------------
+   SIGNATURE ELEMENT — the stage stamp.
+   Used in exactly one place: the deal timeline, when a stage
+   changes. An oval seal with serif text and a rotated tilt,
+   echoing a passport/certification stamp — a loan's journey
+   through checkpoints, made literal. Not reused as decoration
+   anywhere else in the product.
+   --------------------------------------------------------- */
+.stage-stamp {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  width: 64px; height: 64px;
+  border: 2.5px solid var(--stamp-color, var(--navy));
+  border-radius: 50%;
+  color: var(--stamp-color, var(--navy));
+  transform: rotate(-8deg);
+  position: relative;
+}
+.stage-stamp::before {
+  content: '';
+  position: absolute; inset: 4px;
+  border: 1px solid var(--stamp-color, var(--navy));
+  border-radius: 50%;
+  opacity: 0.5;
+}
+.stage-stamp .stamp-text {
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 0 6px;
+}

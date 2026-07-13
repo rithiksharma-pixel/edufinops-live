@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Export / Import Data · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="css/users-admin.css" />
+</head>
+<body>
+  <div class="page">
+    <div style="margin-bottom:14px;"><a href="users-admin.html" style="font-size:13px;color:var(--accent);text-decoration:none;">← Manage Users</a></div>
+    <header class="page-header">
+      <div><h1>Export / Import data</h1><p class="subtitle">Bulk data in and out — for migrations, backups, or offline analysis.</p></div>
+    </header>
+
+    <section class="table-card" style="padding:20px;margin-bottom:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Export</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="btnExportLeads"><i class="fa-solid fa-file-arrow-down"></i> Export leads (CSV)</button>
+        <button class="btn btn-ghost" id="btnExportDeals"><i class="fa-solid fa-file-arrow-down"></i> Export deals (CSV)</button>
+      </div>
+    </section>
+
+    <section class="table-card" style="padding:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Import leads</h2>
+      <p class="subtitle" style="margin-bottom:14px;">CSV must have these columns: <code>student_name, student_phone, student_email, course_name, university_name, destination_country, loan_amount_requested, source_name</code>. <code>source_name</code> must exactly match an existing lead source's name.</p>
+      <button class="btn btn-ghost" id="btnDownloadTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
+      <div class="form-field"><input type="file" id="importFileInput" accept=".csv" /></div>
+      <button class="btn btn-primary" id="btnValidateImport">Validate file</button>
+
+      <div id="importPreview" style="margin-top:18px;"></div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="../../shared/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script type="module" src="js/data-tools.js"></script>
+</body>
+</html>

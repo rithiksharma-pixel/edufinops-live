@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Students · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="css/portal.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><span class="brand-mark">E</span><span class="brand-name">EduFin<span class="brand-accent">Ops</span></span></div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" href="index.html"><i class="fa-solid fa-user-graduate"></i> My Students</a>
+        <a class="nav-item" href="profile.html"><i class="fa-solid fa-id-badge"></i> Profile</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip"><div class="avatar" id="avatar">–</div><div class="user-meta"><span class="user-name" id="userName">Loading…</span><span class="user-role">Consultant</span></div></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="main-header">
+        <div><h1>My students</h1><p class="subtitle">Every lead you've submitted, and where it stands.</p></div>
+        <button class="btn btn-primary" id="btnAddLead"><i class="fa-solid fa-plus"></i> Add lead</button>
+      </header>
+
+      <section class="stat-cards" id="cpDashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;"></section>
+
+      <input type="text" id="searchInput" class="search-input" placeholder="Search by name or phone" />
+
+      <div class="table-card">
+        <table class="data-table">
+          <thead><tr><th>Student</th><th>Course / University</th><th>Loan amount</th><th>Status</th><th>Submitted</th></tr></thead>
+          <tbody id="leadsBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="addLeadOverlay" hidden>
+    <div class="modal">
+      <div class="modal-header"><h2>Add a student</h2><button class="icon-btn" id="btnCloseAdd"><i class="fa-solid fa-xmark"></i></button></div>
+      <form id="addLeadForm" class="modal-body" novalidate>
+        <div class="form-grid">
+          <div class="form-field"><label>Student name *</label><input name="student_name" type="text" required /><span class="field-error" data-error-for="student_name"></span></div>
+          <div class="form-field"><label>Phone *</label><input name="student_phone" type="tel" required /><span class="field-error" data-error-for="student_phone"></span></div>
+          <div class="form-field"><label>Email</label><input name="student_email" type="email" /><span class="field-error" data-error-for="student_email"></span></div>
+          <div class="form-field"><label>Course</label><input name="course_name" type="text" /></div>
+          <div class="form-field"><label>University</label><input name="university_name" type="text" /></div>
+          <div class="form-field"><label>Destination country</label><input name="destination_country" type="text" /></div>
+          <div class="form-field"><label>Loan amount requested *</label><input name="loan_amount_requested" type="number" min="0" required /><span class="field-error" data-error-for="loan_amount_requested"></span></div>
+          <div class="form-field"><label>Source *</label><select name="lead_source_id" id="sourceSelect" required></select><span class="field-error" data-error-for="lead_source_id"></span></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-ghost" id="btnCancelAdd">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="drawer-overlay" id="drawerOverlay" hidden>
+    <aside class="drawer">
+      <div class="drawer-header"><div><h2 id="drawerName">–</h2><span class="drawer-subtitle" id="drawerSubtitle">–</span></div><button class="icon-btn" id="btnCloseDrawer"><i class="fa-solid fa-xmark"></i></button></div>
+      <nav class="drawer-tabs">
+        <button class="tab-btn active" data-tab="status">Lead status</button>
+        <button class="tab-btn" data-tab="messages">Messages</button>
+      </nav>
+      <div class="drawer-body">
+        <div class="tab-panel active" data-panel="status" id="panelStatus"></div>
+        <div class="tab-panel" data-panel="messages" id="panelMessages"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="../../shared/env.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lead Management · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <div class="app-shell">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark">E</span>
+        <span class="brand-name">EduFin<span class="brand-accent">Ops</span></span>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" href="#">
+          <i class="fa-solid fa-diagram-project"></i> Lead Management
+        </a>
+        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+          <i class="fa-solid fa-user-tie"></i> RM Workspace
+        </a>
+        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+          <i class="fa-solid fa-handshake"></i> Consultant Portal
+        </a>
+        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+          <i class="fa-solid fa-chart-line"></i> Manager Dashboard
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="avatar" id="currentUserAvatar">–</div>
+          <div class="user-meta">
+            <span class="user-name" id="currentUserName">Loading…</span>
+            <span class="user-role" id="currentUserRole">–</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+
+      <header class="main-header">
+        <div>
+          <h1>Lead management</h1>
+          <p class="subtitle">Every student loan lead, from first contact to disbursement.</p>
+        </div>
+        <button class="btn btn-primary" id="btnNewLead">
+          <i class="fa-solid fa-plus"></i> New lead
+        </button>
+      </header>
+
+      <!-- Funnel summary cards -->
+      <section class="funnel-row" id="funnelRow" aria-label="Pipeline summary">
+        <!-- populated by JS: one card per stage with a live count -->
+      </section>
+
+      <!-- Filters -->
+      <section class="filter-bar">
+        <div class="filter-field">
+          <label for="filterStage">Stage</label>
+          <select id="filterStage"><option value="">All stages</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="filterSource">Source</label>
+          <select id="filterSource"><option value="">All sources</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="filterRm">Assigned RM</label>
+          <select id="filterRm"><option value="">All RMs</option></select>
+        </div>
+        <div class="filter-field filter-search">
+          <label for="filterSearch">Search</label>
+          <input id="filterSearch" type="text" placeholder="Student name or phone" />
+        </div>
+      </section>
+
+      <!-- Lead table -->
+      <section class="table-card">
+        <table class="lead-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Course / University</th>
+              <th>Loan amount</th>
+              <th>Stage</th>
+              <th>Assigned RM</th>
+              <th>Next follow-up</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="leadTableBody">
+            <tr><td colspan="7" class="empty-state">Loading leads…</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ NEW LEAD MODAL ============ -->
+  <div class="modal-overlay" id="leadModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="leadModalTitle">
+      <div class="modal-header">
+        <h2 id="leadModalTitle">New lead</h2>
+        <button class="icon-btn" id="btnCloseModal" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="leadForm" class="modal-body" novalidate>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="f_student_name">Student name *</label>
+            <input id="f_student_name" name="student_name" type="text" required />
+            <span class="field-error" data-error-for="student_name"></span>
+          </div>
+          <div class="form-field">
+            <label for="f_student_phone">Phone *</label>
+            <input id="f_student_phone" name="student_phone" type="tel" required />
+            <span class="field-error" data-error-for="student_phone"></span>
+          </div>
+          <div class="form-field">
+            <label for="f_student_email">Email</label>
+            <input id="f_student_email" name="student_email" type="email" />
+            <span class="field-error" data-error-for="student_email"></span>
+          </div>
+          <div class="form-field">
+            <label for="f_course_name">Course</label>
+            <input id="f_course_name" name="course_name" type="text" />
+          </div>
+          <div class="form-field">
+            <label for="f_university_name">University</label>
+            <input id="f_university_name" name="university_name" type="text" />
+          </div>
+          <div class="form-field">
+            <label for="f_destination_country">Destination country</label>
+            <input id="f_destination_country" name="destination_country" type="text" />
+          </div>
+          <div class="form-field">
+            <label for="f_loan_amount_requested">Loan amount requested *</label>
+            <input id="f_loan_amount_requested" name="loan_amount_requested" type="number" min="0" step="1000" required />
+            <span class="field-error" data-error-for="loan_amount_requested"></span>
+          </div>
+          <div class="form-field">
+            <label for="f_lead_source_id">Lead source *</label>
+            <select id="f_lead_source_id" name="lead_source_id" required></select>
+            <span class="field-error" data-error-for="lead_source_id"></span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="btnCancelModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitLead">Save lead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ LEAD DETAIL DRAWER ============ -->
+  <div class="drawer-overlay" id="drawerOverlay" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerStudentName">
+      <div class="drawer-header">
+        <div>
+          <h2 id="drawerStudentName">–</h2>
+          <span class="drawer-subtitle" id="drawerSubtitle">–</span>
+        </div>
+        <button class="icon-btn" id="btnCloseDrawer" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <nav class="drawer-tabs">
+        <button class="tab-btn active" data-tab="overview">Overview</button>
+        <button class="tab-btn" data-tab="lenders">Deals</button>
+        <button class="tab-btn" data-tab="documents">Documents</button>
+        <button class="tab-btn" data-tab="timeline">Timeline</button>
+      </nav>
+
+      <div class="drawer-body">
+        <div class="tab-panel active" data-panel="overview" id="panelOverview"></div>
+        <div class="tab-panel" data-panel="lenders" id="panelLenders"></div>
+        <div class="tab-panel" data-panel="documents" id="panelDocuments"></div>
+        <div class="tab-panel" data-panel="timeline" id="panelTimeline"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="../../shared/env.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

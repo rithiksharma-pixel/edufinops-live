@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RM Workspace · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="css/workspace.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><span class="brand-mark">E</span><span class="brand-name">EduFin<span class="brand-accent">Ops</span></span></div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-view="dashboard" href="#"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+        <a class="nav-item" data-view="assigned" href="#"><i class="fa-solid fa-inbox"></i> Assigned Leads</a>
+        <a class="nav-item" data-view="followups" href="#"><i class="fa-solid fa-clock"></i> Today's Follow-ups</a>
+        <a class="nav-item" data-view="new" href="#"><i class="fa-solid fa-star"></i> New Leads</a>
+        <a class="nav-item" data-view="documents" href="#"><i class="fa-solid fa-file-lines"></i> Documents Pending</a>
+        <a class="nav-item" data-view="lenders" href="#"><i class="fa-solid fa-building-columns"></i> Lender Updates</a>
+        <a class="nav-item" data-view="tasks" href="#"><i class="fa-solid fa-list-check"></i> Tasks</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip"><div class="avatar" id="avatar">–</div><div class="user-meta"><span class="user-name" id="userName">Loading…</span><span class="user-role">Relationship Manager</span></div></div>
+        <a href="../../lead-management/public/index.html" style="display:block;margin-top:10px;font-size:12px;color:#B7B6B0;text-decoration:none;">Open full Lead Management →</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="main-header">
+        <div><h1 id="viewTitle">Assigned leads</h1><p class="subtitle" id="viewSubtitle">Every lead currently assigned to you.</p></div>
+      </header>
+
+      <div id="dashboardView">
+        <section class="stat-cards" id="rmDashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <section class="table-card" style="padding:18px;">
+            <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">My leads by stage</h3>
+            <div id="rmDashStageBreakdown"></div>
+          </section>
+          <section class="table-card" style="padding:18px;">
+            <h3 style="font-size:14px;font-weight:500;margin:0 0 4px;">Needs attention</h3>
+            <p class="subtitle" style="margin-bottom:12px;">Overdue follow-ups on your leads.</p>
+            <div id="rmDashAttention"></div>
+          </section>
+        </div>
+      </div>
+
+      <div id="listView" hidden>
+        <table class="data-table">
+          <thead id="listHead"></thead>
+          <tbody id="listBody"><tr><td class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <div id="tasksView" hidden>
+        <div class="table-card" style="padding:18px;margin-bottom:18px;">
+          <div class="form-grid">
+            <div class="form-field"><label>Title</label><input id="taskTitle" type="text" placeholder="e.g. Call Ananya re: income proof" /></div>
+            <div class="form-field"><label>Due date</label><input id="taskDueDate" type="date" /></div>
+            <div class="form-field" style="grid-column:1/-1;"><label>Related lead (optional)</label><select id="taskLeadSelect"><option value="">None</option></select></div>
+          </div>
+          <button class="btn btn-primary" id="btnAddTask">Add task</button>
+        </div>
+        <div id="tasksList"></div>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+  <script src="../../shared/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

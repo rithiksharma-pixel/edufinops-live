@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Manager Dashboard · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><span class="brand-mark">E</span><span class="brand-name">EduFin<span class="brand-accent">Ops</span></span></div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" href="#"><i class="fa-solid fa-chart-line"></i> Team Dashboard</a>
+        <a href="../../lead-management/public/index.html" class="nav-item" style="text-decoration:none;"><i class="fa-solid fa-diagram-project"></i> Lead Management</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip"><div class="avatar" id="avatar">–</div><div class="user-meta"><span class="user-name" id="userName">Loading…</span><span class="user-role">Manager</span></div></div>
+      </div>
+    </aside>
+
+    <main class="main" style="max-width:1100px;">
+      <header class="main-header"><div><h1>Team dashboard</h1><p class="subtitle">Your team's pipeline, performance, and today's business.</p></div></header>
+
+      <section class="stat-cards" id="dailyStats"></section>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;">
+        <section class="chart-card">
+          <h3>Needs attention</h3>
+          <div id="attentionList"></div>
+        </section>
+        <section class="chart-card">
+          <h3>By lender</h3>
+          <div id="lenderBreakdown"></div>
+        </section>
+      </div>
+
+      <section class="chart-card">
+        <h3>Funnel — leads by stage</h3>
+        <canvas id="funnelChart" height="90"></canvas>
+      </section>
+
+      <section class="table-card">
+        <h3 class="section-title" style="padding:16px 20px 0;font-size:14px;font-weight:500;">RM performance</h3>
+        <table class="data-table">
+          <thead><tr><th>RM</th><th>Assigned leads</th><th>Overdue follow-ups</th><th>Deals</th><th>Disbursed (Closed Won)</th></tr></thead>
+          <tbody id="rmPerformanceBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script src="../../shared/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+const url=window.__ENV__?.SUPABASE_URL||'https://YOUR-PROJECT.supabase.co';const key=window.__ENV__?.SUPABASE_ANON_KEY||'YOUR-ANON-KEY';export const supabase=window.supabase.createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true}});

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lender Pipeline · EduFin Loan Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="css/pipeline.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><span class="brand-mark">E</span><span class="brand-name">EduFin<span class="brand-accent">Ops</span></span></div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-view="dashboard" href="#"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
+        <a class="nav-item" data-view="pipeline" href="#"><i class="fa-solid fa-building-columns"></i> Our Pipeline</a>
+        <a class="nav-item" data-view="profile" href="#"><i class="fa-solid fa-id-card"></i> Bank Details</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-chip"><div class="avatar" id="avatar">–</div><div class="user-meta"><span class="user-name" id="userName">Loading…</span><span class="user-role" id="orgName">–</span></div></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div id="dashboardPanel">
+        <header class="main-header"><div><h1>Dashboard</h1><p class="subtitle">Your institution's pipeline at a glance.</p></div></header>
+        <section class="stat-cards" id="dashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <section class="table-card" style="padding:18px;">
+            <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">By stage</h3>
+            <div id="dashStageBreakdown"></div>
+          </section>
+          <section class="table-card" style="padding:18px;">
+            <h3 style="font-size:14px;font-weight:500;margin:0 0 4px;">Needs attention</h3>
+            <p class="subtitle" style="margin-bottom:12px;">On hold, rejected, or no movement in 7+ days.</p>
+            <div id="dashAttentionList"></div>
+          </section>
+        </div>
+      </div>
+
+      <div id="pipelinePanel" hidden>
+        <header class="main-header"><div><h1>Our pipeline</h1><p class="subtitle">Every case shared with your institution.</p></div></header>
+        <section class="table-card">
+          <table class="data-table">
+            <thead><tr><th>Student</th><th>Requested amount</th><th>Stage</th><th>Status</th></tr></thead>
+            <tbody id="dealsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </section>
+      </div>
+
+      <div id="profilePanel" hidden>
+        <header class="main-header"><div><h1>Bank details</h1><p class="subtitle">Keep your institution's contact info current for our team.</p></div></header>
+        <form id="profileForm" class="table-card" style="padding:24px;max-width:520px;">
+          <div class="form-field"><label>Institution name</label><input name="name" type="text" disabled /></div>
+          <div class="form-field"><label>Contact person</label><input name="contact_person_name" type="text" /></div>
+          <div class="form-field"><label>Contact email</label><input name="contact_email" type="email" /></div>
+          <div class="form-field"><label>Contact phone</label><input name="contact_phone" type="tel" /></div>
+          <div class="form-field"><label>Registered address</label><textarea name="registered_address" rows="2"></textarea></div>
+          <div class="form-field"><label>Processing notes</label><textarea name="processing_notes" rows="2" placeholder="e.g. Sanctions typically take 5-7 business days"></textarea></div>
+          <button type="submit" class="btn btn-primary" style="margin-top:8px;">Save changes</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="drawerOverlay" hidden>
+    <aside class="drawer">
+      <div class="drawer-header"><div><h2 id="drawerName">–</h2><span class="drawer-subtitle" id="drawerSubtitle">–</span></div><button class="icon-btn" id="btnCloseDrawer"><i class="fa-solid fa-xmark"></i></button></div>
+      <nav class="drawer-tabs">
+        <button class="tab-btn active" data-tab="manage">Manage</button>
+        <button class="tab-btn" data-tab="messages">Messages</button>
+      </nav>
+      <div class="drawer-body">
+        <div class="tab-panel active" data-panel="manage" id="panelManage"></div>
+        <div class="tab-panel" data-panel="messages" id="panelMessages"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="../../shared/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
