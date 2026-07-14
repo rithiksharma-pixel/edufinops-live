@@ -65,6 +65,51 @@ export async function getDocumentsPending() {
   return data;
 }
 
+// Same per-stage TAT thresholds used on Manager/Admin Dashboard —
+// duplicated rather than shared, matching this codebase's existing
+// pattern of each app owning its own copy of small constants (e.g.
+// STAGE_TABLE_MAP in dealService.js vs lenderDealService.js).
+const STAGE_TAT_THRESHOLD_DAYS = {
+  'Bank Prospect': 7,
+  Login: 5,
+  Sanction: 10,
+  PF: 5,
+  Disbursement: 7,
+};
+
+export async function getMyTatBreachedDeals() {
+  const { data: dealsData, error: dealsError } = await supabase
+    .from('deals')
+    .select('id, is_on_hold, is_rejected, created_at, leads(student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
+    .eq('is_deleted', false);
+  if (dealsError) throw dealsError;
+
+  const { data: stageEvents, error: eventsError } = await supabase
+    .from('deal_events')
+    .select('deal_id, to_stage_id, created_at')
+    .not('to_stage_id', 'is', null)
+    .order('created_at', { ascending: false });
+  if (eventsError) throw eventsError;
+
+  const enteredCurrentStageAt = {};
+  for (const ev of stageEvents) {
+    if (enteredCurrentStageAt[ev.deal_id]) continue;
+    enteredCurrentStageAt[ev.deal_id] = ev;
+  }
+
+  const now = Date.now();
+  return dealsData
+    .filter((d) => {
+      if (d.is_on_hold || d.is_rejected) return false;
+      const stageName = d.current_deal_stage?.name;
+      if (!stageName || !STAGE_TAT_THRESHOLD_DAYS[stageName]) return false;
+      const enteredAt = enteredCurrentStageAt[d.id]?.created_at || d.created_at;
+      const daysInStage = (now - new Date(enteredAt).getTime()) / (24 * 60 * 60 * 1000);
+      return daysInStage > STAGE_TAT_THRESHOLD_DAYS[stageName];
+    })
+    .map((d) => ({ student: d.leads?.student_name, stage: d.current_deal_stage?.name, thresholdDays: STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name] }));
+}
+
 export async function getLenderUpdates() {
   const { data, error } = await supabase
     .from('deal_events')

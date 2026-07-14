@@ -1,5 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
-import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates } from './services/dashboardService.js';
+import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
 
@@ -140,6 +140,11 @@ async function renderRmDashboard() {
   const leads = await getAssignedLeads();
   const now = Date.now();
   const overdue = leads.filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < now);
+  const today = new Date().toISOString().slice(0, 10);
+  const [overdueTasks, tatBreaches] = await Promise.all([
+    getMyTasks().then((tasks) => tasks.filter((t) => !t.is_completed && t.due_date && t.due_date < today)),
+    getMyTatBreachedDeals(),
+  ]);
 
   document.getElementById('rmDashStats').innerHTML = `
     <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;">${leads.length}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Assigned leads</div></div>
@@ -160,9 +165,13 @@ async function renderRmDashboard() {
     </div>
   `).join('') || '<p class="empty-state">No leads assigned yet.</p>';
 
-  document.getElementById('rmDashAttention').innerHTML = overdue.length
-    ? overdue.slice(0, 8).map((l) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('')
-    : '<p class="empty-state">Nothing overdue — nice work.</p>';
+  const overdueFollowUpHtml = overdue.slice(0, 8).map((l) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('');
+  const overdueTaskHtml = overdueTasks.slice(0, 8).map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)}${t.leads ? ' · ' + escapeHtml(t.leads.student_name) : ''}</span><span class="badge badge-danger">Overdue task</span></div>`).join('');
+  const tatBreachHtml = tatBreaches.slice(0, 8).map((d) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.student || '–')}</span><span class="badge badge-warning">Overstayed ${escapeHtml(d.stage)} (${d.thresholdDays}d TAT)</span></div>`).join('');
+
+  document.getElementById('rmDashAttention').innerHTML = (overdue.length + overdueTasks.length + tatBreaches.length) === 0
+    ? '<p class="empty-state">Nothing overdue — nice work.</p>'
+    : overdueFollowUpHtml + overdueTaskHtml + tatBreachHtml;
 }
 
 async function bootstrap() {

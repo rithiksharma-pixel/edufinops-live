@@ -7,6 +7,8 @@ import {
   getLeadTimeline,
   changeLeadStage,
   assignLeadToRm,
+  logCall,
+  CALL_STATUS_OPTIONS,
 } from '../services/leadService.js';
 import { initDealsTab } from './dealPanel.js';
 import { initDocumentsTab } from './documentPanel.js';
@@ -64,7 +66,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
       ]);
 
       renderHeader(lead);
-      renderOverview(lead, coApplicants, stages, rms, currentUserRole, showToast, onLeadUpdated);
+      renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated);
       renderTimeline(timeline);
 
       // Refetches just the EL Details tabs after a save, without reloading
@@ -111,8 +113,9 @@ function renderHeader(lead) {
     [lead.course_name, lead.university_name].filter(Boolean).join(' · ') || 'No course details yet';
 }
 
-function renderOverview(lead, coApplicants, stages, rms, role, showToast, onLeadUpdated) {
+function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated) {
   const panel = document.getElementById('panelOverview');
+  const role = currentUser.role;
   const canEdit = ['Admin', 'Manager', 'Relationship Manager'].includes(role);
 
   const stageOptions = stages
@@ -140,6 +143,32 @@ function renderOverview(lead, coApplicants, stages, rms, role, showToast, onLead
         : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}
     </span></div>
     <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${formatDateTime(lead.next_follow_up_at)}</span></div>
+
+    ${canEdit ? `
+    <h3 style="font-size:14px;font-weight:500;margin:20px 0 8px;">Log a call</h3>
+    <div class="form-grid">
+      <div class="form-field">
+        <label>Call status</label>
+        <select id="callStatusSelect">${CALL_STATUS_OPTIONS.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+      </div>
+      <div class="form-field">
+        <label>Notes</label>
+        <textarea id="callNotes" rows="1"></textarea>
+      </div>
+    </div>
+    <div class="form-grid" id="callTaskFields" style="margin-top:10px;">
+      <div class="form-field">
+        <label>Follow-up task *</label>
+        <input type="text" id="callTaskTitle" placeholder="e.g. Call back to confirm documents" />
+      </div>
+      <div class="form-field">
+        <label>Due date *</label>
+        <input type="date" id="callTaskDueDate" />
+      </div>
+    </div>
+    <span class="field-error" id="callTaskError" style="display:block;margin-top:4px;"></span>
+    <button class="btn btn-primary" id="btnLogCall" style="width:100%;justify-content:center;margin-top:10px;">Log call</button>
+    ` : ''}
 
     <h3 style="font-size:14px;font-weight:500;margin:20px 0 8px;">Co-applicants</h3>
     ${
@@ -185,6 +214,51 @@ function renderOverview(lead, coApplicants, stages, rms, role, showToast, onLead
         console.error(err);
         showToast('Could not reassign this lead.', true);
         e.target.value = lead.assigned_rm_id || '';
+      }
+    });
+  }
+
+  const callStatusSelect = document.getElementById('callStatusSelect');
+  if (callStatusSelect) {
+    const taskFields = document.getElementById('callTaskFields');
+    const taskError = document.getElementById('callTaskError');
+    const syncTaskRequirement = () => {
+      const notInterested = callStatusSelect.value === 'Not Interested';
+      taskFields.style.opacity = notInterested ? '0.5' : '1';
+      taskFields.querySelectorAll('input').forEach((el) => { el.disabled = notInterested; });
+      taskError.textContent = '';
+    };
+    callStatusSelect.addEventListener('change', syncTaskRequirement);
+    syncTaskRequirement();
+
+    document.getElementById('btnLogCall').addEventListener('click', async () => {
+      const callStatus = callStatusSelect.value;
+      const notes = document.getElementById('callNotes').value;
+      const taskTitle = document.getElementById('callTaskTitle').value.trim();
+      const taskDueDate = document.getElementById('callTaskDueDate').value;
+
+      if (callStatus !== 'Not Interested' && (!taskTitle || !taskDueDate)) {
+        taskError.textContent = 'A follow-up task (title + due date) is required for this call outcome.';
+        return;
+      }
+
+      const btn = document.getElementById('btnLogCall');
+      btn.disabled = true;
+      btn.textContent = 'Logging…';
+      try {
+        await logCall(
+          lead.id,
+          { callStatus, notes, taskTitle: callStatus === 'Not Interested' ? null : taskTitle, taskDueDate: callStatus === 'Not Interested' ? null : taskDueDate },
+          currentUser.id
+        );
+        showToast('Call logged.');
+        onLeadUpdated();
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Could not log this call.', true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Log call';
       }
     });
   }

@@ -86,10 +86,22 @@ export async function getLenderBreakdown() {
   return Object.values(byLender).sort((a, b) => b.dealCount - a.dealCount);
 }
 
+// How many days a deal can sit in a stage before it's flagged as stuck.
+// V1: hardcoded per-stage default. Revisit as an admin-configurable
+// setting once there's a Settings surface for it.
+const STAGE_TAT_THRESHOLD_DAYS = {
+  'Bank Prospect': 7,
+  Login: 5,
+  Sanction: 10,
+  PF: 5,
+  Disbursement: 7,
+};
+
 /**
- * "Needs attention" = overdue follow-up, or a deal on hold/rejected, or
- * a deal with no movement in 7+ days. Same heuristic as Lender Pipeline's
- * dashboard, applied here across the whole team instead of one bank.
+ * "Needs attention" = overdue follow-up, a deal on hold/rejected, a deal
+ * that's overstayed its current stage's TAT threshold, or an overdue task.
+ * Same heuristic as Lender Pipeline's dashboard, applied here across the
+ * whole team instead of one bank.
  */
 export async function getAttentionSummary() {
   const { data: leadsData, error: leadsError } = await supabase
@@ -100,26 +112,104 @@ export async function getAttentionSummary() {
 
   const { data: dealsData, error: dealsError } = await supabase
     .from('deals')
-    .select('id, is_on_hold, is_rejected, updated_at, lead_id, leads(student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
+    .select('id, is_on_hold, is_rejected, created_at, lead_id, leads(student_name), current_deal_stage_id, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
     .eq('is_deleted', false);
   if (dealsError) throw dealsError;
 
+  const { data: stageEvents, error: eventsError } = await supabase
+    .from('deal_events')
+    .select('deal_id, to_stage_id, created_at')
+    .not('to_stage_id', 'is', null)
+    .order('created_at', { ascending: false });
+  if (eventsError) throw eventsError;
+
+  const { data: overdueTasksData, error: tasksError } = await supabase
+    .from('tasks')
+    .select('id, title, due_date, leads(student_name), assigned_to:users!tasks_assigned_to_user_id_fkey(full_name)')
+    .eq('is_deleted', false)
+    .eq('is_completed', false)
+    .lt('due_date', new Date().toISOString().slice(0, 10));
+  if (tasksError) throw tasksError;
+
   const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  // Latest event that moved each deal INTO its current stage — the clock
+  // for "how long has it been stuck here" starts there, not at last-updated
+  // (which also bumps on unrelated edits like hold/release).
+  const enteredCurrentStageAt = {};
+  for (const ev of stageEvents) {
+    if (enteredCurrentStageAt[ev.deal_id]) continue; // already have the newest (rows are DESC)
+    enteredCurrentStageAt[ev.deal_id] = ev;
+  }
 
   const overdueLeads = leadsData.filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < now);
-  const flaggedDeals = dealsData.filter((d) => {
-    const stuck = new Date(d.updated_at).getTime() < sevenDaysAgo && d.current_deal_stage?.name !== 'Closed Won';
-    return d.is_on_hold || d.is_rejected || stuck;
+
+  const tatBreachedDeals = dealsData.filter((d) => {
+    if (d.is_on_hold || d.is_rejected) return false;
+    const stageName = d.current_deal_stage?.name;
+    if (!stageName || !STAGE_TAT_THRESHOLD_DAYS[stageName]) return false;
+    const enteredAt = enteredCurrentStageAt[d.id]?.created_at || d.created_at;
+    const daysInStage = (now - new Date(enteredAt).getTime()) / (24 * 60 * 60 * 1000);
+    return daysInStage > STAGE_TAT_THRESHOLD_DAYS[stageName];
   });
+
+  const flaggedDeals = dealsData.filter((d) => d.is_on_hold || d.is_rejected || tatBreachedDeals.includes(d));
   const onTrackCount = leadsData.length - overdueLeads.length;
 
   return {
     overdueLeads: overdueLeads.map((l) => ({ name: l.student_name, rm: l.assigned_rm?.full_name, dueAt: l.next_follow_up_at })),
-    flaggedDeals: flaggedDeals.map((d) => ({ name: d.leads?.student_name, reason: d.is_rejected ? 'Rejected' : d.is_on_hold ? 'On hold' : 'No movement in 7+ days' })),
+    flaggedDeals: flaggedDeals.map((d) => ({
+      name: d.leads?.student_name,
+      reason: d.is_rejected ? 'Rejected' : d.is_on_hold ? 'On hold' : `Overstayed ${d.current_deal_stage?.name} (${STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name]}d TAT)`,
+    })),
+    overdueTasks: overdueTasksData.map((t) => ({ title: t.title, dueDate: t.due_date, student: t.leads?.student_name, owner: t.assigned_to?.full_name })),
     onTrackCount,
     totalLeads: leadsData.length,
   };
+}
+
+/**
+ * Turn-around-time between consecutive deal stages, computed purely from
+ * deal_events timestamps (every stage change is already logged there —
+ * no new tracking needed). Returns per-transition averages plus the
+ * slowest individual transitions, each with its remarks if one was left.
+ */
+export async function getTatAnalysis() {
+  const { data, error } = await supabase
+    .from('deal_events')
+    .select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))')
+    .not('to_stage_id', 'is', null)
+    .order('deal_id', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+
+  const byDeal = {};
+  data.forEach((ev) => { (byDeal[ev.deal_id] ??= []).push(ev); });
+
+  const transitions = [];
+  Object.values(byDeal).forEach((events) => {
+    for (let i = 1; i < events.length; i++) {
+      const prev = events[i - 1];
+      const curr = events[i];
+      const days = (new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()) / (24 * 60 * 60 * 1000);
+      transitions.push({
+        label: `${prev.to_stage?.name || '–'} → ${curr.to_stage?.name || '–'}`,
+        days,
+        student: curr.deals?.leads?.student_name,
+        remarks: curr.remarks,
+      });
+    }
+  });
+
+  const byLabel = {};
+  transitions.forEach((t) => { (byLabel[t.label] ??= []).push(t.days); });
+  const averages = Object.entries(byLabel)
+    .map(([label, values]) => ({ label, avgDays: values.reduce((a, b) => a + b, 0) / values.length, count: values.length }))
+    .sort((a, b) => b.avgDays - a.avgDays);
+
+  const worstOffenders = [...transitions].sort((a, b) => b.days - a.days).slice(0, 10);
+
+  return { averages, worstOffenders };
 }
 
 export async function getDailyBusiness() {

@@ -161,6 +161,43 @@ export async function upsertCollateralDetails(leadId, collateralId, fields, curr
   if (error) throw error;
 }
 
+// Fixed list for now — matches the roadmap's "adjust the list on request".
+export const CALL_STATUS_OPTIONS = [
+  'Connected', 'No Answer', 'Busy', 'Call Back Requested', 'Interested', 'Not Interested', 'Wrong Number',
+];
+
+/**
+ * Logs a call as a lead_events row (shows up in the Timeline tab with no
+ * extra UI needed) and, unless the outcome was "Not Interested", creates
+ * the mandatory follow-up task and syncs leads.next_follow_up_at to its
+ * due date so the Overview field and every "overdue follow-up" query
+ * elsewhere in the app stay correct for free.
+ */
+export async function logCall(leadId, { callStatus, notes, taskTitle, taskDueDate }, currentUserId) {
+  const { error: eventError } = await supabase.from('lead_events').insert({
+    lead_id: leadId,
+    event_type: callStatus,
+    remarks: notes?.trim() || null,
+    created_by: currentUserId,
+  });
+  if (eventError) throw eventError;
+
+  if (!taskTitle) return;
+
+  const { error: taskError } = await supabase.from('tasks').insert({
+    title: taskTitle,
+    due_date: taskDueDate,
+    lead_id: leadId,
+    assigned_to_user_id: currentUserId,
+    created_by: currentUserId,
+    updated_by: currentUserId,
+  });
+  if (taskError) throw new Error(`Call logged, but the follow-up task failed to save: ${taskError.message}`);
+
+  const { error: leadUpdateError } = await supabase.from('leads').update({ next_follow_up_at: taskDueDate }).eq('id', leadId);
+  if (leadUpdateError) throw new Error(`Call logged and task saved, but updating the lead's next follow-up failed: ${leadUpdateError.message}`);
+}
+
 export async function upsertReference(leadId, referenceType, fields, currentUserId) {
   const { error } = await supabase
     .from('lead_references')

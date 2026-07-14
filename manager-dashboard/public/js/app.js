@@ -1,5 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
-import { getTeamFunnel, getRmPerformance, getDailyBusiness, getLenderBreakdown, getAttentionSummary } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
 
 function escapeHtml(str) {
   const d = document.createElement('div');
@@ -63,10 +63,13 @@ async function renderAttentionList() {
   const flaggedHtml = summary.flaggedDeals.slice(0, 8).map((d) =>
     `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.name || '–')}</span><span class="badge badge-warning">${escapeHtml(d.reason)}</span></div>`
   ).join('');
-  const total = summary.overdueLeads.length + summary.flaggedDeals.length;
+  const overdueTasksHtml = summary.overdueTasks.slice(0, 8).map((t) =>
+    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)} <span style="color:var(--ink-500);">· ${escapeHtml(t.owner || '–')}${t.student ? ' · ' + escapeHtml(t.student) : ''}</span></span><span class="badge badge-danger">Overdue task</span></div>`
+  ).join('');
+  const total = summary.overdueLeads.length + summary.flaggedDeals.length + summary.overdueTasks.length;
   container.innerHTML = total === 0
     ? `<p class="empty-state">Nothing needs attention — ${summary.onTrackCount} of ${summary.totalLeads} leads on track.</p>`
-    : `<div style="margin-bottom:10px;font-size:12px;color:var(--ink-500);">${summary.onTrackCount} of ${summary.totalLeads} leads on track</div>` + overdueHtml + flaggedHtml;
+    : `<div style="margin-bottom:10px;font-size:12px;color:var(--ink-500);">${summary.onTrackCount} of ${summary.totalLeads} leads on track</div>` + overdueHtml + flaggedHtml + overdueTasksHtml;
 }
 
 async function renderLenderBreakdown() {
@@ -86,6 +89,26 @@ async function renderLenderBreakdown() {
   }).join('');
 }
 
+async function renderTatAnalysis() {
+  const { averages, worstOffenders } = await getTatAnalysis();
+
+  document.getElementById('tatAverages').innerHTML = averages.length
+    ? averages.map((t) => `
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div>
+        </div>`).join('')
+    : '<p class="empty-state">No stage transitions recorded yet.</p>';
+
+  document.getElementById('tatWorstOffenders').innerHTML = worstOffenders.length
+    ? worstOffenders.map((t) => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
+          <span>${escapeHtml(t.student || '–')} <span style="color:var(--ink-500);">· ${escapeHtml(t.label)}</span></span>
+          <span class="badge badge-warning">${t.days.toFixed(1)}d</span>
+        </div>
+        ${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${escapeHtml(t.remarks)}</div>` : ''}`).join('')
+    : '<p class="empty-state">No stage transitions recorded yet.</p>';
+}
+
 async function bootstrap() {
   let user;
   try {
@@ -97,7 +120,7 @@ async function bootstrap() {
   document.getElementById('userName').textContent = user.fullName;
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
-  await Promise.all([renderDailyStats(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown()]);
+  await Promise.all([renderDailyStats(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis()]);
 }
 
 bootstrap();
