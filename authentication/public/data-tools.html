@@ -34,6 +34,16 @@
 
       <div id="importPreview" style="margin-top:18px;"></div>
     </section>
+
+    <section class="table-card" style="padding:20px;margin-top:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Bulk update users</h2>
+      <p class="subtitle" style="margin-bottom:14px;">CSV columns: <code>email, role_name, reporting_manager_email, team_name, is_active</code>. <code>email</code> identifies the existing user to update — everything else is optional; leave a cell blank to leave that field unchanged. Put <code>NONE</code> in <code>reporting_manager_email</code> or <code>team_name</code> to clear it. <code>is_active</code> must be <code>TRUE</code> or <code>FALSE</code> if set. This only updates existing users — invite new people from Manage Users.</p>
+      <button class="btn btn-ghost" id="btnDownloadUsersTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
+      <div class="form-field"><input type="file" id="usersImportFileInput" accept=".csv" /></div>
+      <button class="btn btn-primary" id="btnValidateUsersImport">Validate file</button>
+
+      <div id="usersImportPreview" style="margin-top:18px;"></div>
+    </section>
   </div>
 
   <div class="toast" id="toast" hidden></div>

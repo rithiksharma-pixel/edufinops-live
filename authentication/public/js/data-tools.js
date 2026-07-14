@@ -1,5 +1,8 @@
 import { getCurrentUserProfile } from './services/authService.js';
-import { exportLeadsCsv, exportDealsCsv, downloadCsv, importTemplateCsv, parseLeadsCsv, commitLeadImport } from './services/exportImportService.js';
+import {
+  exportLeadsCsv, exportDealsCsv, downloadCsv, importTemplateCsv, parseLeadsCsv, commitLeadImport,
+  usersBulkUpdateTemplateCsv, parseUsersBulkUpdateCsv, commitUsersBulkUpdate,
+} from './services/exportImportService.js';
 
 const toastEl = document.getElementById('toast');
 function showToast(msg, isError = false) {
@@ -11,6 +14,7 @@ function showToast(msg, isError = false) {
 
 let currentUser;
 let pendingValidRows = [];
+let pendingUsersValidRows = [];
 
 async function bootstrap() {
   try {
@@ -59,6 +63,24 @@ async function bootstrap() {
       showToast('Could not parse this file. Is it a valid CSV?', true);
     }
   });
+
+  document.getElementById('btnDownloadUsersTemplate').addEventListener('click', () => {
+    downloadCsv(usersBulkUpdateTemplateCsv(), 'users-bulk-update-template.csv');
+  });
+
+  document.getElementById('btnValidateUsersImport').addEventListener('click', async () => {
+    const fileInput = document.getElementById('usersImportFileInput');
+    const file = fileInput.files[0];
+    if (!file) { showToast('Choose a CSV file first.', true); return; }
+
+    try {
+      const { validRows, errors } = await parseUsersBulkUpdateCsv(file);
+      pendingUsersValidRows = validRows;
+      renderUsersPreview(validRows, errors);
+    } catch (err) {
+      showToast('Could not parse this file. Is it a valid CSV?', true);
+    }
+  });
 }
 
 function renderPreview(validRows, errors) {
@@ -83,6 +105,33 @@ function renderPreview(validRows, errors) {
           : '<p>Import complete.</p>';
       } catch (err) {
         showToast('Import failed unexpectedly.', true);
+      }
+    });
+  }
+}
+
+function renderUsersPreview(validRows, errors) {
+  const container = document.getElementById('usersImportPreview');
+  container.innerHTML = `
+    <div class="table-card" style="padding:16px;">
+      <p><strong>${validRows.length}</strong> valid row(s), <strong>${errors.length}</strong> error(s).</p>
+      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitUsersImport" style="margin-top:12px;">Update ${validRows.length} user(s)</button>` : ''}
+    </div>
+  `;
+  const commitBtn = document.getElementById('btnCommitUsersImport');
+  if (commitBtn) {
+    commitBtn.addEventListener('click', async () => {
+      commitBtn.disabled = true;
+      commitBtn.textContent = 'Updating…';
+      try {
+        const { succeeded, failures } = await commitUsersBulkUpdate(pendingUsersValidRows);
+        showToast(`Updated ${succeeded} user(s)${failures.length ? `, ${failures.length} failed` : ''}.`, failures.length > 0);
+        container.innerHTML = failures.length > 0
+          ? `<p style="color:var(--danger);">${failures.length} row(s) had a problem: ${failures.map((f) => escapeHtml(`${f.email} — ${f.error}`)).join('; ')}</p>`
+          : '<p>Update complete.</p>';
+      } catch (err) {
+        showToast('Update failed unexpectedly.', true);
       }
     });
   }

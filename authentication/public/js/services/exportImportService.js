@@ -148,3 +148,120 @@ export async function commitLeadImport(validRows) {
   }
   return { succeeded, failures };
 }
+
+export function usersBulkUpdateTemplateCsv() {
+  return Papa.unparse([
+    { email: 'existing.user@example.com', role_name: '', reporting_manager_email: '', team_name: '', is_active: '' },
+  ]);
+}
+
+/**
+ * Every column except email is optional — a blank cell means "leave this
+ * field unchanged". To explicitly clear reporting_manager_email or
+ * team_name, put the literal word NONE in that cell.
+ */
+export async function parseUsersBulkUpdateCsv(file) {
+  const [{ data: users, error: usersError }, { data: roles, error: rolesError }, { data: teams, error: teamsError }] = await Promise.all([
+    supabase.from('users').select('id, email, roles(name)').eq('is_deleted', false),
+    supabase.from('roles').select('id, name').eq('is_deleted', false),
+    supabase.from('teams').select('id, name').eq('is_deleted', false),
+  ]);
+  if (usersError) throw usersError;
+  if (rolesError) throw rolesError;
+  if (teamsError) throw teamsError;
+
+  const findUserByEmail = (email) => users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const errors = [];
+        const validRows = [];
+        results.data.forEach((row, i) => {
+          const rowNum = i + 2;
+          const email = row.email?.trim();
+          if (!email) { errors.push(`Row ${rowNum}: missing email`); return; }
+          const targetUser = findUserByEmail(email);
+          if (!targetUser) { errors.push(`Row ${rowNum}: no user found with email "${email}"`); return; }
+
+          const change = { userId: targetUser.id, email };
+          let rowHasError = false;
+
+          const roleName = row.role_name?.trim();
+          if (roleName) {
+            const role = roles.find((r) => r.name.toLowerCase() === roleName.toLowerCase());
+            if (!role) { errors.push(`Row ${rowNum}: unknown role_name "${roleName}"`); rowHasError = true; }
+            else change.newRoleId = role.id;
+          }
+
+          const managerEmail = row.reporting_manager_email?.trim();
+          if (managerEmail) {
+            if (managerEmail.toUpperCase() === 'NONE') change.newManagerId = null;
+            else {
+              const manager = findUserByEmail(managerEmail);
+              if (!manager) { errors.push(`Row ${rowNum}: no user found for reporting_manager_email "${managerEmail}"`); rowHasError = true; }
+              else change.newManagerId = manager.id;
+            }
+          }
+
+          const teamName = row.team_name?.trim();
+          if (teamName) {
+            if (teamName.toUpperCase() === 'NONE') change.teamId = null;
+            else {
+              const team = teams.find((t) => t.name.toLowerCase() === teamName.toLowerCase());
+              if (!team) { errors.push(`Row ${rowNum}: unknown team_name "${teamName}"`); rowHasError = true; }
+              else change.teamId = team.id;
+            }
+          }
+
+          const isActiveRaw = row.is_active?.trim();
+          if (isActiveRaw) {
+            if (isActiveRaw.toUpperCase() === 'TRUE') change.isActive = true;
+            else if (isActiveRaw.toUpperCase() === 'FALSE') change.isActive = false;
+            else { errors.push(`Row ${rowNum}: is_active must be TRUE or FALSE, got "${isActiveRaw}"`); rowHasError = true; }
+          }
+
+          if (!rowHasError) validRows.push(change);
+        });
+        resolve({ validRows, errors });
+      },
+      error: (err) => reject(err),
+    });
+  });
+}
+
+/**
+ * Applies each field of each row independently — a failed role change
+ * on one row doesn't block that same row's manager/team update, and one
+ * bad row never aborts the rest of the batch. Returns per-row failures
+ * with which specific field failed so the UI can report exactly what
+ * didn't take.
+ */
+export async function commitUsersBulkUpdate(validRows) {
+  let succeeded = 0;
+  const failures = [];
+  for (const change of validRows) {
+    const rowErrors = [];
+    if (change.newRoleId) {
+      const { error } = await supabase.rpc('change_user_role', { p_target_user_id: change.userId, p_new_role_id: change.newRoleId, p_remarks: 'Bulk update via Manage Users' });
+      if (error) rowErrors.push(`role: ${error.message}`);
+    }
+    if ('newManagerId' in change) {
+      const { error } = await supabase.rpc('change_reporting_manager', { p_target_user_id: change.userId, p_new_manager_id: change.newManagerId, p_remarks: 'Bulk update via Manage Users' });
+      if (error) rowErrors.push(`reporting manager: ${error.message}`);
+    }
+    if ('teamId' in change) {
+      const { error } = await supabase.from('users').update({ team_id: change.teamId }).eq('id', change.userId);
+      if (error) rowErrors.push(`team: ${error.message}`);
+    }
+    if ('isActive' in change) {
+      const { error } = await supabase.rpc(change.isActive ? 'reactivate_user' : 'deactivate_user', { p_target_user_id: change.userId, p_remarks: 'Bulk update via Manage Users' });
+      if (error) rowErrors.push(`active status: ${error.message}`);
+    }
+    if (rowErrors.length > 0) failures.push({ email: change.email, error: rowErrors.join('; ') });
+    else succeeded += 1;
+  }
+  return { succeeded, failures };
+}
