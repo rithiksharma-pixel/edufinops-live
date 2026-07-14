@@ -207,3 +207,21 @@ export async function sendMessage(dealId, senderId, message) {
   const { error } = await supabase.from('lender_deal_messages').insert({ deal_id: dealId, sender_id: senderId, message, created_by: senderId });
   if (error) throw error;
 }
+
+/**
+ * Everything relevant to underwriting this student, minus the CRM's
+ * internal pipeline stage, the other-lenders share matrix, and the RM
+ * team's internal logs — enforced server-side in get_lead_profile_for_lender,
+ * not just left out of this query.
+ */
+export async function getLeadProfileForLender(dealId) {
+  const { data, error } = await supabase.rpc('get_lead_profile_for_lender', { p_deal_id: dealId });
+  if (error) throw error;
+  return data;
+}
+
+export async function getDocumentDownloadUrl(storagePath) {
+  const { data, error } = await supabase.storage.from('lead-documents').createSignedUrl(storagePath, 60 * 5);
+  if (error) throw error;
+  return data.signedUrl;
+}

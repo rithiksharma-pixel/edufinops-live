@@ -4,6 +4,7 @@ import {
   updateStageDetails, changeDealStage, putDealOnHold, releaseDealHold, rejectDeal, reinstateDeal,
   recordDisbursement, getMessages, sendMessage, STAGE_TABLE_MAP,
   getMyLenderProfile, updateMyLenderProfile, getDashboardSummary,
+  getLeadProfileForLender, getDocumentDownloadUrl,
 } from './services/lenderDealService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
 
@@ -54,8 +55,160 @@ async function openDrawer(dealId) {
   const holdReasons = await getDealHoldReasons();
   const rejectionReasons = await getDealRejectionReasons();
   await loadManagePanel(dealId, stages, holdReasons, rejectionReasons);
+  await renderProfile(dealId);
   await renderQueries(dealId);
   await renderMessages(dealId);
+}
+
+function fieldRow(label, value) {
+  if (value === null || value === undefined || value === '') return '';
+  return `<div class="detail-row"><span class="k">${escapeHtml(label)}</span><span class="v">${escapeHtml(String(value))}</span></div>`;
+}
+
+async function renderProfile(dealId) {
+  const panel = document.getElementById('panelProfile');
+  panel.innerHTML = '<p class="empty-state">Loading student profile…</p>';
+  let profile;
+  try {
+    profile = await getLeadProfileForLender(dealId);
+  } catch (err) {
+    panel.innerHTML = '<p class="empty-state">Could not load the student profile.</p>';
+    return;
+  }
+  const lead = profile.lead || {};
+  const academic = profile.academic || {};
+  const parents = profile.parents || {};
+
+  const universityHtml = (profile.university_choices || []).length
+    ? profile.university_choices.map((u) => `<div class="detail-row"><span class="k">Choice ${u.sequence_order}</span><span class="v">${escapeHtml(u.university_name)}</span></div>`).join('')
+    : '<p class="empty-state" style="padding:6px 0;">No university choices recorded.</p>';
+
+  const coApplicantsHtml = (profile.co_applicants || []).length
+    ? profile.co_applicants.map((c) => `
+        <div class="lender-app-card">
+          <div class="lender-name">${escapeHtml(c.full_name)} <span style="color:var(--ink-500);font-weight:400;">(${escapeHtml(c.relationship_to_student || '–')})</span></div>
+          ${fieldRow('Annual income', c.annual_income ? formatCurrency(c.annual_income) : null)}
+          ${fieldRow('Employer', c.employer_name)}
+          ${fieldRow('Designation', c.designation)}
+          ${fieldRow('Monthly net income', c.monthly_net_income ? formatCurrency(c.monthly_net_income) : null)}
+          ${fieldRow('Credit score', c.credit_score)}
+        </div>`).join('')
+    : '<p class="empty-state" style="padding:6px 0;">No co-applicant added.</p>';
+
+  const collateralHtml = (profile.collateral || []).length
+    ? profile.collateral.map((c) => `
+        <div class="lender-app-card">
+          ${fieldRow('Security offered', c.security_offered)}
+          ${fieldRow('Type', c.security_type)}
+          ${fieldRow('Current value', c.current_value ? formatCurrency(c.current_value) : null)}
+          ${fieldRow('Owned by', c.owned_by)}
+        </div>`).join('')
+    : '';
+
+  const referencesHtml = (profile.references || []).length
+    ? profile.references.map((r) => `
+        <div class="lender-app-card">
+          <div class="lender-name">${escapeHtml([r.first_name, r.last_name].filter(Boolean).join(' ') || 'Reference')} <span style="color:var(--ink-500);font-weight:400;">(${escapeHtml(r.reference_type || '–')})</span></div>
+          ${fieldRow('Phone', r.phone)}
+          ${fieldRow('Email', r.email)}
+          ${fieldRow('Address', r.address)}
+        </div>`).join('')
+    : '<p class="empty-state" style="padding:6px 0;">No references recorded.</p>';
+
+  const parentsHtml = (parents.father_first_name || parents.mother_first_name)
+    ? `${fieldRow('Father', [parents.father_first_name, parents.father_last_name].filter(Boolean).join(' '))}
+       ${fieldRow('Father mobile', parents.father_mobile)}
+       ${fieldRow('Mother', [parents.mother_first_name, parents.mother_last_name].filter(Boolean).join(' '))}
+       ${fieldRow('Mother mobile', parents.mother_mobile)}`
+    : '<p class="empty-state" style="padding:6px 0;">No parent details recorded.</p>';
+
+  const documentsHtml = (profile.documents || []).length
+    ? profile.documents.map((d) => `
+        <div class="detail-row">
+          <span class="k">${escapeHtml(d.document_type || d.file_name)}</span>
+          <span class="v">
+            <span class="badge ${d.verification_status === 'Verified' ? '' : d.verification_status === 'Rejected' ? 'badge-danger' : 'badge-warning'}">${escapeHtml(d.verification_status)}</span>
+            <button class="btn btn-ghost" style="margin-left:8px;font-size:11px;padding:3px 9px;" data-download="${escapeHtml(d.storage_path)}">Download</button>
+          </span>
+        </div>`).join('')
+    : '<p class="empty-state" style="padding:6px 0;">No documents uploaded yet.</p>';
+
+  panel.innerHTML = `
+    <h4 style="font-size:13px;font-weight:500;margin:0 0 8px;">Applicant</h4>
+    ${fieldRow('Phone', lead.student_phone)}
+    ${fieldRow('Email', lead.student_email)}
+    ${fieldRow('Date of birth', lead.student_dob ? formatDate(lead.student_dob) : null)}
+    ${fieldRow('Gender', lead.gender)}
+    ${fieldRow('Marital status', lead.marital_status)}
+    ${fieldRow('Citizenship', lead.citizenship)}
+    ${fieldRow('PAN', lead.pan_number)}
+    ${fieldRow('Aadhaar', lead.aadhaar_number)}
+    ${fieldRow('Passport', lead.passport_number)}
+    ${fieldRow('Current address', [lead.current_address, lead.current_city, lead.current_state, lead.current_pincode].filter(Boolean).join(', '))}
+    ${fieldRow('Permanent address', [lead.permanent_address, lead.permanent_city, lead.permanent_state, lead.permanent_pincode].filter(Boolean).join(', '))}
+    ${fieldRow('Relationship manager', lead.assigned_rm_name)}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Course &amp; loan</h4>
+    ${fieldRow('Course', lead.course_name)}
+    ${fieldRow('Degree', lead.degree)}
+    ${fieldRow('Destination', lead.destination_country)}
+    ${fieldRow('Intake', lead.intake_month && lead.intake_year ? `${lead.intake_month}/${lead.intake_year}` : null)}
+    ${fieldRow('Admission offer', lead.admission_offer_status)}
+    ${fieldRow('Loan type', lead.loan_type)}
+    ${fieldRow('Loan amount requested', formatCurrency(lead.loan_amount_requested))}
+    ${fieldRow('Total study cost', lead.total_study_cost ? formatCurrency(lead.total_study_cost) : null)}
+    ${fieldRow('Self funds available', lead.self_funds_available ? formatCurrency(lead.self_funds_available) : null)}
+    <h4 style="font-size:13px;font-weight:500;margin:14px 0 8px;">University choices</h4>
+    ${universityHtml}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Academic</h4>
+    ${fieldRow('Highest qualification', academic.highest_qualification)}
+    ${fieldRow('English test taken', academic.english_test_taken)}
+    ${fieldRow('Aptitude test taken', academic.aptitude_test_taken)}
+    ${fieldRow('UG college', academic.ug_college_name)}
+    ${fieldRow('UG course', academic.ug_course_name)}
+    ${fieldRow('UG CGPA', academic.ug_cgpa)}
+    ${fieldRow('UG graduation year', academic.ug_graduation_year)}
+    ${fieldRow('UG backlogs', academic.ug_backlogs)}
+    ${fieldRow('PG college', academic.pg_college_name)}
+    ${fieldRow('PG course', academic.pg_course_name)}
+    ${fieldRow('PG CGPA', academic.pg_cgpa)}
+    ${fieldRow('Scholarship offered', academic.scholarship_offered ? `Yes${academic.scholarship_amount ? ' · ' + formatCurrency(academic.scholarship_amount) : ''}` : null)}
+    ${Object.keys(academic).length === 0 ? '<p class="empty-state" style="padding:6px 0;">No academic details recorded.</p>' : ''}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Family</h4>
+    ${parentsHtml}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Financial</h4>
+    ${fieldRow('Employment status', lead.employment_status)}
+    ${fieldRow('Applicant financial status', lead.applicant_financial_status)}
+    ${fieldRow('Co-applicant financial status', lead.coapplicant_financial_status)}
+    ${fieldRow('Credit score', lead.credit_score)}
+    ${fieldRow('Savings amount', lead.savings_amount ? formatCurrency(lead.savings_amount) : null)}
+    ${fieldRow('Has liabilities', lead.has_liabilities === true ? `Yes${lead.liabilities_amount ? ' · ' + formatCurrency(lead.liabilities_amount) : ''}` : lead.has_liabilities === false ? 'No' : null)}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Co-applicants</h4>
+    ${coApplicantsHtml}
+
+    ${collateralHtml ? `<h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Collateral</h4>${collateralHtml}` : ''}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">References</h4>
+    ${referencesHtml}
+
+    <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Documents</h4>
+    ${documentsHtml}
+  `;
+
+  panel.querySelectorAll('[data-download]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        const url = await getDocumentDownloadUrl(btn.dataset.download);
+        window.open(url, '_blank');
+      } catch (err) {
+        showToast('Could not open this document.', true);
+      }
+    });
+  });
 }
 
 async function renderQueries(dealId) {
