@@ -3,18 +3,17 @@
 // "which product does each role land in" — update here only.
 //
 // GO-LIVE STATE (update this comment as apps ship):
-// Built and deployed: Authentication, Lead Management (+ Document
-// Management, integrated), Consultant Portal, RM Workspace, Manager
-// Dashboard, Lender Pipeline.
-// Not started: Admin Dashboard (partial — invite/role-mgmt + export/
-// import live in Authentication), Reporting, Notification Engine, Settings.
+// Built and deployed: Authentication, Admin Dashboard, Lead Management
+// (+ Document Management, integrated), Consultant Portal, RM Workspace,
+// Manager Dashboard, Lender Pipeline.
 //
-// Roles whose dedicated app isn't shipped yet are routed to Lead
-// Management, since its RLS already grants them full, correctly-scoped
-// access — a working shared surface beats a dead link.
+// Business Development and Counselor don't have dedicated apps by design
+// — they're routed to Lead Management, since its RLS already grants them
+// full, correctly-scoped access — a working shared surface beats a dead
+// link for roles without enough distinct workflow to justify a bespoke app.
 // =========================================================
 export const ROLE_HOME_ROUTES = {
-  Admin: '/lead-management/public/index.html',              // TODO: swap to /admin-dashboard when it ships
+  Admin: '/admin-dashboard/public/index.html',
   Manager: '/manager-dashboard/public/index.html',
   'Relationship Manager': '/rm-workspace/public/index.html',
   Consultant: '/consultant-portal/public/index.html',
