@@ -3,12 +3,17 @@
 // =========================================================
 import {
   getLeadDetail,
+  getLeadExtendedDetail,
   getLeadTimeline,
   changeLeadStage,
   assignLeadToRm,
 } from '../services/leadService.js';
 import { initDealsTab } from './dealPanel.js';
 import { initDocumentsTab } from './documentPanel.js';
+import { initApplicantDetailsTab } from './applicantDetailsPanel.js';
+import { initAcademicDetailsTab } from './academicDetailsPanel.js';
+import { initFamilyTab } from './familyPanel.js';
+import { initCollateralReferencesTab } from './collateralReferencesPanel.js';
 import { getLeadStages, getAssignableRms } from '../services/lookupService.js';
 import { formatCurrency, formatDateTime } from '../utils/validation.js';
 
@@ -48,8 +53,9 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
     document.getElementById('panelOverview').innerHTML = '<p class="empty-state">Loading…</p>';
 
     try {
-      const [{ lead, coApplicants }, timeline, stages, rms] = await Promise.all([
+      const [{ lead, coApplicants }, extended, timeline, stages, rms] = await Promise.all([
         getLeadDetail(leadId),
+        getLeadExtendedDetail(leadId),
         getLeadTimeline(leadId),
         getLeadStages(),
         // Consultants/BD never see the RM-assignment control (RLS also blocks
@@ -60,6 +66,24 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
       renderHeader(lead);
       renderOverview(lead, coApplicants, stages, rms, currentUserRole, showToast, onLeadUpdated);
       renderTimeline(timeline);
+
+      // Refetches just the EL Details tabs after a save, without reloading
+      // the whole drawer (stage/RM controls, timeline, etc. stay untouched).
+      const refreshDetailsTabs = async () => {
+        const [{ lead: freshLead, coApplicants: freshCoApplicants }, freshExtended] = await Promise.all([
+          getLeadDetail(leadId),
+          getLeadExtendedDetail(leadId),
+        ]);
+        await initApplicantDetailsTab(document.getElementById('panelApplicant'), freshLead, freshExtended.universities, { currentUser, showToast, onSaved: refreshDetailsTabs });
+        await initAcademicDetailsTab(document.getElementById('panelAcademic'), freshLead, freshExtended.academic, { currentUser, showToast, onSaved: refreshDetailsTabs });
+        await initFamilyTab(document.getElementById('panelFamily'), freshLead, freshExtended.parents, freshCoApplicants[0], { currentUser, showToast, onSaved: refreshDetailsTabs });
+        await initCollateralReferencesTab(document.getElementById('panelCollateral'), freshLead, freshExtended.collateral, freshExtended.references, { currentUser, showToast, onSaved: refreshDetailsTabs });
+      };
+
+      await initApplicantDetailsTab(document.getElementById('panelApplicant'), lead, extended.universities, { currentUser, showToast, onSaved: refreshDetailsTabs });
+      await initAcademicDetailsTab(document.getElementById('panelAcademic'), lead, extended.academic, { currentUser, showToast, onSaved: refreshDetailsTabs });
+      await initFamilyTab(document.getElementById('panelFamily'), lead, extended.parents, coApplicants[0], { currentUser, showToast, onSaved: refreshDetailsTabs });
+      await initCollateralReferencesTab(document.getElementById('panelCollateral'), lead, extended.collateral, extended.references, { currentUser, showToast, onSaved: refreshDetailsTabs });
 
       // Consultants/BD never see Deals — commercially sensitive, blocked by
       // RLS too, but no point rendering a tab that will always come back empty.

@@ -24,16 +24,31 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+// supabase-js's functions.invoke() is a cross-origin call from the browser,
+// so the browser sends a CORS preflight OPTIONS request before the real
+// POST. Without these headers the preflight gets a bare 405 and the actual
+// invite request never fires, even though nothing about the POST itself
+// was wrong.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
   }
 
   try {
     const { invitationId, email, fullName } = await req.json();
 
     if (!invitationId || !email) {
-      return new Response(JSON.stringify({ error: 'invitationId and email are required' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'invitationId and email are required' }), { status: 400, headers: corsHeaders });
     }
 
     // Belt-and-suspenders: confirm the invitation actually exists and is
@@ -48,10 +63,10 @@ serve(async (req) => {
       .single();
 
     if (fetchError || !invitation) {
-      return new Response(JSON.stringify({ error: 'No matching pending invitation found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'No matching pending invitation found' }), { status: 404, headers: corsHeaders });
     }
     if (invitation.email !== email) {
-      return new Response(JSON.stringify({ error: 'Email does not match the invitation record' }), { status: 400 });
+      return new Response(JSON.stringify({ error: 'Email does not match the invitation record' }), { status: 400, headers: corsHeaders });
     }
 
     // This is the actual privileged call: creates the auth.users row and
@@ -67,14 +82,14 @@ serve(async (req) => {
       // account (e.g. a previous invite, or they were invited then
       // deactivated then re-invited). Surface it clearly rather than a
       // generic 500 — the Admin UI shows this message directly.
-      return new Response(JSON.stringify({ error: error.message }), { status: 400 });
+      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ success: true, authUserId: data.user?.id }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message ?? 'Unexpected error' }), { status: 500 });
+    return new Response(JSON.stringify({ error: err.message ?? 'Unexpected error' }), { status: 500, headers: corsHeaders });
   }
 });

@@ -81,6 +81,93 @@ export async function getLeadDetail(leadId) {
   return { lead, coApplicants };
 }
 
+/**
+ * Fetches the EL Details extension data for a lead: university choices,
+ * academic details, parent details, collateral, and both references.
+ * Kept as one call so leadDrawer.js can fetch it alongside getLeadDetail
+ * in the same Promise.all it already uses for stages/RMs/timeline.
+ */
+export async function getLeadExtendedDetail(leadId) {
+  const [universities, academic, parents, collateral, references] = await Promise.all([
+    supabase.from('lead_university_choices').select('*').eq('lead_id', leadId).eq('is_deleted', false).order('sequence_order'),
+    supabase.from('lead_academic_details').select('*').eq('lead_id', leadId).eq('is_deleted', false).maybeSingle(),
+    supabase.from('lead_parent_details').select('*').eq('lead_id', leadId).eq('is_deleted', false).maybeSingle(),
+    supabase.from('lead_collateral_details').select('*').eq('lead_id', leadId).eq('is_deleted', false),
+    supabase.from('lead_references').select('*').eq('lead_id', leadId).eq('is_deleted', false),
+  ]);
+  for (const r of [universities, academic, parents, collateral, references]) {
+    if (r.error) throw r.error;
+  }
+  return {
+    universities: universities.data,
+    academic: academic.data,
+    parents: parents.data,
+    collateral: collateral.data,
+    references: references.data,
+  };
+}
+
+/** Personal ID + Loan Identification + Addresses + Alternate Contact + Employment — all plain leads columns. */
+export async function updateApplicantDetails(leadId, fields) {
+  const { error } = await supabase.from('leads').update(fields).eq('id', leadId);
+  if (error) throw error;
+}
+
+export async function upsertUniversityChoices(leadId, choices, currentUserId) {
+  // choices: [{ sequence_order, university_name }]. Replace-all is simplest
+  // and correct here — there are at most 6 rows per lead, so a delete+insert
+  // is cheap and avoids tracking which rows changed client-side.
+  const { error: delError } = await supabase.from('lead_university_choices').delete().eq('lead_id', leadId);
+  if (delError) throw delError;
+  const rows = choices
+    .filter((c) => c.university_name?.trim())
+    .map((c) => ({ lead_id: leadId, sequence_order: c.sequence_order, university_name: c.university_name.trim(), created_by: currentUserId, updated_by: currentUserId }));
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('lead_university_choices').insert(rows);
+  if (error) throw error;
+}
+
+export async function upsertAcademicDetails(leadId, fields, currentUserId) {
+  const { error } = await supabase
+    .from('lead_academic_details')
+    .upsert({ lead_id: leadId, ...fields, updated_by: currentUserId, created_by: currentUserId }, { onConflict: 'lead_id' });
+  if (error) throw error;
+}
+
+export async function upsertParentDetails(leadId, fields, currentUserId) {
+  const { error } = await supabase
+    .from('lead_parent_details')
+    .upsert({ lead_id: leadId, ...fields, updated_by: currentUserId, created_by: currentUserId }, { onConflict: 'lead_id' });
+  if (error) throw error;
+}
+
+export async function updateCoApplicant(coApplicantId, fields) {
+  const { error } = await supabase.from('co_applicants').update(fields).eq('id', coApplicantId);
+  if (error) throw error;
+}
+
+export async function createCoApplicant(leadId, fields, currentUserId) {
+  const { error } = await supabase.from('co_applicants').insert({ lead_id: leadId, ...fields, created_by: currentUserId, updated_by: currentUserId });
+  if (error) throw error;
+}
+
+export async function upsertCollateralDetails(leadId, collateralId, fields, currentUserId) {
+  if (collateralId) {
+    const { error } = await supabase.from('lead_collateral_details').update(fields).eq('id', collateralId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase.from('lead_collateral_details').insert({ lead_id: leadId, ...fields, created_by: currentUserId, updated_by: currentUserId });
+  if (error) throw error;
+}
+
+export async function upsertReference(leadId, referenceType, fields, currentUserId) {
+  const { error } = await supabase
+    .from('lead_references')
+    .upsert({ lead_id: leadId, reference_type: referenceType, ...fields, updated_by: currentUserId, created_by: currentUserId }, { onConflict: 'lead_id,reference_type' });
+  if (error) throw error;
+}
+
 export async function getLeadTimeline(leadId) {
   const { data, error } = await supabase
     .from('lead_events')
