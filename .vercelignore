@@ -1,0 +1,8 @@
+# Only each app's public/ folder (plus shared/) should ever be served.
+# Everything below is internal source/docs that Vercel's zero-config
+# static deploy was otherwise serving verbatim to anyone with the URL —
+# full DB schema, RLS policy source, and edge function source included.
+deployment/
+docs/
+sql/
+supabase/
