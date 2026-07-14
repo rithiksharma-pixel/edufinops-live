@@ -7,7 +7,6 @@
 import {
   getDealsForLead,
   getDealDetail,
-  createDeal,
   updateStageDetails,
   changeDealStage,
   putDealOnHold,
@@ -22,9 +21,6 @@ import {
   getDealStageStatuses,
   getDealRejectionReasons,
   getDealHoldReasons,
-  getLenders,
-  getCounselors,
-  getLoanOfficers,
 } from '../services/lookupService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from '../services/dealQueryService.js';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/validation.js';
@@ -37,21 +33,16 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     const [deals, stages] = await Promise.all([getDealsForLead(leadId), getDealStages()]);
 
     panelEl.innerHTML = `
-      <button class="btn btn-ghost" id="btnNewDeal" style="width:100%;justify-content:center;margin-bottom:14px;">
-        <i class="fa-solid fa-plus"></i> Share with new lender
-      </button>
-      <div id="newDealForm"></div>
+      <h4 style="font-size:13px;font-weight:500;margin:0 0 10px;">Shared deals</h4>
       <div id="dealCards"></div>
     `;
 
     const cardsWrap = document.getElementById('dealCards');
     if (deals.length === 0) {
-      cardsWrap.innerHTML = '<p class="empty-state">Not shared with any lender yet.</p>';
+      cardsWrap.innerHTML = '<p class="empty-state">Not shared with any lender yet — use the table above to share.</p>';
     } else {
       deals.forEach((deal) => cardsWrap.appendChild(renderDealCard(deal, stages)));
     }
-
-    document.getElementById('btnNewDeal').addEventListener('click', () => showNewDealForm());
   }
 
   function renderDealCard(deal, stages) {
@@ -376,54 +367,8 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     return el;
   }
 
-  async function showNewDealForm() {
-    const formWrap = document.getElementById('newDealForm');
-    const [lenders, counselors, stages] = await Promise.all([getLenders(), getCounselors(), getDealStages()]);
-    const firstStage = stages.find((s) => s.sequence_order === Math.min(...stages.map((s) => s.sequence_order)));
-
-    formWrap.innerHTML = `
-      <div class="lender-app-card">
-        <div class="form-field"><label>Lender</label><select id="newDealLender"><option value="">Select…</option>${lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}</select></div>
-        <div class="form-field"><label>Assigned counselor</label><select id="newDealCounselor"><option value="">Unassigned</option>${counselors.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join('')}</select></div>
-        <div class="form-field"><label>Loan officer *</label><select id="newDealLoanOfficer"><option value="">Select a lender first</option></select></div>
-        <p class="empty-state" style="padding:4px 0;font-size:12px;">Only the assigned loan officer at the lender will be able to see this deal.</p>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-ghost" id="btnCancelNewDeal" style="flex:1;">Cancel</button>
-          <button class="btn btn-primary" id="btnSaveNewDeal" style="flex:1;">Share deal</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('newDealLender').addEventListener('change', async (e) => {
-      const officerSelect = document.getElementById('newDealLoanOfficer');
-      if (!e.target.value) { officerSelect.innerHTML = '<option value="">Select a lender first</option>'; return; }
-      officerSelect.innerHTML = '<option value="">Loading…</option>';
-      const officers = await getLoanOfficers(e.target.value);
-      officerSelect.innerHTML = officers.length
-        ? `<option value="">Select…</option>` + officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('')
-        : '<option value="">No one at this lender yet — invite them first</option>';
-    });
-
-    document.getElementById('btnCancelNewDeal').addEventListener('click', () => { formWrap.innerHTML = ''; });
-    document.getElementById('btnSaveNewDeal').addEventListener('click', async () => {
-      const lenderId = document.getElementById('newDealLender').value;
-      const counselorId = document.getElementById('newDealCounselor').value || null;
-      const loanOfficerId = document.getElementById('newDealLoanOfficer').value || null;
-      if (!lenderId) { showToast('Choose a lender.', true); return; }
-      if (!loanOfficerId) { showToast('Choose the loan officer this deal should be assigned to — otherwise no one at the lender can see it.', true); return; }
-      try {
-        await createDeal({ leadId, lenderId, assignedCounselorId: counselorId, assignedLoanOfficerId: loanOfficerId }, firstStage.id, currentUser.id);
-        showToast('Deal created.');
-        formWrap.innerHTML = '';
-        onDealUpdated();
-        await refresh();
-      } catch (err) {
-        showToast(err.message || 'Could not create this deal.', true);
-      }
-    });
-  }
-
   await refresh();
+  return { refresh };
 }
 
 function escapeHtml(str) {

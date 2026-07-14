@@ -180,6 +180,7 @@
         <div>
           <h2 id="drawerStudentName">–</h2>
           <span class="drawer-subtitle" id="drawerSubtitle">–</span>
+          <div class="drawer-header-facts" id="drawerHeaderFacts"></div>
         </div>
         <button class="icon-btn" id="btnCloseDrawer" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -190,8 +191,8 @@
           <button class="tab-btn" data-tab="applicant">Applicant Details</button>
           <button class="tab-btn" data-tab="academic">Academic</button>
           <button class="tab-btn" data-tab="family">Family & Co-Applicant</button>
-          <button class="tab-btn" data-tab="collateral">Collateral & References</button>
-          <button class="tab-btn" data-tab="lenders">Deals</button>
+          <button class="tab-btn" data-tab="collateral" id="tabBtnCollateral">Collateral & References</button>
+          <button class="tab-btn" data-tab="lenders">Lenders</button>
           <button class="tab-btn" data-tab="documents">Documents</button>
           <button class="tab-btn" data-tab="timeline">Timeline</button>
         </nav>
@@ -202,7 +203,10 @@
           <div class="tab-panel" data-panel="academic" id="panelAcademic"></div>
           <div class="tab-panel" data-panel="family" id="panelFamily"></div>
           <div class="tab-panel" data-panel="collateral" id="panelCollateral"></div>
-          <div class="tab-panel" data-panel="lenders" id="panelLenders"></div>
+          <div class="tab-panel" data-panel="lenders">
+            <div id="panelLenderMatrix"></div>
+            <div id="panelLenders" style="margin-top:26px;"></div>
+          </div>
           <div class="tab-panel" data-panel="documents" id="panelDocuments"></div>
           <div class="tab-panel" data-panel="timeline" id="panelTimeline"></div>
         </div>

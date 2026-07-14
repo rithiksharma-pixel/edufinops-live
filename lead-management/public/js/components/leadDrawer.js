@@ -16,6 +16,7 @@ import { initApplicantDetailsTab } from './applicantDetailsPanel.js';
 import { initAcademicDetailsTab } from './academicDetailsPanel.js';
 import { initFamilyTab } from './familyPanel.js';
 import { initCollateralReferencesTab } from './collateralReferencesPanel.js';
+import { initLenderStatusPanel } from './lenderStatusPanel.js';
 import { getLeadStages, getAssignableRms } from '../services/lookupService.js';
 import { formatCurrency, formatDateTime } from '../utils/validation.js';
 
@@ -69,6 +70,14 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
       renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated);
       renderTimeline(timeline);
 
+      // Collateral & References only makes sense for a Collateral loan —
+      // hide the tab entirely rather than show an irrelevant empty section.
+      document.getElementById('tabBtnCollateral').hidden = lead.loan_type !== 'Collateral';
+      // Every open() starts fresh at Overview, regardless of which tab
+      // was active for whatever lead was last viewed.
+      tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === 'overview'));
+      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === 'overview'));
+
       // Refetches just the EL Details tabs after a save, without reloading
       // the whole drawer (stage/RM controls, timeline, etc. stay untouched).
       const refreshDetailsTabs = async () => {
@@ -87,15 +96,23 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
       await initFamilyTab(document.getElementById('panelFamily'), lead, extended.parents, coApplicants[0], { currentUser, showToast, onSaved: refreshDetailsTabs });
       await initCollateralReferencesTab(document.getElementById('panelCollateral'), lead, extended.collateral, extended.references, { currentUser, showToast, onSaved: refreshDetailsTabs });
 
-      // Consultants/BD never see Deals — commercially sensitive, blocked by
-      // RLS too, but no point rendering a tab that will always come back empty.
+      // Consultants/BD never see Deals/Lenders — commercially sensitive,
+      // blocked by RLS too, but no point rendering a tab that always comes
+      // back empty.
+      const lenderMatrixPanel = document.getElementById('panelLenderMatrix');
       const dealsPanel = document.getElementById('panelLenders');
       const documentsPanel = document.getElementById('panelDocuments');
       if (currentUserRole === 'Consultant' || currentUserRole === 'Business Development') {
+        lenderMatrixPanel.innerHTML = '';
         dealsPanel.innerHTML = '<p class="empty-state">Deal information isn\'t visible from this role.</p>';
         documentsPanel.innerHTML = '<p class="empty-state">Document management isn\'t visible from this role.</p>';
       } else {
-        await initDealsTab(dealsPanel, leadId, { currentUser, showToast, onDealUpdated: onLeadUpdated });
+        const dealsTab = await initDealsTab(dealsPanel, leadId, { currentUser, showToast, onDealUpdated: onLeadUpdated });
+        await initLenderStatusPanel(lenderMatrixPanel, leadId, {
+          currentUser,
+          showToast,
+          onShared: () => { onLeadUpdated(); dealsTab.refresh(); },
+        });
         await initDocumentsTab(documentsPanel, leadId, { currentUser, showToast, coApplicants });
       }
     } catch (err) {
@@ -111,6 +128,20 @@ function renderHeader(lead) {
   document.getElementById('drawerStudentName').textContent = lead.student_name;
   document.getElementById('drawerSubtitle').textContent =
     [lead.course_name, lead.university_name].filter(Boolean).join(' · ') || 'No course details yet';
+
+  // Pinned "at a glance" facts — visible above the tabs no matter which
+  // section is active, so you don't have to click into Overview to see
+  // the basics while working through Applicant/Academic/etc.
+  const facts = [
+    ['Phone', lead.student_phone],
+    ['Stage', lead.lead_stages?.name || '–'],
+    ['Assigned RM', lead.assigned_rm?.full_name || 'Unassigned'],
+    ['Loan type', lead.loan_type || '–'],
+    ['Loan requested', formatCurrency(lead.loan_amount_requested, lead.currency)],
+  ];
+  document.getElementById('drawerHeaderFacts').innerHTML = facts
+    .map(([k, v]) => `<div class="drawer-header-fact"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`)
+    .join('');
 }
 
 function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated) {
