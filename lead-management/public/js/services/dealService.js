@@ -118,35 +118,44 @@ export async function getDealEvents(dealId) {
   return data;
 }
 
+/**
+ * Deliberately does NOT chain .select() on the insert. Postgres evaluates
+ * an INSERT's RETURNING clause against the table's SELECT policies as
+ * part of the same statement, and empirically (verified directly against
+ * Postgres) that check fails here even for a row an admin unquestionably
+ * can see — can_view_deal(id) returns true for the exact same row a
+ * moment later in a separate statement, just not inside INSERT...RETURNING
+ * itself. Generating the id client-side and reading it back afterward
+ * sidesteps the issue entirely rather than depending on that RETURNING
+ * quirk resolving itself.
+ */
 export async function createDeal({ leadId, lenderId, assignedCounselorId, assignedLoanOfficerId }, firstStageId, currentUserId) {
-  const { data: deal, error } = await supabase
-    .from('deals')
-    .insert({
-      lead_id: leadId,
-      lender_id: lenderId,
-      current_deal_stage_id: firstStageId,
-      assigned_counselor_id: assignedCounselorId || null,
-      assigned_loan_officer_id: assignedLoanOfficerId || null,
-      created_by: currentUserId,
-      updated_by: currentUserId,
-    })
-    .select()
-    .single();
+  const dealId = crypto.randomUUID();
+  const { error } = await supabase.from('deals').insert({
+    id: dealId,
+    lead_id: leadId,
+    lender_id: lenderId,
+    current_deal_stage_id: firstStageId,
+    assigned_counselor_id: assignedCounselorId || null,
+    assigned_loan_officer_id: assignedLoanOfficerId || null,
+    created_by: currentUserId,
+    updated_by: currentUserId,
+  });
   if (error) throw error;
 
   // Seed the Bank Prospect detail row so the form has something to edit immediately
-  const { error: detailError } = await supabase.from('deal_bank_prospect_details').insert({ deal_id: deal.id });
+  const { error: detailError } = await supabase.from('deal_bank_prospect_details').insert({ deal_id: dealId });
   if (detailError) throw new Error(`Deal created, but its Bank Prospect details failed to initialize: ${detailError.message}`);
 
   const { error: eventError } = await supabase.from('deal_events').insert({
-    deal_id: deal.id,
+    deal_id: dealId,
     event_type: 'Deal Created',
     to_stage_id: firstStageId,
     created_by: currentUserId,
   });
   if (eventError) throw new Error(`Deal created, but its opening timeline entry failed: ${eventError.message}`);
 
-  return deal;
+  return { id: dealId };
 }
 
 export async function updateStageDetails(stageName, dealId, fields) {
