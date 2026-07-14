@@ -378,16 +378,15 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
   async function showNewDealForm() {
     const formWrap = document.getElementById('newDealForm');
-    const [lenders, counselors, loanOfficers, stages] = await Promise.all([
-      getLenders(), getCounselors(), getLoanOfficers(), getDealStages(),
-    ]);
+    const [lenders, counselors, stages] = await Promise.all([getLenders(), getCounselors(), getDealStages()]);
     const firstStage = stages.find((s) => s.sequence_order === Math.min(...stages.map((s) => s.sequence_order)));
 
     formWrap.innerHTML = `
       <div class="lender-app-card">
-        <div class="form-field"><label>Lender</label><select id="newDealLender">${lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Lender</label><select id="newDealLender"><option value="">Select…</option>${lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')}</select></div>
         <div class="form-field"><label>Assigned counselor</label><select id="newDealCounselor"><option value="">Unassigned</option>${counselors.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join('')}</select></div>
-        <div class="form-field"><label>Loan officer (optional)</label><select id="newDealLoanOfficer"><option value="">Not yet known</option>${loanOfficers.map((c) => `<option value="${c.id}">${escapeHtml(c.full_name)}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Loan officer *</label><select id="newDealLoanOfficer"><option value="">Select a lender first</option></select></div>
+        <p class="empty-state" style="padding:4px 0;font-size:12px;">Only the assigned loan officer at the lender will be able to see this deal.</p>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-ghost" id="btnCancelNewDeal" style="flex:1;">Cancel</button>
           <button class="btn btn-primary" id="btnSaveNewDeal" style="flex:1;">Share deal</button>
@@ -395,12 +394,23 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       </div>
     `;
 
+    document.getElementById('newDealLender').addEventListener('change', async (e) => {
+      const officerSelect = document.getElementById('newDealLoanOfficer');
+      if (!e.target.value) { officerSelect.innerHTML = '<option value="">Select a lender first</option>'; return; }
+      officerSelect.innerHTML = '<option value="">Loading…</option>';
+      const officers = await getLoanOfficers(e.target.value);
+      officerSelect.innerHTML = officers.length
+        ? `<option value="">Select…</option>` + officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('')
+        : '<option value="">No one at this lender yet — invite them first</option>';
+    });
+
     document.getElementById('btnCancelNewDeal').addEventListener('click', () => { formWrap.innerHTML = ''; });
     document.getElementById('btnSaveNewDeal').addEventListener('click', async () => {
       const lenderId = document.getElementById('newDealLender').value;
       const counselorId = document.getElementById('newDealCounselor').value || null;
       const loanOfficerId = document.getElementById('newDealLoanOfficer').value || null;
       if (!lenderId) { showToast('Choose a lender.', true); return; }
+      if (!loanOfficerId) { showToast('Choose the loan officer this deal should be assigned to — otherwise no one at the lender can see it.', true); return; }
       try {
         await createDeal({ leadId, lenderId, assignedCounselorId: counselorId, assignedLoanOfficerId: loanOfficerId }, firstStage.id, currentUser.id);
         showToast('Deal created.');

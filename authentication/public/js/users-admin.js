@@ -2,7 +2,7 @@ import { getCurrentUserProfile } from './services/authService.js';
 import {
   getRoles, getAllUsers, getPossibleManagers, getPendingInvitations,
   inviteUser, revokeInvitation, changeUserRole, changeReportingManager,
-  deactivateUser, reactivateUser,
+  deactivateUser, reactivateUser, getLenders, getLenderBranches,
 } from './services/userAdminService.js';
 
 const toastEl = document.getElementById('toast');
@@ -17,6 +17,7 @@ function showToast(message, isError = false) {
 
 let roles = [];
 let managers = [];
+let lenders = [];
 
 async function loadUsers() {
   const tbody = document.getElementById('usersTableBody');
@@ -116,16 +117,44 @@ function initInviteModal() {
   const roleSelect = document.getElementById('inviteRoleSelect');
   const managerField = document.getElementById('managerField');
   const managerSelect = document.getElementById('inviteManagerSelect');
+  const lenderOrgField = document.getElementById('lenderOrgField');
+  const lenderOrgSelect = document.getElementById('inviteLenderOrgSelect');
+  const lenderBranchField = document.getElementById('lenderBranchField');
+  const lenderBranchSelect = document.getElementById('inviteLenderBranchSelect');
 
   roleSelect.innerHTML = roles.map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   managerSelect.innerHTML = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('');
+  lenderOrgSelect.innerHTML = `<option value="">Select…</option>` + lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
 
-  function updateManagerFieldVisibility() {
+  function updateFieldVisibility() {
     const selectedName = roleSelect.selectedOptions[0]?.dataset.name;
     managerField.hidden = !['Relationship Manager', 'Counselor', 'Business Development'].includes(selectedName);
+    const isLender = selectedName === 'Lender';
+    lenderOrgField.hidden = !isLender;
+    lenderBranchField.hidden = !isLender;
+    if (!isLender) {
+      lenderOrgSelect.value = '';
+      lenderBranchSelect.innerHTML = '';
+    }
   }
-  roleSelect.addEventListener('change', updateManagerFieldVisibility);
-  updateManagerFieldVisibility();
+  roleSelect.addEventListener('change', updateFieldVisibility);
+  updateFieldVisibility();
+
+  lenderOrgSelect.addEventListener('change', async () => {
+    lenderBranchSelect.innerHTML = '<option value="">Loading…</option>';
+    if (!lenderOrgSelect.value) {
+      lenderBranchSelect.innerHTML = '<option value="">Select a lender first</option>';
+      return;
+    }
+    try {
+      const branches = await getLenderBranches(lenderOrgSelect.value);
+      lenderBranchSelect.innerHTML = branches.length
+        ? `<option value="">Select…</option>` + branches.map((b) => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join('')
+        : '<option value="">No branches set up yet — add one in Admin Settings</option>';
+    } catch (err) {
+      lenderBranchSelect.innerHTML = '<option value="">Could not load branches</option>';
+    }
+  });
 
   document.getElementById('btnInvite').addEventListener('click', () => { overlay.hidden = false; });
   document.getElementById('btnCloseInviteModal').addEventListener('click', () => { overlay.hidden = true; });
@@ -139,6 +168,11 @@ function initInviteModal() {
       showToast('Fill in name, email, and role.', true);
       return;
     }
+    const selectedRoleName = roleSelect.selectedOptions[0]?.dataset.name;
+    if (selectedRoleName === 'Lender' && (!payload.lender_organization_id || !payload.lender_branch_id)) {
+      showToast('Select the lender institution and branch for this person.', true);
+      return;
+    }
     const btn = document.getElementById('btnSubmitInvite');
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
@@ -147,6 +181,8 @@ function initInviteModal() {
         fullName: payload.full_name.trim(),
         roleId: payload.role_id,
         reportingManagerId: payload.reporting_manager_id || null,
+        lenderOrganizationId: payload.lender_organization_id || null,
+        lenderBranchId: payload.lender_branch_id || null,
       });
       showToast('Invitation sent.');
       overlay.hidden = true;
@@ -180,6 +216,7 @@ async function bootstrap() {
 
   roles = await getRoles();
   managers = await getPossibleManagers();
+  lenders = await getLenders();
   initInviteModal();
   await Promise.all([loadUsers(), loadInvitations()]);
 }

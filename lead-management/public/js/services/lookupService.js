@@ -130,12 +130,19 @@ export async function getCounselors() {
   return data;
 }
 
-/** Lender-side users (future Lender login) who can be set as a deal's loan officer. */
-export async function getLoanOfficers() {
+/**
+ * Lender-side users who can be set as a deal's loan officer, scoped to
+ * one lender institution — with 17 lenders and multiple branches each,
+ * an unfiltered list would be hundreds of names. Requires lenderId since
+ * a deal's loan officer only ever makes sense once a lender is picked.
+ */
+export async function getLoanOfficers(lenderId) {
+  if (!lenderId) return [];
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, roles!inner(name)')
+    .select('id, full_name, roles!inner(name), lender_branches(name)')
     .eq('roles.name', 'Lender')
+    .eq('lender_organization_id', lenderId)
     .eq('is_active', true)
     .eq('is_deleted', false)
     .order('full_name', { ascending: true });
