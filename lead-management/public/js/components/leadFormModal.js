@@ -85,6 +85,12 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
           loan_amount_requested: Number(payload.loan_amount_requested),
           lead_source_id: payload.lead_source_id,
           source_user_id: currentUser.id,
+          // RM/Manager creators must land somewhere their own SELECT policy
+          // covers (assigned_rm_id / assigned_manager_id) — otherwise the
+          // insert's RETURNING clause fails RLS on the row they just made,
+          // even though the insert itself was allowed.
+          assigned_rm_id: currentUser.role === 'Relationship Manager' ? currentUser.id : null,
+          assigned_manager_id: currentUser.role === 'Manager' ? currentUser.id : null,
         },
         currentUser.id,
         openingStage.id
