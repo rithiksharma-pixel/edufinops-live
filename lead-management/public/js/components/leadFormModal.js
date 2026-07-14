@@ -3,7 +3,9 @@
 // =========================================================
 import { validateLeadForm } from '../utils/validation.js';
 import { createLead } from '../services/leadService.js';
-import { getLeadSources, getLeadStages } from '../services/lookupService.js';
+import { getLeadSources, getLeadStages, getConsultancies } from '../services/lookupService.js';
+
+const OTHER_CONSULTANCY_VALUE = '__other__';
 
 export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   const overlay = document.getElementById('leadModalOverlay');
@@ -12,17 +14,52 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   const btnClose = document.getElementById('btnCloseModal');
   const btnCancel = document.getElementById('btnCancelModal');
   const sourceSelect = document.getElementById('f_lead_source_id');
+  const consultancyField = document.getElementById('consultancyField');
+  const consultancySelect = document.getElementById('f_consultancy_id');
+  const consultancyOtherInput = document.getElementById('f_consultancy_other_name');
+
+  let sources = [];
+
+  function isBdPartnership() {
+    const selected = sources.find((s) => s.id === sourceSelect.value);
+    return selected?.name === 'BD Partnership';
+  }
+
+  function toggleConsultancyField() {
+    const show = isBdPartnership();
+    consultancyField.hidden = !show;
+    if (!show) {
+      consultancySelect.value = '';
+      consultancyOtherInput.hidden = true;
+      consultancyOtherInput.value = '';
+    }
+  }
+
+  sourceSelect.addEventListener('change', toggleConsultancyField);
+  consultancySelect.addEventListener('change', () => {
+    const isOther = consultancySelect.value === OTHER_CONSULTANCY_VALUE;
+    consultancyOtherInput.hidden = !isOther;
+    if (!isOther) consultancyOtherInput.value = '';
+  });
 
   async function open() {
     if (window.__closeLeadDrawer) window.__closeLeadDrawer();
     clearErrors();
     form.reset();
     if (sourceSelect.options.length <= 0) {
-      const sources = await getLeadSources();
+      sources = await getLeadSources();
       sourceSelect.innerHTML = sources
         .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
         .join('');
     }
+    if (consultancySelect.options.length <= 0) {
+      const consultancies = await getConsultancies();
+      consultancySelect.innerHTML =
+        `<option value="">Select consultancy…</option>` +
+        consultancies.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') +
+        `<option value="${OTHER_CONSULTANCY_VALUE}">Other</option>`;
+    }
+    toggleConsultancyField();
     overlay.hidden = false;
   }
 
@@ -66,6 +103,24 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
       return;
     }
 
+    let consultancyId = null;
+    let consultancyOtherName = null;
+    if (isBdPartnership()) {
+      if (!consultancySelect.value) {
+        showErrors({ consultancy_id: 'Choose the consultancy this lead came from.' });
+        return;
+      }
+      if (consultancySelect.value === OTHER_CONSULTANCY_VALUE) {
+        consultancyOtherName = consultancyOtherInput.value.trim();
+        if (!consultancyOtherName) {
+          showErrors({ consultancy_id: 'Enter the consultancy name.' });
+          return;
+        }
+      } else {
+        consultancyId = consultancySelect.value;
+      }
+    }
+
     const submitBtn = document.getElementById('btnSubmitLead');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving…';
@@ -84,6 +139,8 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
           destination_country: payload.destination_country?.trim() || null,
           loan_amount_requested: Number(payload.loan_amount_requested),
           lead_source_id: payload.lead_source_id,
+          consultancy_id: consultancyId,
+          consultancy_other_name: consultancyOtherName,
           source_user_id: currentUser.id,
           // RM/Manager creators must land somewhere their own SELECT policy
           // covers (assigned_rm_id / assigned_manager_id) — otherwise the

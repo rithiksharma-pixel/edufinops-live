@@ -118,6 +118,22 @@ export async function getLenders() {
   return data;
 }
 
+let consultancyCache = null;
+
+/** Admin-managed list for the "Consultancy name" field shown when Lead Source = BD Partnership. */
+export async function getConsultancies() {
+  if (consultancyCache) return consultancyCache;
+  const { data, error } = await supabase
+    .from('consultancies')
+    .select('id, name')
+    .eq('is_active', true)
+    .eq('is_deleted', false)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  consultancyCache = data;
+  return data;
+}
+
 export async function getCounselors() {
   const { data, error } = await supabase
     .from('users')

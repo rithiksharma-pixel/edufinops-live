@@ -24,14 +24,20 @@
         <a class="nav-item active" href="#">
           <i class="fa-solid fa-diagram-project"></i> Lead Management
         </a>
-        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+        <a class="nav-item" href="../../rm-workspace/public/index.html">
           <i class="fa-solid fa-user-tie"></i> RM Workspace
         </a>
-        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+        <a class="nav-item" href="../../consultant-portal/public/index.html">
           <i class="fa-solid fa-handshake"></i> Consultant Portal
         </a>
-        <a class="nav-item disabled" href="#" title="Separate application — coming next">
+        <a class="nav-item" href="../../manager-dashboard/public/index.html">
           <i class="fa-solid fa-chart-line"></i> Manager Dashboard
+        </a>
+        <a class="nav-item" href="../../admin-dashboard/public/index.html">
+          <i class="fa-solid fa-gauge-high"></i> Admin Dashboard
+        </a>
+        <a class="nav-item" href="../../lender-pipeline/public/index.html">
+          <i class="fa-solid fa-building-columns"></i> Lender Pipeline
         </a>
       </nav>
       <div class="sidebar-footer">
@@ -151,6 +157,12 @@
             <label for="f_lead_source_id">Lead source *</label>
             <select id="f_lead_source_id" name="lead_source_id" required></select>
             <span class="field-error" data-error-for="lead_source_id"></span>
+          </div>
+          <div class="form-field" id="consultancyField" hidden>
+            <label for="f_consultancy_id">Consultancy name *</label>
+            <select id="f_consultancy_id" name="consultancy_id"></select>
+            <input id="f_consultancy_other_name" name="consultancy_other_name" type="text" placeholder="Enter consultancy name" hidden />
+            <span class="field-error" data-error-for="consultancy_id"></span>
           </div>
         </div>
         <div class="modal-footer">

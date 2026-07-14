@@ -29,6 +29,8 @@ The Document Management feature (Documents tab in Lead Management) uploads real 
 - Name: `lead-documents` (must match exactly — `documentService.js` hardcodes this)
 - Public: **No** (keep it private; the app uses signed URLs for downloads, never public links)
 
+The bucket alone isn't enough — Storage has row-level security on `storage.objects` just like every Postgres table, and a private bucket with no policy denies every upload/download with "new row violates row-level security policy". `000_master_migration.sql` already includes the `lead_documents_insert`/`lead_documents_select` policies for this bucket, so as long as you ran Step 2 after this bucket exists, no extra action is needed here.
+
 ## Step 3 — Create your first Admin (chicken-and-egg problem)
 
 Every other user gets created via the Admin's "Invite user" flow — but the first Admin has no one to invite them. Do this once, manually:
@@ -88,5 +90,5 @@ This is what makes the invite and password-reset emails land the user on the rig
 ## Known limitations to communicate to whoever's using this
 
 - RMs, Managers, and Admins currently all land in Lead Management after login — RM Workspace, Manager Dashboard, and Admin Dashboard don't have dedicated UIs yet. Lead Management's RLS already scopes their access correctly (RM sees only their leads, Manager sees their team), so this is safe, just not purpose-built for those roles yet.
-- No document upload/storage exists yet (Document Management app not started) — "Documents Requested/Received" are timeline events only, no actual file attaches to them.
+- Document upload is live (Documents tab in the lead detail drawer, RM/Manager/Admin/Counselor only) — see Step 2b for the required Storage bucket + policies.
 - Lender-side login doesn't exist — the `bank_rm_id`/`assigned_loan_officer_id` fields on deals are ready for it, but there's no Lender Pipeline app to let a lender actually log in and update their own deals yet.
