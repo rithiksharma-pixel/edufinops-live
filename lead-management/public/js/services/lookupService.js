@@ -140,7 +140,7 @@ export async function getLoanOfficers(lenderId) {
   if (!lenderId) return [];
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, roles!inner(name), lender_branches(name)')
+    .select('id, full_name, roles!inner(name), lender_branches!users_lender_branch_id_fkey(name)')
     .eq('roles.name', 'Lender')
     .eq('lender_organization_id', lenderId)
     .eq('is_active', true)
