@@ -9,9 +9,15 @@ export async function getRoles() {
 export async function getAllUsers() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, email, is_active, roles ( name ), reporting_manager:users!reporting_manager_id ( full_name )')
+    .select('id, full_name, email, is_active, team_id, roles ( name ), reporting_manager:users!reporting_manager_id ( full_name )')
     .eq('is_deleted', false)
     .order('full_name');
+  if (error) throw error;
+  return data;
+}
+
+export async function getTeams() {
+  const { data, error } = await supabase.from('teams').select('id, name').eq('is_deleted', false).order('name');
   if (error) throw error;
   return data;
 }
@@ -63,7 +69,7 @@ export async function getPendingInvitations() {
  * will still create the invitations row; the email step will fail
  * loudly rather than silently, so it's obvious it needs deploying.
  */
-export async function inviteUser({ email, fullName, roleId, reportingManagerId, lenderOrganizationId, lenderBranchId }) {
+export async function inviteUser({ email, fullName, roleId, reportingManagerId, lenderOrganizationId, lenderBranchId, teamId }) {
   const { data: invitationId, error } = await supabase.rpc('invite_user', {
     p_email: email,
     p_full_name: fullName,
@@ -71,6 +77,7 @@ export async function inviteUser({ email, fullName, roleId, reportingManagerId, 
     p_reporting_manager_id: reportingManagerId || null,
     p_lender_organization_id: lenderOrganizationId || null,
     p_lender_branch_id: lenderBranchId || null,
+    p_team_id: teamId || null,
   });
   if (error) throw error;
 
@@ -104,6 +111,11 @@ export async function changeReportingManager(userId, newManagerId, remarks) {
     p_new_manager_id: newManagerId,
     p_remarks: remarks ?? null,
   });
+  if (error) throw error;
+}
+
+export async function changeUserTeam(userId, teamId) {
+  const { error } = await supabase.from('users').update({ team_id: teamId }).eq('id', userId);
   if (error) throw error;
 }
 

@@ -25,9 +25,9 @@
       <h2 class="section-title">Active team</h2>
       <table class="data-table">
         <thead>
-          <tr><th>Name</th><th>Role</th><th>Reporting manager</th><th>Status</th><th></th></tr>
+          <tr><th>Name</th><th>Role</th><th>Reporting manager</th><th>Team</th><th>Status</th><th></th></tr>
         </thead>
-        <tbody id="usersTableBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        <tbody id="usersTableBody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
       </table>
     </section>
 
@@ -53,6 +53,7 @@
         <div class="form-field"><label>Email *</label><input name="email" type="email" required /></div>
         <div class="form-field"><label>Role *</label><select name="role_id" id="inviteRoleSelect" required></select></div>
         <div class="form-field" id="managerField" hidden><label>Reporting manager</label><select name="reporting_manager_id" id="inviteManagerSelect"></select></div>
+        <div class="form-field" id="teamField" hidden><label>Team *</label><select name="team_id" id="inviteTeamSelect"></select></div>
         <div class="form-field" id="lenderOrgField" hidden><label>Lender institution *</label><select name="lender_organization_id" id="inviteLenderOrgSelect"></select></div>
         <div class="form-field" id="lenderBranchField" hidden><label>Branch *</label><select name="lender_branch_id" id="inviteLenderBranchSelect"></select></div>
         <div class="modal-footer">

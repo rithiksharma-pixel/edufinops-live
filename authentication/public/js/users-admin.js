@@ -3,6 +3,7 @@ import {
   getRoles, getAllUsers, getPossibleManagers, getPendingInvitations,
   inviteUser, revokeInvitation, changeUserRole, changeReportingManager,
   deactivateUser, reactivateUser, getLenders, getLenderBranches,
+  getTeams, changeUserTeam,
 } from './services/userAdminService.js';
 
 const toastEl = document.getElementById('toast');
@@ -18,12 +19,13 @@ function showToast(message, isError = false) {
 let roles = [];
 let managers = [];
 let lenders = [];
+let teams = [];
 
 async function loadUsers() {
   const tbody = document.getElementById('usersTableBody');
   const users = await getAllUsers();
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No users yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No users yet.</td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -31,14 +33,30 @@ async function loadUsers() {
     const tr = document.createElement('tr');
     const roleOptions = roles.map((r) => `<option value="${r.id}" ${r.name === u.roles?.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
     const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.full_name === u.reporting_manager?.full_name ? 'selected' : ''}>${escapeHtml(m.full_name)}</option>`).join('');
+    const isManager = u.roles?.name === 'Manager';
+    const teamCell = isManager
+      ? `<select class="inline-select" data-team-for="${u.id}"><option value="">None</option>${teams.map((t) => `<option value="${t.id}" ${t.id === u.team_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>`
+      : '<span style="color:var(--ink-500);">–</span>';
     tr.innerHTML = `
       <td class="name-cell">${escapeHtml(u.full_name)}<div style="font-size:12px;color:var(--ink-500);font-weight:400;">${escapeHtml(u.email)}</div></td>
       <td><select class="inline-select" data-role-for="${u.id}">${roleOptions}</select></td>
       <td><select class="inline-select" data-manager-for="${u.id}">${managerOptions}</select></td>
+      <td>${teamCell}</td>
       <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-neutral'}">${u.is_active ? 'Active' : 'Deactivated'}</span></td>
       <td><button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
     `;
     tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('[data-team-for]').forEach((select) => {
+    select.addEventListener('change', async (e) => {
+      try {
+        await changeUserTeam(e.target.dataset.teamFor, e.target.value || null);
+        showToast('Team updated.');
+      } catch (err) {
+        showToast('Could not change team.', true);
+      }
+    });
   });
 
   tbody.querySelectorAll('[data-role-for]').forEach((select) => {
@@ -117,6 +135,8 @@ function initInviteModal() {
   const roleSelect = document.getElementById('inviteRoleSelect');
   const managerField = document.getElementById('managerField');
   const managerSelect = document.getElementById('inviteManagerSelect');
+  const teamField = document.getElementById('teamField');
+  const teamSelect = document.getElementById('inviteTeamSelect');
   const lenderOrgField = document.getElementById('lenderOrgField');
   const lenderOrgSelect = document.getElementById('inviteLenderOrgSelect');
   const lenderBranchField = document.getElementById('lenderBranchField');
@@ -124,11 +144,14 @@ function initInviteModal() {
 
   roleSelect.innerHTML = roles.map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   managerSelect.innerHTML = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('');
+  teamSelect.innerHTML = `<option value="">Select…</option>` + teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   lenderOrgSelect.innerHTML = `<option value="">Select…</option>` + lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
 
   function updateFieldVisibility() {
     const selectedName = roleSelect.selectedOptions[0]?.dataset.name;
     managerField.hidden = !['Relationship Manager', 'Counselor', 'Business Development'].includes(selectedName);
+    teamField.hidden = selectedName !== 'Manager';
+    if (selectedName !== 'Manager') teamSelect.value = '';
     const isLender = selectedName === 'Lender';
     lenderOrgField.hidden = !isLender;
     lenderBranchField.hidden = !isLender;
@@ -173,6 +196,10 @@ function initInviteModal() {
       showToast('Select the lender institution and branch for this person.', true);
       return;
     }
+    if (selectedRoleName === 'Manager' && !payload.team_id) {
+      showToast('Select the team this Manager leads.', true);
+      return;
+    }
     const btn = document.getElementById('btnSubmitInvite');
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
@@ -183,6 +210,7 @@ function initInviteModal() {
         reportingManagerId: payload.reporting_manager_id || null,
         lenderOrganizationId: payload.lender_organization_id || null,
         lenderBranchId: payload.lender_branch_id || null,
+        teamId: payload.team_id || null,
       });
       showToast('Invitation sent.');
       overlay.hidden = true;
@@ -217,6 +245,7 @@ async function bootstrap() {
   roles = await getRoles();
   managers = await getPossibleManagers();
   lenders = await getLenders();
+  teams = await getTeams();
   initInviteModal();
   await Promise.all([loadUsers(), loadInvitations()]);
 }
