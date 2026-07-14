@@ -5,6 +5,7 @@ import {
   recordDisbursement, getMessages, sendMessage, STAGE_TABLE_MAP,
   getMyLenderProfile, updateMyLenderProfile, getDashboardSummary,
 } from './services/lenderDealService.js';
+import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
 
 let currentUser;
 const toastEl = document.getElementById('toast');
@@ -53,7 +54,70 @@ async function openDrawer(dealId) {
   const holdReasons = await getDealHoldReasons();
   const rejectionReasons = await getDealRejectionReasons();
   await loadManagePanel(dealId, stages, holdReasons, rejectionReasons);
+  await renderQueries(dealId);
   await renderMessages(dealId);
+}
+
+async function renderQueries(dealId) {
+  const panel = document.getElementById('panelQueries');
+  const [queries, categories] = await Promise.all([getQueriesForDeal(dealId), getQueryCategories()]);
+  const openCount = queries.filter((q) => q.status === 'Open').length;
+  const categoryOptions = categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+  const queryRows = queries.length === 0
+    ? '<p class="empty-state">No queries raised yet.</p>'
+    : queries.map((q) => `
+      <div class="lender-app-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div class="lender-name">${escapeHtml(q.deal_query_categories?.name || 'Query')}</div>
+            <div style="font-size:11px;color:var(--ink-500);margin-top:2px;">${escapeHtml(q.raised_by_user?.full_name || 'Someone')} · ${formatDateTime(q.created_at)}</div>
+          </div>
+          <span class="badge ${q.status === 'Resolved' ? '' : 'badge-warning'}">${escapeHtml(q.status)}</span>
+        </div>
+        <div style="font-size:13px;margin-top:6px;">${escapeHtml(q.question)}</div>
+        ${q.status === 'Resolved'
+          ? `<div class="detail-row"><span class="k">Resolution</span><span class="v">${escapeHtml(q.resolution || '–')}</span></div>`
+          : `<div style="margin-top:8px;"><textarea data-resolve-input="${q.id}" rows="2" placeholder="Resolution…" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;"></textarea><button class="btn btn-ghost" style="margin-top:6px;" data-resolve="${q.id}">Mark resolved</button></div>`}
+      </div>`).join('');
+
+  panel.innerHTML = `
+    <h4 style="font-size:13px;font-weight:500;margin:0 0 8px;">Queries${openCount ? ` <span class="badge badge-warning">${openCount} open</span>` : ''}</h4>
+    ${queryRows}
+    <div style="margin-top:14px;">
+      <div class="form-field"><label>Raise a query</label><select id="newQueryCategory">${categoryOptions}</select></div>
+      <textarea id="newQueryQuestion" rows="2" placeholder="What's the question?" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;margin-top:6px;"></textarea>
+      <button class="btn btn-ghost" style="margin-top:6px;" id="btnRaiseQuery">Raise query</button>
+    </div>
+  `;
+
+  document.getElementById('btnRaiseQuery').addEventListener('click', async () => {
+    const categoryId = document.getElementById('newQueryCategory').value;
+    const question = document.getElementById('newQueryQuestion').value.trim();
+    if (!question) { showToast('Enter the question to raise.', true); return; }
+    try {
+      await raiseQuery(dealId, categoryId, question, currentUser.id);
+      showToast('Query raised.');
+      await renderQueries(dealId);
+    } catch (err) {
+      showToast('Could not raise this query.', true);
+    }
+  });
+
+  panel.querySelectorAll('[data-resolve]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const queryId = btn.dataset.resolve;
+      const resolution = panel.querySelector(`[data-resolve-input="${queryId}"]`).value.trim();
+      if (!resolution) { showToast('Enter a resolution before marking this resolved.', true); return; }
+      try {
+        await resolveQuery(queryId, resolution, currentUser.id);
+        showToast('Query resolved.');
+        await renderQueries(dealId);
+      } catch (err) {
+        showToast('Could not resolve this query.', true);
+      }
+    });
+  });
 }
 
 async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {

@@ -26,6 +26,7 @@ import {
   getCounselors,
   getLoanOfficers,
 } from '../services/lookupService.js';
+import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from '../services/dealQueryService.js';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/validation.js';
 
 export async function initDealsTab(panelEl, leadId, ctx) {
@@ -100,17 +101,80 @@ export async function initDealsTab(panelEl, leadId, ctx) {
   }
 
   async function loadDealDetail(dealId, slot, stages) {
-    const [{ deal, stageDetails, disbursements }, stageStatuses, rejectionReasons, holdReasons] = await Promise.all([
+    const [{ deal, stageDetails, disbursements }, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories] = await Promise.all([
       getDealDetail(dealId),
       getDealStageStatuses(),
       getDealRejectionReasons(),
       getDealHoldReasons(),
+      getQueriesForDeal(dealId),
+      getQueryCategories(),
     ]);
     slot.innerHTML = '';
-    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons));
+    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories));
   }
 
-  function renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons) {
+  function renderQueriesSection(deal, queries, queryCategories) {
+    const openCount = queries.filter((q) => q.status === 'Open').length;
+    const categoryOptions = queryCategories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    const queryRows = queries.length === 0
+      ? '<p class="empty-state" style="padding:8px 0;">No queries raised yet.</p>'
+      : queries.map((q) => `
+        <div class="lender-app-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div>
+              <div class="lender-name">${escapeHtml(q.deal_query_categories?.name || 'Query')}</div>
+              <div style="font-size:12px;color:var(--ink-500);margin-top:2px;">${escapeHtml(q.raised_by_user?.full_name || 'Someone')} · ${formatDateTime(q.created_at)}</div>
+            </div>
+            <span class="badge ${q.status === 'Resolved' ? '' : 'badge-warning'}">${escapeHtml(q.status)}</span>
+          </div>
+          <div style="font-size:13px;margin-top:6px;">${escapeHtml(q.question)}</div>
+          ${q.status === 'Resolved'
+            ? `<div class="detail-row"><span class="k">Resolution</span><span class="v">${escapeHtml(q.resolution || '–')}</span></div>`
+            : `<div style="margin-top:8px;"><textarea data-resolve-input="${q.id}" rows="2" placeholder="Resolution…" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;"></textarea><button class="btn btn-ghost" style="margin-top:6px;" data-resolve="${q.id}">Mark resolved</button></div>`}
+        </div>`).join('');
+
+    return `
+      <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Queries${openCount ? ` <span class="badge badge-warning">${openCount} open</span>` : ''}</h4>
+      ${queryRows}
+      <div style="margin-top:10px;">
+        <div class="form-field"><label>Raise a query</label><select data-new-query-category>${categoryOptions}</select></div>
+        <textarea data-new-query-question rows="2" placeholder="What's the question?" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;margin-top:6px;"></textarea>
+        <button class="btn btn-ghost" style="margin-top:6px;" data-action="raise-query">Raise query</button>
+      </div>
+    `;
+  }
+
+  function wireQueriesSection(el, deal) {
+    el.querySelector('[data-action="raise-query"]').addEventListener('click', async () => {
+      const categoryId = el.querySelector('[data-new-query-category]').value;
+      const question = el.querySelector('[data-new-query-question]').value.trim();
+      if (!question) { showToast('Enter the question to raise.', true); return; }
+      try {
+        await raiseQuery(deal.id, categoryId, question, currentUser.id);
+        showToast('Query raised.');
+        await refresh();
+      } catch (err) {
+        showToast('Could not raise this query.', true);
+      }
+    });
+
+    el.querySelectorAll('[data-resolve]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const queryId = btn.dataset.resolve;
+        const resolution = el.querySelector(`[data-resolve-input="${queryId}"]`).value.trim();
+        if (!resolution) { showToast('Enter a resolution before marking this resolved.', true); return; }
+        try {
+          await resolveQuery(queryId, resolution, currentUser.id);
+          showToast('Query resolved.');
+          await refresh();
+        } catch (err) {
+          showToast('Could not resolve this query.', true);
+        }
+      });
+    });
+  }
+
+  function renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories) {
     const el = document.createElement('div');
     el.style.cssText = 'border-top:1px solid var(--border);margin-top:12px;padding-top:12px;';
     const stageName = deal.current_deal_stage?.name;
@@ -121,6 +185,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
         <div class="detail-row"><span class="k">Rejection date</span><span class="v">${formatDateTime(deal.rejection_date)}</span></div>
         <div class="detail-row"><span class="k">Remarks</span><span class="v">${escapeHtml(deal.rejection_remarks || '–')}</span></div>
         <button class="btn btn-primary" style="margin-top:10px;width:100%;justify-content:center;" data-action="reinstate">Reinstate this deal</button>
+        ${renderQueriesSection(deal, queries, queryCategories)}
       `;
       el.querySelector('[data-action="reinstate"]').addEventListener('click', async () => {
         try {
@@ -132,6 +197,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
           showToast('Could not reinstate this deal.', true);
         }
       });
+      wireQueriesSection(el, deal);
       return el;
     }
 
@@ -201,6 +267,8 @@ export async function initDealsTab(panelEl, leadId, ctx) {
         <div class="form-field"><label>Remarks</label><textarea data-field="rejection_remarks" rows="2"></textarea></div>
         <button class="btn btn-primary" style="background:var(--danger);" data-action="confirm-reject">Confirm rejection</button>
       </div>
+
+      ${renderQueriesSection(deal, queries, queryCategories)}
     `;
 
     if (stageConfig) {
@@ -304,6 +372,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       });
     }
 
+    wireQueriesSection(el, deal);
     return el;
   }
 
