@@ -260,7 +260,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
   display: flex; justify-content: flex-end;
 }
 .drawer {
-  width: min(460px, 100vw);
+  width: min(760px, 100vw);
   background: var(--bg-surface);
   box-shadow: var(--shadow-drawer);
   display: flex; flex-direction: column;
@@ -274,22 +274,29 @@ button, input, select { font-family: inherit; font-size: inherit; }
 .drawer-header h2 { margin: 0; font-size: 17px; font-weight: 500; }
 .drawer-subtitle { font-size: 13px; color: var(--ink-500); }
 
+.drawer-content { flex: 1; display: flex; min-height: 0; }
+
 .drawer-tabs {
-  display: flex; gap: 4px;
-  padding: 10px 22px 0;
-  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 2px;
+  width: 170px; flex-shrink: 0;
+  padding: 14px 10px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 .tab-btn {
   background: none; border: none; cursor: pointer;
-  padding: 8px 12px;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm, 6px);
   font-size: 13px; font-weight: 500;
+  line-height: 1.3;
   color: var(--ink-500);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+  border-left: 2px solid transparent;
 }
-.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn:hover { background: var(--bg-hover); }
+.tab-btn.active { color: var(--accent); background: var(--bg-hover); border-left-color: var(--accent); }
 
-.drawer-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.drawer-body { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 22px; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
