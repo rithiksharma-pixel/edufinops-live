@@ -1,1 +1,1 @@
-{"cleanUrls":false,"trailingSlash":false,"rewrites":[{"source":"/","destination":"/authentication/public/login.html"}]}
+{"cleanUrls":false,"trailingSlash":false,"redirects":[{"source":"/","destination":"/authentication/public/login.html","permanent":false}]}
