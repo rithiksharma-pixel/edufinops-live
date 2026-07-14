@@ -18,6 +18,9 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
     panelEl.innerHTML = '<p class="empty-state">Loading lenders…</p>';
     const [rows, reasons] = await Promise.all([getLenderStatusForLead(leadId), getNotSharedReasons()]);
 
+    const tabCountEl = document.getElementById('lendersTabCount');
+    if (tabCountEl) tabCountEl.textContent = `${rows.filter((r) => r.share_status === 'Shared').length}/${rows.length}`;
+
     if (rows.length === 0) {
       panelEl.innerHTML = '<p class="empty-state">No lenders configured yet — add one in Admin Settings.</p>';
       return;
@@ -107,31 +110,40 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
 
   function renderRow(row, buildReasonOptions, canEdit) {
     const isShared = row.share_status === 'Shared';
-    const statusBadge = isShared
-      ? `<span class="lender-status-badge shared">Shared</span>`
-      : `<span class="lender-status-badge not-shared">Not Shared</span>`;
     const isOtherSelected = row.lead_lender_not_shared_reasons?.name === 'Other';
 
-    let detail;
+    let statusCell, detail;
     if (isShared) {
+      // The certification-stamp mark — the same passport-stamp motif the
+      // Timeline already uses for a stage change, reused here for "this
+      // lender has genuinely seen this student," not just a DB flag flip.
+      statusCell = `
+        <div class="lender-officer-cell">
+          <span class="lender-stamp-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></span>
+          <span class="lender-status-badge shared"><span class="dot"></span>Shared</span>
+        </div>`;
       const stageName = row.deals?.current_deal_stage?.name || '–';
       const officerName = row.deals?.assigned_loan_officer?.full_name || '–';
       detail = `${escapeHtml(officerName)} · ${escapeHtml(stageName)}`;
     } else {
+      statusCell = `<span class="lender-status-badge not-shared"><span class="dot"></span>Not Shared</span>`;
       const reasonText = isOtherSelected ? (row.not_shared_other_text || '–') : (row.lead_lender_not_shared_reasons?.name || '–');
+      const attribution = row.not_shared_reason_id && row.updated_by_user
+        ? `<span class="lender-matrix-reason-who">Marked by ${escapeHtml(row.updated_by_user.full_name)}, ${formatRelative(row.updated_at)}</span>`
+        : '';
       detail = canEdit
         ? `<div class="lender-matrix-reason-row">
             <select data-reason-for="${row.id}">${buildReasonOptions(row.not_shared_reason_id, isOtherSelected)}</select>
             <input type="text" data-reason-other-for="${row.id}" placeholder="Reason…" value="${escapeHtml(row.not_shared_other_text || '')}" ${isOtherSelected ? '' : 'hidden'} style="min-width:160px;" />
             <button class="btn btn-ghost" data-save-reason="${row.id}" style="font-size:12px;padding:5px 10px;">Save</button>
-          </div>`
-        : escapeHtml(reasonText);
+          </div>${attribution}`
+        : `${escapeHtml(reasonText)}${attribution}`;
     }
 
     return `
       <tr>
         <td><strong>${escapeHtml(row.lenders?.name || 'Unknown')}</strong></td>
-        <td>${statusBadge}</td>
+        <td>${statusCell}</td>
         <td>${detail}</td>
         <td>
           ${!isShared && canEdit ? `<button class="btn btn-ghost" data-share="${row.id}" style="font-size:12px;padding:5px 10px;">Share</button>` : ''}
@@ -139,6 +151,15 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
         </td>
       </tr>
     `;
+  }
+
+  function formatRelative(iso) {
+    if (!iso) return '';
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
+    if (days < 30) return `${days} days ago`;
+    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   await refresh();

@@ -26,9 +26,10 @@ export async function getLenderStatusForLead(leadId) {
   const { data, error } = await supabase
     .from('lead_lender_status')
     .select(`
-      id, share_status, not_shared_reason_id, not_shared_other_text, deal_id,
+      id, share_status, not_shared_reason_id, not_shared_other_text, deal_id, updated_at,
       lenders ( id, name ),
       lead_lender_not_shared_reasons ( name ),
+      updated_by_user:users!lead_lender_status_updated_by_fkey ( full_name ),
       deals ( id, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name), assigned_loan_officer:users!deals_assigned_loan_officer_id_fkey(full_name) )
     `)
     .eq('lead_id', leadId)
