@@ -11,6 +11,10 @@
 // aggregates rather than fetching raw rows and summing in the browser.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+// CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
+// only place calls are actually logged) — imported rather than
+// re-declared so the two lists can never drift apart.
+import { CALL_STATUS_OPTIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
 export async function getTeamFunnel() {
   const { data, error } = await supabase
@@ -49,7 +53,7 @@ export async function getRmPerformance() {
   const byRm = {};
   leads.forEach((l) => {
     const rmId = l.assigned_rm_id;
-    if (!byRm[rmId]) byRm[rmId] = { name: l.assigned_rm?.full_name || 'Unknown', leadCount: 0, overdueCount: 0, disbursedAmount: 0, dealCount: 0 };
+    if (!byRm[rmId]) byRm[rmId] = { id: rmId, name: l.assigned_rm?.full_name || 'Unknown', leadCount: 0, overdueCount: 0, disbursedAmount: 0, dealCount: 0 };
     byRm[rmId].leadCount += 1;
     if (l.next_follow_up_at && new Date(l.next_follow_up_at) < new Date()) byRm[rmId].overdueCount += 1;
   });
@@ -61,6 +65,46 @@ export async function getRmPerformance() {
   });
 
   return Object.values(byRm).sort((a, b) => b.leadCount - a.leadCount);
+}
+
+// Calendar week starting Monday 00:00 local time — duplicated per app
+// rather than shared, matching this codebase's existing pattern of each
+// app owning its own copy of small date-window helpers.
+function startOfWeek() {
+  const d = new Date();
+  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Per-RM call volume + connect rate for the current calendar week, keyed
+ * by the user id who logged the call (created_by) — i.e. whose activity
+ * it actually is, not just whichever RM the lead happens to be assigned
+ * to. RLS's lead_events_select policy (can_view_lead) already scopes
+ * visible rows to leads this manager's team can see, so no extra
+ * team-membership filtering is needed client-side.
+ */
+export async function getRmCallStats() {
+  const since = startOfWeek();
+  const { data, error } = await supabase
+    .from('lead_events')
+    .select('event_type, created_by')
+    .in('event_type', CALL_STATUS_OPTIONS)
+    .eq('is_deleted', false)
+    .gte('created_at', since.toISOString());
+  if (error) throw error;
+
+  const byRm = {};
+  data.forEach((ev) => {
+    if (!ev.created_by) return;
+    if (!byRm[ev.created_by]) byRm[ev.created_by] = { callCount: 0, connectedCount: 0 };
+    byRm[ev.created_by].callCount += 1;
+    if (ev.event_type === 'Connected') byRm[ev.created_by].connectedCount += 1;
+  });
+  return byRm;
 }
 
 export async function getLenderBreakdown() {

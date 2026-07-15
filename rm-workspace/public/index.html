@@ -21,6 +21,7 @@
         <a class="nav-item" data-view="new" href="#"><i class="fa-solid fa-star"></i> New Leads</a>
         <a class="nav-item" data-view="documents" href="#"><i class="fa-solid fa-file-lines"></i> Documents Pending</a>
         <a class="nav-item" data-view="lenders" href="#"><i class="fa-solid fa-building-columns"></i> Lender Updates</a>
+        <a class="nav-item" data-view="calls" href="#"><i class="fa-solid fa-phone"></i> Calls</a>
         <a class="nav-item" data-view="tasks" href="#"><i class="fa-solid fa-list-check"></i> Tasks</a>
         <a class="nav-item" href="../../lead-management/public/index.html"><i class="fa-solid fa-diagram-project"></i> Lead Management</a>
       </nav>
@@ -55,6 +56,20 @@
           <thead id="listHead"></thead>
           <tbody id="listBody"><tr><td class="empty-state">Loading…</td></tr></tbody>
         </table>
+      </div>
+
+      <div id="callsView" hidden>
+        <div class="period-toggle" id="callsPeriodToggle">
+          <button type="button" class="pill-btn active" data-period="today">Today</button>
+          <button type="button" class="pill-btn" data-period="week">This week</button>
+        </div>
+        <section class="stat-cards" id="callsStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
+        <div class="table-card">
+          <table class="data-table">
+            <thead><tr><th>Student</th><th>Outcome</th><th>Notes</th><th>Logged at</th></tr></thead>
+            <tbody id="callsListBody"><tr><td class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <div id="tasksView" hidden>

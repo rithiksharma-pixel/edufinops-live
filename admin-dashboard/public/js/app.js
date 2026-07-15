@@ -1,4 +1,8 @@
 import { supabase } from './config/supabaseClient.js';
+// CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
+// only place calls are actually logged) — imported rather than
+// re-declared so the two lists can never drift apart.
+import { CALL_STATUS_OPTIONS } from '../../../lead-management/public/js/services/leadService.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => { const node = document.createElement('span'); node.textContent = value ?? ''; return node.innerHTML; };
@@ -71,19 +75,45 @@ async function loadReports() {
   $('tatAverages').innerHTML = averages.length ? averages.map((t) => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${esc(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div></div>`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
   $('tatWorstOffenders').innerHTML = worstOffenders.length ? worstOffenders.map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${esc(t.student || '–')} <span style="color:var(--ink-500);">· ${esc(t.label)}</span></span><span class="badge">${t.days.toFixed(1)}d</span></div>${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${esc(t.remarks)}</div>` : ''}`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
 }
-let teamPerfData = null; // cached { teams, managers, rms, leads, deals } for the currently loaded view
+let teamPerfData = null; // cached { teams, managers, rms, leads, deals, callStats } for the currently loaded view
+
+// Calendar week starting Monday 00:00 local time — duplicated per app
+// rather than shared, matching this codebase's existing pattern of each
+// app owning its own copy of small date-window helpers.
+function startOfWeek() {
+  const d = new Date();
+  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diffToMonday);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 async function loadTeamPerformance() {
   if (!teamPerfData) {
-    const [teamsRes, managersRes, rmsRes, leadsRes, dealsRes] = await Promise.all([
+    const [teamsRes, managersRes, rmsRes, leadsRes, dealsRes, callEventsRes] = await Promise.all([
       supabase.from('teams').select('id,name').eq('is_deleted', false).order('name'),
       supabase.from('users').select('id,full_name,team_id,roles!inner(name)').in('roles.name', ['Manager', 'Associate Team Manager']).eq('is_deleted', false),
       supabase.from('users').select('id,full_name,reporting_manager_id,roles!inner(name)').eq('roles.name', 'Relationship Manager').eq('is_deleted', false),
       supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false),
       supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false),
+      // Admin sees every lead_events row (is_admin() bypasses can_view_lead's
+      // team scoping) — filtered to call outcomes only, keyed below by
+      // created_by so each RM's own activity is counted, not just calls
+      // logged on their leads by someone else.
+      supabase.from('lead_events').select('event_type,created_by').in('event_type', CALL_STATUS_OPTIONS).eq('is_deleted', false).gte('created_at', startOfWeek().toISOString()),
     ]);
-    for (const r of [teamsRes, managersRes, rmsRes, leadsRes, dealsRes]) if (r.error) throw r.error;
-    teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes.data, deals: dealsRes.data };
+    for (const r of [teamsRes, managersRes, rmsRes, leadsRes, dealsRes, callEventsRes]) if (r.error) throw r.error;
+
+    const callStats = {};
+    (callEventsRes.data || []).forEach((ev) => {
+      if (!ev.created_by) return;
+      if (!callStats[ev.created_by]) callStats[ev.created_by] = { callCount: 0, connectedCount: 0 };
+      callStats[ev.created_by].callCount += 1;
+      if (ev.event_type === 'Connected') callStats[ev.created_by].connectedCount += 1;
+    });
+
+    teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes.data, deals: dealsRes.data, callStats };
 
     $('teamScopeSelect').innerHTML = '<option value="">All teams</option>' + teamPerfData.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   }
@@ -123,7 +153,9 @@ function renderTeamPerformance() {
     $('teamBreakdownTable').innerHTML = rmsInScope.map((rm) => {
       const rmLeads = teamPerfData.leads.filter((l) => l.assigned_rm_id === rm.id);
       const rmDeals = teamPerfData.deals.filter((d) => d.leads?.assigned_rm_id === rm.id);
-      return `<div class="simple-row"><strong>${esc(rm.full_name)}</strong><div class="muted">${rmLeads.length} leads · ${rmDeals.length} deals</div></div>`;
+      const calls = teamPerfData.callStats[rm.id] || { callCount: 0, connectedCount: 0 };
+      const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
+      return `<div class="simple-row"><strong>${esc(rm.full_name)}</strong><div class="muted">${rmLeads.length} leads · ${rmDeals.length} deals · ${calls.callCount} calls this week · ${connectRate} connect rate</div></div>`;
     }).join('') || '<p class="muted">No RMs assigned to this team yet.</p>';
   } else {
     $('teamBreakdownTitle').textContent = 'By team';

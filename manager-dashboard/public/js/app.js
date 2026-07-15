@@ -1,5 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
-import { getTeamFunnel, getRmPerformance, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
 
 function escapeHtml(str) {
   const d = document.createElement('div');
@@ -38,21 +38,27 @@ async function renderFunnelChart() {
 }
 
 async function renderRmPerformance() {
-  const perf = await getRmPerformance();
+  const [perf, callStats] = await Promise.all([getRmPerformance(), getRmCallStats()]);
   const tbody = document.getElementById('rmPerformanceBody');
   if (perf.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5">${emptyState('fa-people-group', 'No RMs with assigned leads yet', 'Performance will show up here once leads are assigned to your team.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7">${emptyState('fa-people-group', 'No RMs with assigned leads yet', 'Performance will show up here once leads are assigned to your team.')}</td></tr>`;
     return;
   }
-  tbody.innerHTML = perf.map((rm) => `
+  tbody.innerHTML = perf.map((rm) => {
+    const calls = callStats[rm.id] || { callCount: 0, connectedCount: 0 };
+    const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
+    return `
     <tr>
       <td><strong>${escapeHtml(rm.name)}</strong></td>
       <td>${rm.leadCount}</td>
       <td>${rm.overdueCount > 0 ? `<span class="badge badge-danger">${rm.overdueCount}</span>` : '0'}</td>
       <td>${rm.dealCount}</td>
       <td>${formatCurrency(rm.disbursedAmount)}</td>
+      <td>${calls.callCount}</td>
+      <td>${connectRate}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function renderAttentionList() {

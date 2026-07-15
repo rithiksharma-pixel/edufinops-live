@@ -2,6 +2,7 @@ import { getCurrentUser } from './services/authService.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
+import { getMyCalls } from './services/callService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
 
 let currentUser;
@@ -79,8 +80,9 @@ function renderLenderUpdateRows(events) {
 
 async function loadView(key) {
   document.getElementById('dashboardView').hidden = key !== 'dashboard';
-  document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard';
+  document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls';
   document.getElementById('tasksView').hidden = key !== 'tasks';
+  document.getElementById('callsView').hidden = key !== 'calls';
   document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === key));
 
   if (key === 'dashboard') {
@@ -94,6 +96,13 @@ async function loadView(key) {
     document.getElementById('viewTitle').textContent = 'Tasks';
     document.getElementById('viewSubtitle').textContent = 'Your personal to-do list.';
     await refreshTasks();
+    return;
+  }
+
+  if (key === 'calls') {
+    document.getElementById('viewTitle').textContent = 'Calls';
+    document.getElementById('viewSubtitle').textContent = 'Your call activity across every lead.';
+    await renderCallsView();
     return;
   }
 
@@ -134,6 +143,60 @@ async function refreshTasks() {
       } catch (err) {
         showToast('Could not update this task.', true);
       }
+    });
+  });
+}
+
+let callsPeriod = 'today';
+
+function truncate(text, max) {
+  if (!text) return '–';
+  return text.length > max ? text.slice(0, max).trimEnd() + '…' : text;
+}
+
+async function renderCallsView() {
+  const periodLabel = callsPeriod === 'week' ? 'this week' : 'today';
+  const body = document.getElementById('callsListBody');
+  body.innerHTML = '<tr><td class="empty-state">Loading…</td></tr>';
+  let calls;
+  try {
+    calls = await getMyCalls(currentUser.id, callsPeriod);
+  } catch (err) {
+    console.error(err);
+    body.innerHTML = '<tr><td class="empty-state">Could not load your calls.</td></tr>';
+    return;
+  }
+
+  const connected = calls.filter((c) => c.event_type === 'Connected').length;
+  const rate = calls.length ? Math.round((connected / calls.length) * 100) : 0;
+
+  document.getElementById('callsStats').innerHTML = [
+    [calls.length, `Calls ${periodLabel}`, 'fa-phone', 'var(--accent)'],
+    [connected, `Connected ${periodLabel}`, 'fa-phone-volume', 'var(--success)'],
+    [`${rate}%`, `Connect rate ${periodLabel}`, 'fa-chart-simple', 'var(--warning)'],
+  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+
+  if (calls.length === 0) {
+    body.innerHTML = `<tr><td colspan="4">${emptyState('fa-phone-slash', 'No calls logged yet', callsPeriod === 'week' ? "You haven't logged any calls this week." : "You haven't logged any calls today.")}</td></tr>`;
+    return;
+  }
+  body.innerHTML = calls.map((c) => `
+    <tr onclick="window.location.href='${leadLink(c.leads?.id)}'">
+      <td><strong>${escapeHtml(c.leads?.student_name || '–')}</strong></td>
+      <td><span class="badge ${c.event_type === 'Connected' ? 'badge-success' : 'badge-neutral'}">${escapeHtml(c.event_type)}</span></td>
+      <td>${escapeHtml(truncate(c.remarks, 60))}</td>
+      <td>${formatDateTime(c.created_at)}</td>
+    </tr>
+  `).join('');
+}
+
+function initCallsPeriodToggle() {
+  document.querySelectorAll('#callsPeriodToggle .pill-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (btn.dataset.period === callsPeriod) return;
+      callsPeriod = btn.dataset.period;
+      document.querySelectorAll('#callsPeriodToggle .pill-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      await renderCallsView();
     });
   });
 }
@@ -310,6 +373,7 @@ async function bootstrap() {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });
   });
   initLeadModal();
+  initCallsPeriodToggle();
 
   const leadOptions = await getMyOpenLeadsForTaskLink();
   document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));

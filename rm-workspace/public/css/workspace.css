@@ -107,6 +107,12 @@
 .stat-card .amount { font: 600 24px/1.1 'IBM Plex Mono', Fraunces, serif; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .stat-card .stat-label { font-size: 12px; color: var(--ink-500); margin-top: 5px; }
 
+/* ---------- Period pills — Today / This week toggle (Calls tab) ---------- */
+.period-toggle { display: inline-flex; gap: 4px; background: var(--bg-hover); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 18px; }
+.pill-btn { background: none; border: none; cursor: pointer; padding: 7px 14px; font-size: 13px; font-weight: 500; color: var(--ink-500); border-radius: 5px; }
+.pill-btn:hover { color: var(--ink-700); }
+.pill-btn.active { background: var(--bg-surface); color: var(--ink-900); box-shadow: 0 1px 3px rgba(21,24,29,0.08); }
+
 /* ---------- Empty states — icon + heading + hint, not just bare text ---------- */
 .empty-state-block { text-align: center; padding: 36px 20px; color: var(--ink-500); }
 .empty-state-block .icon {
