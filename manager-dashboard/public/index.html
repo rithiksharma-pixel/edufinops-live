@@ -28,6 +28,17 @@
 
       <section class="stat-cards" id="dailyStats"></section>
 
+      <section class="table-card" style="margin-bottom:22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 0;">
+          <h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Unassigned leads</h3>
+          <span class="badge badge-warning" id="unassignedOverdueBadge" hidden></span>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Student</th><th>Source</th><th>Loan amount</th><th>Waiting</th><th>Assign to RM</th></tr></thead>
+          <tbody id="unassignedLeadsBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </section>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;">
         <section class="chart-card">
           <h3>Needs attention</h3>
@@ -64,6 +75,8 @@
       </div>
     </main>
   </div>
+
+  <div id="toast" class="toast" hidden></div>
 
   <script src="../../shared/env.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

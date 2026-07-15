@@ -3548,3 +3548,52 @@ begin
   return v_invitation_id;
 end;
 $function$;
+
+-- ---------------------------------------------------------------------
+-- Patch from deployment/010_unassigned_leads_manager_visibility_migration.sql
+-- Leads sourced via consultant-portal land with BOTH assigned_rm_id and
+-- assigned_manager_id NULL, which the leads_select_manager /
+-- leads_update_manager policies above (line ~3349) could never match —
+-- no manager could see or claim them. Add an explicit "genuinely
+-- unclaimed" branch so any Manager/ATM can see and claim leads from
+-- this shared intake pool; see that file for the full writeup.
+-- ---------------------------------------------------------------------
+alter policy leads_select_manager on leads
+  using (
+    (coalesce(is_manager(), false) and (
+      (assigned_manager_id = auth.uid())
+      or rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+    or
+    (coalesce(is_associate_team_manager(), false) and (
+      rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+  );
+
+alter policy leads_update_manager on leads
+  using (
+    (coalesce(is_manager(), false) and (
+      (assigned_manager_id = auth.uid())
+      or rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+    or
+    (coalesce(is_associate_team_manager(), false) and (
+      rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+  )
+  with check (
+    (coalesce(is_manager(), false) and (
+      (assigned_manager_id = auth.uid())
+      or rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+    or
+    (coalesce(is_associate_team_manager(), false) and (
+      rm_reports_to_current_manager(assigned_rm_id)
+      or (assigned_rm_id is null and assigned_manager_id is null)
+    ))
+  );

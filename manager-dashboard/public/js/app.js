@@ -1,5 +1,16 @@
 import { getCurrentUser } from './services/authService.js';
 import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
+import { getUnassignedLeads } from './services/unassignedLeadsService.js';
+// Cross-app imports: app folders are top-level siblings (not nested), so
+// this reaches lead-management's own service layer three levels up. These
+// are the SAME functions Lead Management's own UI calls — assignLeadToRm
+// already has the correct RLS/audit-trail behavior (writes lead_assignments
+// + lead_events), and getAssignableRms is already scoped to "my team" by
+// the users table's own RLS. Nothing new is reimplemented here.
+import { assignLeadToRm } from '../../../lead-management/public/js/services/leadService.js';
+import { getAssignableRms } from '../../../lead-management/public/js/services/lookupService.js';
+
+const UNASSIGNED_WARNING_MS = 48 * 60 * 60 * 1000; // 48h — flagged with a warning badge
 
 function escapeHtml(str) {
   const d = document.createElement('div');
@@ -59,6 +70,105 @@ async function renderRmPerformance() {
     </tr>
   `;
   }).join('');
+}
+
+function showToast(message, error = false) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.toggle('error', error);
+  el.hidden = false;
+  clearTimeout(window.toastTimer);
+  window.toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+}
+
+function formatWaiting(iso) {
+  const hours = (Date.now() - new Date(iso).getTime()) / (60 * 60 * 1000);
+  if (hours < 1) return 'just now';
+  if (hours < 24) return `${Math.floor(hours)}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function leadSourceLabel(lead) {
+  const consultancyName = lead.consultancies?.name || lead.consultancy_other_name;
+  const sourceName = lead.lead_sources?.name;
+  if (sourceName && consultancyName) return `${sourceName} · ${consultancyName}`;
+  return sourceName || consultancyName || '–';
+}
+
+async function renderUnassignedLeads() {
+  const tbody = document.getElementById('unassignedLeadsBody');
+  const countBadge = document.getElementById('unassignedOverdueBadge');
+  const [leads, rms] = await Promise.all([getUnassignedLeads(), getAssignableRms()]);
+
+  const overdueCount = leads.filter((l) => Date.now() - new Date(l.created_at).getTime() > UNASSIGNED_WARNING_MS).length;
+  if (overdueCount > 0) {
+    countBadge.hidden = false;
+    countBadge.textContent = `${overdueCount} waiting over 48h`;
+  } else {
+    countBadge.hidden = true;
+  }
+
+  if (leads.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5">${emptyState('fa-circle-check', 'All caught up', 'Every new lead has been handed off to an RM.')}</td></tr>`;
+    return;
+  }
+
+  const rmOptions = rms.map((rm) => `<option value="${rm.id}">${escapeHtml(rm.full_name)}</option>`).join('');
+
+  tbody.innerHTML = leads.map((l) => {
+    const overdue = Date.now() - new Date(l.created_at).getTime() > UNASSIGNED_WARNING_MS;
+    const waitingCell = overdue
+      ? `<span class="badge badge-warning">${escapeHtml(formatWaiting(l.created_at))}</span>`
+      : escapeHtml(formatWaiting(l.created_at));
+    return `
+    <tr>
+      <td><strong>${escapeHtml(l.student_name)}</strong></td>
+      <td>${escapeHtml(leadSourceLabel(l))}</td>
+      <td class="amount">${formatCurrency(l.loan_amount_requested)}</td>
+      <td>${waitingCell}</td>
+      <td>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select class="unassigned-rm-select" data-lead-id="${l.id}" style="padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);font-size:13px;max-width:150px;">
+            <option value="">Assign to…</option>
+            ${rmOptions}
+          </select>
+          <button type="button" class="btn btn-primary" data-assign-btn data-lead-id="${l.id}" disabled style="padding:6px 12px;font-size:13px;">Assign</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.unassigned-rm-select').forEach((select) => {
+    select.addEventListener('change', (e) => {
+      const btn = tbody.querySelector(`[data-assign-btn][data-lead-id="${e.target.dataset.leadId}"]`);
+      if (btn) btn.disabled = !e.target.value;
+    });
+  });
+
+  tbody.querySelectorAll('[data-assign-btn]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const leadId = btn.dataset.leadId;
+      const select = tbody.querySelector(`.unassigned-rm-select[data-lead-id="${leadId}"]`);
+      const newRmId = select?.value;
+      if (!newRmId) return;
+      btn.disabled = true;
+      select.disabled = true;
+      btn.textContent = 'Assigning…';
+      try {
+        await assignLeadToRm(leadId, newRmId, 'Assigned from Manager Dashboard – Unassigned Leads');
+        showToast('Lead assigned.');
+        await renderUnassignedLeads();
+      } catch (err) {
+        console.error(err);
+        showToast('Could not assign this lead. Please try again.', true);
+        btn.disabled = false;
+        select.disabled = false;
+        btn.textContent = 'Assign';
+      }
+    });
+  });
 }
 
 async function renderAttentionList() {
@@ -127,7 +237,7 @@ async function bootstrap() {
   document.getElementById('userName').textContent = user.fullName;
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
-  await Promise.all([renderDailyStats(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis()]);
+  await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis()]);
 }
 
 bootstrap();
