@@ -1,4 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
+import { mountTopbar } from '../../../shared/js/appNav.js';
 import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 // Cross-app imports: app folders are top-level siblings (not nested), so
@@ -236,6 +237,7 @@ async function bootstrap() {
   }
   document.getElementById('userName').textContent = user.fullName;
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  mountTopbar({ app: 'manager-dashboard', user });
 
   await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis()]);
 }

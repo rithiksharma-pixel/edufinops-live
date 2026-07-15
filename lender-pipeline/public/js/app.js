@@ -1,4 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
+import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import {
   getMyBankDeals, getDealDetail, getDealStages, getDealHoldReasons, getDealRejectionReasons,
   updateStageDetails, changeDealStage, putDealOnHold, releaseDealHold, rejectDeal, reinstateDeal,
@@ -441,6 +442,7 @@ async function bootstrap() {
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('orgName').textContent = currentUser.lenderOrgName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  mountTopbar({ app: 'lender-pipeline', user: currentUser });
 
   initDrawerChrome();
   initViewSwitching();
@@ -459,10 +461,13 @@ function initViewSwitching() {
   });
 }
 
+const LENDER_VIEW_CRUMBS = { dashboard: '', pipeline: 'Our Pipeline', profile: 'Bank Details' };
+
 async function showView(view) {
   document.getElementById('dashboardPanel').hidden = view !== 'dashboard';
   document.getElementById('pipelinePanel').hidden = view !== 'pipeline';
   document.getElementById('profilePanel').hidden = view !== 'profile';
+  setBreadcrumb(LENDER_VIEW_CRUMBS[view] ? [LENDER_VIEW_CRUMBS[view]] : []);
   if (view === 'dashboard') await renderDashboard();
   else if (view === 'pipeline') await refreshDealsList();
   else if (view === 'profile') await loadProfileForm();

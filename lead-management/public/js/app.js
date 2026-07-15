@@ -4,6 +4,7 @@
 // services to components. Components never import each other directly.
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
+import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { listLeads, getStageCounts } from './services/leadService.js';
 import { getLeadStages, getLeadSources, getAssignableRms } from './services/lookupService.js';
 import { renderLeadTable } from './components/leadTable.js';
@@ -110,6 +111,7 @@ async function bootstrap() {
   }
 
   renderCurrentUserChip();
+  mountTopbar({ app: 'lead-management', user: state.currentUser });
 
   const [stages, sources, rms] = await Promise.all([
     getLeadStages(),
@@ -126,6 +128,8 @@ async function bootstrap() {
     showToast,
     onLeadUpdated: refreshLeadsAndFunnel,
     currentUser: state.currentUser,
+    onOpen: (lead) => setBreadcrumb([{ label: 'All Leads', onClick: () => drawer.close() }, lead.student_name || 'Lead']),
+    onClose: () => setBreadcrumb([]),
   });
 
   initLeadFormModal({

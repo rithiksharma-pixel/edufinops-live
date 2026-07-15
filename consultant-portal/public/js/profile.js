@@ -1,4 +1,5 @@
 import { getCurrentUser, updateMyProfile } from './services/authService.js';
+import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 
 const toastEl = document.getElementById('toast');
 function showToast(msg, isError = false) {
@@ -16,6 +17,9 @@ async function bootstrap() {
     document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">Please sign in first.</div>';
     return;
   }
+
+  mountTopbar({ app: 'consultant-portal', user });
+  setBreadcrumb(['Profile']);
 
   const form = document.getElementById('profileForm');
   form.full_name.value = user.fullName;

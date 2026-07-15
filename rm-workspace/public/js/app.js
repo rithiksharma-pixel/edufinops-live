@@ -1,4 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
+import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
@@ -78,12 +79,19 @@ function renderLenderUpdateRows(events) {
   `).join('');
 }
 
+const VIEW_CRUMBS = {
+  dashboard: '', assigned: 'Assigned Leads', followups: "Today's Follow-ups",
+  new: 'New Leads', documents: 'Documents Pending', lenders: 'Lender Updates',
+  calls: 'Calls', tasks: 'Tasks',
+};
+
 async function loadView(key) {
   document.getElementById('dashboardView').hidden = key !== 'dashboard';
   document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls';
   document.getElementById('tasksView').hidden = key !== 'tasks';
   document.getElementById('callsView').hidden = key !== 'calls';
   document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === key));
+  setBreadcrumb(VIEW_CRUMBS[key] ? [VIEW_CRUMBS[key]] : []);
 
   if (key === 'dashboard') {
     document.getElementById('viewTitle').textContent = 'Dashboard';
@@ -368,6 +376,7 @@ async function bootstrap() {
   }
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  mountTopbar({ app: 'rm-workspace', user: currentUser });
 
   document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });

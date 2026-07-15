@@ -22,7 +22,7 @@ import { formatCurrency, formatDateTime } from '../utils/validation.js';
 
 let currentLeadId = null;
 
-export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
+export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, onClose }) {
   const overlay = document.getElementById('drawerOverlay');
   const btnClose = document.getElementById('btnCloseDrawer');
   const tabs = document.querySelectorAll('.tab-btn');
@@ -45,6 +45,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
   function close() {
     overlay.hidden = true;
     currentLeadId = null;
+    if (onClose) onClose();
   }
   window.__closeLeadDrawer = close;
 
@@ -67,6 +68,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser }) {
       ]);
 
       renderHeader(lead);
+      if (onOpen) onOpen(lead);
       renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated);
       renderTimeline(timeline);
 

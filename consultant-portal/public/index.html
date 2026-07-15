@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="css/portal.css" />
 </head>
 <body>
@@ -17,7 +18,6 @@
       <nav class="sidebar-nav">
         <a class="nav-item active" href="index.html"><i class="fa-solid fa-user-graduate"></i> My Students</a>
         <a class="nav-item" href="profile.html"><i class="fa-solid fa-id-badge"></i> Profile</a>
-        <a class="nav-item" href="../../lead-management/public/index.html"><i class="fa-solid fa-diagram-project"></i> Lead Management</a>
       </nav>
       <div class="sidebar-footer">
         <div class="user-chip"><div class="avatar" id="avatar">–</div><div class="user-meta"><span class="user-name" id="userName">Loading…</span><span class="user-role">Consultant</span></div></div>
@@ -25,6 +25,7 @@
     </aside>
 
     <main class="main">
+      <div id="ztTopbar" class="zt-topbar"></div>
       <header class="main-header">
         <div><h1>My students</h1><p class="subtitle">Every lead you've submitted, and where it stands.</p></div>
         <button class="btn btn-primary" id="btnAddLead"><i class="fa-solid fa-plus"></i> Add lead</button>

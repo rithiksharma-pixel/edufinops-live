@@ -1,0 +1,101 @@
+/* =========================================================
+   SHARED CROSS-APP NAVIGATION CHROME
+   Rendered by shared/js/appNav.js into #ztTopbar (first child of
+   <main>). Uses the design tokens from design-tokens.css.
+   ========================================================= */
+
+.zt-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 4px 0 14px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  min-height: 40px;
+}
+
+.zt-topbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; }
+.zt-topbar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+/* ---------- App switcher ---------- */
+.zt-appswitch { position: relative; flex-shrink: 0; }
+.zt-appswitch-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 11px 6px 7px; cursor: pointer;
+  font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-900);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.zt-appswitch-btn:hover:not(:disabled) { border-color: var(--ink-300); box-shadow: 0 1px 3px rgba(21,24,29,0.06); }
+.zt-appswitch.static .zt-appswitch-btn { cursor: default; }
+.zt-appswitch-mark {
+  width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--navy); color: #fff; font-size: 11px;
+}
+.zt-appswitch-label { white-space: nowrap; }
+.zt-appswitch-caret { font-size: 11px; color: var(--ink-500); margin-left: 1px; }
+
+.zt-switch-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 200;
+  min-width: 230px; background: var(--bg-surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(23,23,26,0.14); padding: 6px;
+}
+.zt-switch-menu-head {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-500); padding: 6px 8px 4px;
+}
+.zt-switch-item {
+  display: flex; align-items: center; gap: 11px; padding: 9px 8px;
+  border-radius: var(--radius-sm); text-decoration: none;
+  color: var(--ink-700); font-size: 13.5px; font-weight: 500;
+}
+.zt-switch-item:hover { background: var(--bg-hover); color: var(--ink-900); }
+.zt-switch-item > i:first-child { width: 18px; text-align: center; color: var(--ink-500); font-size: 13px; }
+.zt-switch-item.current { color: var(--ink-900); font-weight: 600; }
+.zt-switch-item.current > i:first-child { color: var(--accent); }
+.zt-switch-check { margin-left: auto; color: var(--accent); font-size: 12px; }
+
+/* ---------- Breadcrumbs ---------- */
+.zt-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.zt-crumb-sep { color: var(--ink-300); font-size: 11px; margin: 0 3px; flex-shrink: 0; }
+.zt-crumbs > span, .zt-crumb-link {
+  font-size: 13.5px; color: var(--ink-500); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 260px;
+}
+.zt-crumbs > span:last-child { color: var(--ink-900); font-weight: 500; }
+.zt-crumb-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; color: var(--accent); text-decoration: none;
+}
+.zt-crumb-link:hover { text-decoration: underline; }
+
+/* ---------- User + sign out ---------- */
+.zt-user { display: flex; align-items: center; gap: 9px; }
+.zt-user-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: var(--navy); color: #fff; font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.zt-user-meta { display: flex; flex-direction: column; line-height: 1.25; }
+.zt-user-name { font-size: 13px; font-weight: 600; color: var(--ink-900); }
+.zt-user-role { font-size: 11px; color: var(--ink-500); }
+.zt-signout {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 12px; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 500; color: var(--ink-700);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.zt-signout:hover { background: var(--danger-soft); color: var(--danger-soft-ink); border-color: transparent; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 720px) {
+  .zt-topbar { flex-wrap: wrap; gap: 10px; }
+  .zt-user-meta { display: none; }
+  .zt-signout span { display: none; }
+  .zt-signout { padding: 7px 10px; }
+  .zt-crumbs { display: none; }
+}
