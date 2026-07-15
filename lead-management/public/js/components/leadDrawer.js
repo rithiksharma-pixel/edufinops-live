@@ -298,7 +298,7 @@ function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast,
 function renderTimeline(events) {
   const panel = document.getElementById('panelTimeline');
   if (!events || events.length === 0) {
-    panel.innerHTML = '<p class="empty-state">No activity recorded yet.</p>';
+    panel.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-clock-rotate-left"></i></div><div class="title">No activity recorded yet</div><p class="hint">Stage changes, calls, and updates on this lead will show up here.</p></div>';
     return;
   }
   panel.innerHTML = events

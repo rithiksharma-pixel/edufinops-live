@@ -120,13 +120,26 @@ button, input, select { font-family: inherit; font-size: inherit; }
   margin-bottom: 22px;
 }
 .funnel-card {
+  position: relative; overflow: hidden;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
+  padding: 14px 16px 14px 18px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
-.funnel-card .count { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-.funnel-card .label { font-size: 12px; color: var(--ink-500); margin-top: 2px; display: block; }
+.funnel-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--stat-accent, var(--accent));
+}
+.funnel-card:hover { box-shadow: 0 6px 20px rgba(21, 24, 29, 0.06); transform: translateY(-1px); }
+.funnel-card .stat-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; margin-bottom: 8px;
+  background: color-mix(in srgb, var(--stat-accent, var(--accent)) 14%, transparent);
+  color: var(--stat-accent, var(--accent)); font-size: 11px;
+}
+.funnel-card .count { font: 600 22px/1.1 'IBM Plex Mono', Fraunces, serif; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; display: block; }
+.funnel-card .label { font-size: 12px; color: var(--ink-500); margin-top: 3px; display: block; }
 
 /* =========================================================
    FILTER BAR
@@ -183,13 +196,26 @@ button, input, select { font-family: inherit; font-size: inherit; }
 .student-phone { font-size: 12px; color: var(--ink-500); font-family: var(--font-mono); }
 .empty-state { text-align: center; color: var(--ink-500); padding: 32px !important; }
 
+/* ---------- Empty states — icon + heading + hint, not just bare text ---------- */
+.empty-state-block { text-align: center; padding: 40px 20px; color: var(--ink-500); }
+.empty-state-block .icon {
+  width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 50%;
+  background: var(--bg-hover); display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: var(--ink-300);
+}
+.empty-state-block .title { font-size: 14px; font-weight: 600; color: var(--ink-700); margin-bottom: 4px; }
+.empty-state-block .hint { font-size: 12.5px; max-width: 34ch; margin: 0 auto; line-height: 1.5; }
+.empty-state-block .btn { margin-top: 14px; }
+
+.btn:active { transform: translateY(1px); }
+
 .badge {
   display: inline-flex; align-items: center;
   padding: 3px 9px;
   border-radius: 20px;
   font-size: 12px; font-weight: 500;
 }
-.badge-neutral   { background: #F1EFE8; color: var(--ink-700); }
+.badge-neutral   { background: var(--paper-sunken); color: var(--ink-700); }
 .badge-accent    { background: var(--accent-soft); color: var(--accent-soft-ink); }
 .badge-success   { background: var(--success-soft); color: var(--success-soft-ink); }
 .badge-warning   { background: var(--warning-soft); color: var(--warning-soft-ink); }

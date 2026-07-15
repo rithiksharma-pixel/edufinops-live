@@ -39,7 +39,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
     const cardsWrap = document.getElementById('dealCards');
     if (deals.length === 0) {
-      cardsWrap.innerHTML = '<p class="empty-state">Not shared with any lender yet — use the table above to share.</p>';
+      cardsWrap.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-building-columns"></i></div><div class="title">Not shared with any lender yet</div><p class="hint">Use the table above to share this lead with a lender and start a deal.</p></div>';
     } else {
       deals.forEach((deal) => cardsWrap.appendChild(renderDealCard(deal, stages)));
     }

@@ -20,11 +20,11 @@ async function bootstrap() {
   try {
     currentUser = await getCurrentUserProfile();
     if (currentUser.role !== 'Admin') {
-      document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">This page is only available to Admins.</div>';
+      document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-lock" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Admins only</strong><span style="color:var(--ink-500);font-size:13px;">This page is only available to Admins.</span></div>';
       return;
     }
   } catch (err) {
-    document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">Please <a href="login.html">sign in</a> first.</div>';
+    document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-right-to-bracket" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Sign-in required</strong><span style="color:var(--ink-500);font-size:13px;">Please <a href="login.html" style="color:var(--accent);">sign in</a> first.</span></div>';
     return;
   }
 

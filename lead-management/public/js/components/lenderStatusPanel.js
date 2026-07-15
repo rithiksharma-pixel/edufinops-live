@@ -22,7 +22,7 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
     if (tabCountEl) tabCountEl.textContent = `${rows.filter((r) => r.share_status === 'Shared').length}/${rows.length}`;
 
     if (rows.length === 0) {
-      panelEl.innerHTML = '<p class="empty-state">No lenders configured yet — add one in Admin Settings.</p>';
+      panelEl.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-building-columns"></i></div><div class="title">No lenders configured yet</div><p class="hint">Add a lender in Admin Settings and it will appear here for sharing.</p></div>';
       return;
     }
 

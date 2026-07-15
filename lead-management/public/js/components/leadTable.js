@@ -13,7 +13,7 @@ export function renderLeadTable(tbody, leads, onRowClick) {
   tbody.innerHTML = '';
 
   if (!leads || leads.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No leads match these filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state-block"><div class="icon"><i class="fa-solid fa-magnifying-glass"></i></div><div class="title">No leads match these filters</div><p class="hint">Try widening your search or clearing a filter to see more results.</p></div></td></tr>';
     return;
   }
 

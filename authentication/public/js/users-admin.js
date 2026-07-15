@@ -7,6 +7,7 @@ import {
 } from './services/userAdminService.js';
 
 const toastEl = document.getElementById('toast');
+const emptyState = (icon, title, hint, cta) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div><p class="hint">${escapeHtml(hint)}</p>${cta ? `<a class="btn btn-secondary" href="${cta.href}">${escapeHtml(cta.label)}</a>` : ''}</div>`;
 let toastTimer = null;
 function showToast(message, isError = false) {
   clearTimeout(toastTimer);
@@ -35,7 +36,7 @@ async function loadUsers() {
   const tbody = document.getElementById('usersTableBody');
   const users = await getAllUsers();
   if (users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No users yet.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="6">${emptyState('fa-users', 'No users yet', 'Invite your first teammate and they will show up here.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = '';
@@ -112,7 +113,7 @@ async function loadInvitations() {
   const tbody = document.getElementById('invitesTableBody');
   const invites = await getPendingInvitations();
   if (invites.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No pending invitations.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="6">${emptyState('fa-envelope-open-text', 'No pending invitations', 'Invitations you send will wait here until the person accepts.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = invites.map((inv) => `
@@ -272,11 +273,11 @@ async function bootstrap() {
   try {
     currentUserProfile = await getCurrentUserProfile();
     if (!INVITE_CAPABLE_ROLES.includes(currentUserProfile.role)) {
-      document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">This page is only available to Admins, Managers, and Associate Team Managers.</div>';
+      document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-lock" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Restricted</strong><span style="color:var(--ink-500);font-size:13px;">This page is only available to Admins, Managers, and Associate Team Managers.</span></div>';
       return;
     }
   } catch (err) {
-    document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">Please <a href="login.html">sign in</a> first.</div>';
+    document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-right-to-bracket" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Sign-in required</strong><span style="color:var(--ink-500);font-size:13px;">Please <a href="login.html" style="color:var(--accent);">sign in</a> first.</span></div>';
     return;
   }
 

@@ -9,11 +9,25 @@
 .data-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-500); padding: 10px 20px; border-bottom: 1px solid var(--border); background: #FBFBFA; }
 .data-table td { padding: 12px 20px; font-size: 14px; border-bottom: 1px solid var(--border); color: var(--ink-700); }
 .data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr { transition: background 0.1s ease; }
+.data-table tbody tr:hover { background: var(--bg-hover); }
 .empty-state { text-align: center; color: var(--ink-500); padding: 28px !important; }
 .name-cell { font-weight: 500; color: var(--ink-900); }
 .inline-select { padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-surface); }
-.row-action-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--accent); padding: 4px 8px; }
+.row-action-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--accent); padding: 4px 8px; transition: color 0.12s ease; }
 .row-action-btn.danger { color: var(--danger); }
+.btn:active { transform: translateY(1px); }
+
+/* ---------- Empty states — icon + heading + hint, not just bare text ---------- */
+.empty-state-block { text-align: center; padding: 40px 20px; color: var(--ink-500); }
+.empty-state-block .icon {
+  width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 50%;
+  background: var(--bg-hover); display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: var(--ink-300);
+}
+.empty-state-block .title { font-size: 14px; font-weight: 600; color: var(--ink-700); margin-bottom: 4px; }
+.empty-state-block .hint { font-size: 12.5px; max-width: 34ch; margin: 0 auto; line-height: 1.5; }
+.empty-state-block .btn { margin-top: 14px; }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(23,23,26,0.42); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); width: min(480px, 92vw); }

@@ -6,6 +6,7 @@ import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } fro
 
 let currentUser;
 const toastEl = document.getElementById('toast');
+const emptyState = (icon, title, hint) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div><p class="hint">${escapeHtml(hint)}</p></div>`;
 function showToast(msg, isError = false) {
   toastEl.textContent = msg;
   toastEl.classList.toggle('error', isError);
@@ -29,7 +30,7 @@ function renderLeadRows(leads) {
   document.getElementById('listHead').innerHTML = '<tr><th>Student</th><th>Course / University</th><th>Loan amount</th><th>Stage</th><th>Next follow-up</th></tr>';
   const body = document.getElementById('listBody');
   if (leads.length === 0) {
-    body.innerHTML = '<tr><td colspan="5" class="empty-state">Nothing here.</td></tr>';
+    body.innerHTML = `<tr><td colspan="5">${emptyState('fa-inbox', 'Nothing here', 'Leads will show up here as they\'re assigned to you or as their status changes.')}</td></tr>`;
     return;
   }
   body.innerHTML = leads.map((l) => `
@@ -47,7 +48,7 @@ function renderDocumentRows(docs) {
   document.getElementById('listHead').innerHTML = '<tr><th>Document</th><th>Student</th><th>Uploaded</th></tr>';
   const body = document.getElementById('listBody');
   if (docs.length === 0) {
-    body.innerHTML = '<tr><td colspan="3" class="empty-state">Nothing pending review.</td></tr>';
+    body.innerHTML = `<tr><td colspan="3">${emptyState('fa-folder-open', 'Nothing pending review', 'Documents will appear here once students upload something that needs your verification.')}</td></tr>`;
     return;
   }
   body.innerHTML = docs.map((d) => `
@@ -63,7 +64,7 @@ function renderLenderUpdateRows(events) {
   document.getElementById('listHead').innerHTML = '<tr><th>Event</th><th>Lender</th><th>Student</th><th>When</th></tr>';
   const body = document.getElementById('listBody');
   if (events.length === 0) {
-    body.innerHTML = '<tr><td colspan="4" class="empty-state">No recent lender activity.</td></tr>';
+    body.innerHTML = `<tr><td colspan="4">${emptyState('fa-building-columns', 'No recent lender activity', 'Updates will appear here as lenders act on your shared deals.')}</td></tr>`;
     return;
   }
   body.innerHTML = events.map((ev) => `
@@ -113,7 +114,7 @@ async function refreshTasks() {
   const tasks = await getMyTasks();
   const container = document.getElementById('tasksList');
   if (tasks.length === 0) {
-    container.innerHTML = '<p class="empty-state">No tasks yet.</p>';
+    container.innerHTML = emptyState('fa-list-check', 'No tasks yet', 'Add a task above and it will show up here.');
     return;
   }
   container.innerHTML = tasks.map((t) => `
@@ -147,11 +148,11 @@ async function renderRmDashboard() {
     getMyTatBreachedDeals(),
   ]);
 
-  document.getElementById('rmDashStats').innerHTML = `
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;">${leads.length}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Assigned leads</div></div>
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;color:var(--danger);">${overdue.length}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Overdue follow-ups</div></div>
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;color:var(--success);">${leads.length - overdue.length}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">On track</div></div>
-  `;
+  document.getElementById('rmDashStats').innerHTML = [
+    [leads.length, 'Assigned leads', 'fa-inbox', 'var(--accent)'],
+    [overdue.length, 'Overdue follow-ups', 'fa-clock', 'var(--danger)'],
+    [leads.length - overdue.length, 'On track', 'fa-circle-check', 'var(--success)'],
+  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
 
   const stageCounts = {};
   leads.forEach((l) => {
@@ -164,14 +165,14 @@ async function renderRmDashboard() {
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(name)}</span><span class="amount">${count}</span></div>
       <div style="background:var(--bg-hover);border-radius:4px;height:8px;"><div style="background:var(--accent);width:${(count / maxCount) * 100}%;height:100%;border-radius:4px;"></div></div>
     </div>
-  `).join('') || '<p class="empty-state">No leads assigned yet.</p>';
+  `).join('') || emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, their stage breakdown will show here.');
 
   const overdueFollowUpHtml = overdue.slice(0, 8).map((l) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('');
   const overdueTaskHtml = overdueTasks.slice(0, 8).map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)}${t.leads ? ' · ' + escapeHtml(t.leads.student_name) : ''}</span><span class="badge badge-danger">Overdue task</span></div>`).join('');
   const tatBreachHtml = tatBreaches.slice(0, 8).map((d) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.student || '–')}</span><span class="badge badge-warning">Overstayed ${escapeHtml(d.stage)} (${d.thresholdDays}d TAT)</span></div>`).join('');
 
   document.getElementById('rmDashAttention').innerHTML = (overdue.length + overdueTasks.length + tatBreaches.length) === 0
-    ? '<p class="empty-state">Nothing overdue — nice work.</p>'
+    ? emptyState('fa-circle-check', 'Nothing overdue', 'No overdue follow-ups, tasks, or TAT breaches right now — nice work.')
     : overdueFollowUpHtml + overdueTaskHtml + tatBreachHtml;
 }
 
@@ -299,7 +300,7 @@ async function bootstrap() {
   try {
     currentUser = await getCurrentUser();
   } catch (err) {
-    document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">Please sign in first.</div>';
+    document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-right-to-bracket" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Sign-in required</strong><span style="color:var(--ink-500);font-size:13px;">Please <a href="../../authentication/public/login.html" style="color:var(--accent);">sign in</a> first.</span></div>';
     return;
   }
   document.getElementById('userName').textContent = currentUser.fullName;

@@ -105,7 +105,7 @@ async function bootstrap() {
     // doesn't exist yet in this build sequence.
     console.error('Auth check failed:', err);
     document.body.innerHTML =
-      '<div style="padding:48px;font-family:sans-serif;">Please sign in through the Authentication app first.</div>';
+      '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-right-to-bracket" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Sign-in required</strong><span style="color:var(--ink-500);font-size:13px;">Please <a href="../../authentication/public/login.html" style="color:var(--accent);">sign in</a> first.</span></div>';
     return;
   }
 

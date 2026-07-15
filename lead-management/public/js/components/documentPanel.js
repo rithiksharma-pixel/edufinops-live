@@ -49,7 +49,7 @@ export async function initDocumentsTab(panelEl, leadId, ctx) {
   function renderDocList(docs) {
     const listEl = document.getElementById('docList');
     if (docs.length === 0) {
-      listEl.innerHTML = '<p class="empty-state">No documents uploaded yet.</p>';
+      listEl.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="title">No documents uploaded yet</div><p class="hint">Use the upload form above to add the student\'s first document.</p></div>';
       return;
     }
     listEl.innerHTML = docs.map((d) => {
