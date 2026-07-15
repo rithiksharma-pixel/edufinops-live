@@ -77,7 +77,7 @@ async function loadTeamPerformance() {
   if (!teamPerfData) {
     const [teamsRes, managersRes, rmsRes, leadsRes, dealsRes] = await Promise.all([
       supabase.from('teams').select('id,name').eq('is_deleted', false).order('name'),
-      supabase.from('users').select('id,full_name,team_id,roles!inner(name)').eq('roles.name', 'Manager').eq('is_deleted', false),
+      supabase.from('users').select('id,full_name,team_id,roles!inner(name)').in('roles.name', ['Manager', 'Associate Team Manager']).eq('is_deleted', false),
       supabase.from('users').select('id,full_name,reporting_manager_id,roles!inner(name)').eq('roles.name', 'Relationship Manager').eq('is_deleted', false),
       supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false),
       supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false),

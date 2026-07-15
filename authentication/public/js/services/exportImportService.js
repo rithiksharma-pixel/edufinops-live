@@ -72,9 +72,36 @@ export function downloadCsv(csvText, filename) {
   URL.revokeObjectURL(url);
 }
 
+const VALID_LOAN_TYPES = ['Collateral', 'Non Collateral'];
+
+/**
+ * Every column beyond the original 8 is optional and exists specifically
+ * for HISTORICAL migration of leads from another system, so real history
+ * is preserved instead of every migrated lead looking like it was just
+ * created:
+ *   - stage_name: current pipeline stage (must match an existing
+ *     lead_stages.name exactly). Blank = the opening stage, same as before.
+ *   - assigned_rm_email: the RM this lead is currently assigned to
+ *     (resolved to users.id by email — must be an active user with the
+ *     Relationship Manager role). Blank = unassigned.
+ *   - created_date: backdates the lead's created_at AND the opening
+ *     lead_events row's created_at to this date (YYYY-MM-DD), instead of
+ *     defaulting to "now" like a freshly-created lead. Blank = now.
+ *   - loan_type: "Collateral" or "Non Collateral". Blank = unset.
+ *   - consultancy_name / consultancy_other_name: only meaningful (and
+ *     required — one or the other) when source_name is "BD Partnership".
+ *     consultancy_name must match an existing consultancies.name exactly;
+ *     use consultancy_other_name for a consultancy not yet in the system.
+ */
 export function importTemplateCsv() {
   return Papa.unparse([
-    { student_name: 'Jane Doe', student_phone: '+91 98765 43210', student_email: 'jane@example.com', course_name: 'MS Computer Science', university_name: 'Example University', destination_country: 'USA', loan_amount_requested: 2500000, source_name: 'Direct Website Inquiry' },
+    {
+      student_name: 'Jane Doe', student_phone: '+91 98765 43210', student_email: 'jane@example.com',
+      course_name: 'MS Computer Science', university_name: 'Example University', destination_country: 'USA',
+      loan_amount_requested: 2500000, source_name: 'Direct Website Inquiry',
+      stage_name: 'Documents Received', assigned_rm_email: 'rm@example.com', created_date: '2025-03-14',
+      loan_type: 'Non Collateral', consultancy_name: '', consultancy_other_name: '',
+    },
   ]);
 }
 
@@ -83,10 +110,16 @@ export function importTemplateCsv() {
  * without writing anything — the caller reviews this before committing.
  */
 export async function parseLeadsCsv(file, currentUserId) {
-  const { data: sources, error: sourcesError } = await supabase.from('lead_sources').select('id, name').eq('is_deleted', false);
+  const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, { data: consultancies, error: consultanciesError }] = await Promise.all([
+    supabase.from('lead_sources').select('id, name').eq('is_deleted', false),
+    supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false),
+    supabase.from('users').select('id, email, full_name, roles(name)').eq('is_deleted', false).eq('is_active', true),
+    supabase.from('consultancies').select('id, name').eq('is_deleted', false),
+  ]);
   if (sourcesError) throw sourcesError;
-  const { data: stages, error: stagesError } = await supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false);
   if (stagesError) throw stagesError;
+  if (rmsError) throw rmsError;
+  if (consultanciesError) throw consultanciesError;
   const openingStage = stages.reduce((min, s) => (s.sequence_order < min.sequence_order ? s : min), stages[0]);
 
   return new Promise((resolve, reject) => {
@@ -105,7 +138,63 @@ export async function parseLeadsCsv(file, currentUserId) {
           const source = sources.find((s) => s.name.toLowerCase() === (row.source_name || '').trim().toLowerCase());
           if (!source) { errors.push(`Row ${rowNum}: unknown source_name "${row.source_name}"`); return; }
 
-          validRows.push({
+          let rowHasError = false;
+
+          // stage_name — optional, defaults to the opening stage.
+          let stageId = openingStage.id;
+          const stageName = row.stage_name?.trim();
+          if (stageName) {
+            const stage = stages.find((s) => s.name.toLowerCase() === stageName.toLowerCase());
+            if (!stage) { errors.push(`Row ${rowNum}: unknown stage_name "${stageName}"`); rowHasError = true; }
+            else stageId = stage.id;
+          }
+
+          // assigned_rm_email — optional, must be an active Relationship Manager.
+          let assignedRmId = null;
+          const rmEmail = row.assigned_rm_email?.trim();
+          if (rmEmail) {
+            const rm = rms.find((u) => u.email.toLowerCase() === rmEmail.toLowerCase());
+            if (!rm) { errors.push(`Row ${rowNum}: no active user found with assigned_rm_email "${rmEmail}"`); rowHasError = true; }
+            else if (rm.roles?.name !== 'Relationship Manager') { errors.push(`Row ${rowNum}: "${rmEmail}" is not a Relationship Manager (role: ${rm.roles?.name || 'unknown'})`); rowHasError = true; }
+            else assignedRmId = rm.id;
+          }
+
+          // created_date — optional, backdates created_at / the opening event.
+          let createdAt = null;
+          const createdDateRaw = row.created_date?.trim();
+          if (createdDateRaw) {
+            const parsed = new Date(createdDateRaw);
+            if (Number.isNaN(parsed.getTime())) { errors.push(`Row ${rowNum}: invalid created_date "${createdDateRaw}" (use YYYY-MM-DD)`); rowHasError = true; }
+            else if (parsed.getTime() > Date.now()) { errors.push(`Row ${rowNum}: created_date "${createdDateRaw}" is in the future`); rowHasError = true; }
+            else createdAt = parsed.toISOString();
+          }
+
+          // loan_type — optional.
+          let loanType = null;
+          const loanTypeRaw = row.loan_type?.trim();
+          if (loanTypeRaw) {
+            if (!VALID_LOAN_TYPES.includes(loanTypeRaw)) { errors.push(`Row ${rowNum}: loan_type must be "Collateral" or "Non Collateral", got "${loanTypeRaw}"`); rowHasError = true; }
+            else loanType = loanTypeRaw;
+          }
+
+          // consultancy_name / consultancy_other_name — required (one or the
+          // other) only when the source is BD Partnership.
+          let consultancyId = null;
+          const consultancyNameRaw = row.consultancy_name?.trim();
+          const consultancyOtherNameRaw = row.consultancy_other_name?.trim() || null;
+          if (consultancyNameRaw) {
+            const consultancy = consultancies.find((c) => c.name.toLowerCase() === consultancyNameRaw.toLowerCase());
+            if (!consultancy) { errors.push(`Row ${rowNum}: unknown consultancy_name "${consultancyNameRaw}"`); rowHasError = true; }
+            else consultancyId = consultancy.id;
+          }
+          if (source.name === 'BD Partnership' && !consultancyId && !consultancyOtherNameRaw) {
+            errors.push(`Row ${rowNum}: source_name is "BD Partnership" — consultancy_name or consultancy_other_name is required`);
+            rowHasError = true;
+          }
+
+          if (rowHasError) return;
+
+          const leadRow = {
             student_name: row.student_name.trim(),
             student_phone: row.student_phone.trim(),
             student_email: row.student_email?.trim() || null,
@@ -114,10 +203,17 @@ export async function parseLeadsCsv(file, currentUserId) {
             destination_country: row.destination_country?.trim() || null,
             loan_amount_requested: amount,
             lead_source_id: source.id,
-            current_stage_id: openingStage.id,
+            current_stage_id: stageId,
+            assigned_rm_id: assignedRmId,
+            loan_type: loanType,
+            consultancy_id: consultancyId,
+            consultancy_other_name: consultancyOtherNameRaw,
             created_by: currentUserId,
             updated_by: currentUserId,
-          });
+          };
+          if (createdAt) leadRow.created_at = createdAt;
+
+          validRows.push(leadRow);
         });
         resolve({ validRows, errors });
       },
@@ -130,7 +226,11 @@ export async function parseLeadsCsv(file, currentUserId) {
  * Inserts pre-validated rows and logs the opening timeline event for
  * each, one at a time so a single bad row doesn't abort the whole
  * batch — returns per-row success/failure so the UI can report exactly
- * what happened rather than an opaque "import failed".
+ * what happened rather than an opaque "import failed". When the row
+ * carries a backdated created_at (a historical migration), the opening
+ * lead_events row is backdated to match, so the lead's timeline reads
+ * correctly instead of showing "created today" for a lead that's been
+ * live for months.
  */
 export async function commitLeadImport(validRows) {
   let succeeded = 0;
@@ -141,9 +241,12 @@ export async function commitLeadImport(validRows) {
       failures.push({ row, error: error.message });
       continue;
     }
-    await supabase.from('lead_events').insert({
+    const eventRow = {
       lead_id: lead.id, event_type: 'Lead Created', to_stage_id: row.current_stage_id, created_by: row.created_by,
-    });
+      remarks: row.created_at ? 'Migrated from historical data' : null,
+    };
+    if (row.created_at) eventRow.created_at = row.created_at;
+    await supabase.from('lead_events').insert(eventRow);
     succeeded += 1;
   }
   return { succeeded, failures };

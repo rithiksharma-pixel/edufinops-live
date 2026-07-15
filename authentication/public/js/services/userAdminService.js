@@ -22,15 +22,47 @@ export async function getTeams() {
   return data;
 }
 
-export async function getPossibleManagers() {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, full_name, roles!inner(name)')
-    .in('roles.name', ['Manager', 'Admin'])
-    .eq('is_active', true)
-    .order('full_name');
-  if (error) throw error;
-  return data;
+/**
+ * "Reporting manager" choices for the invite modal, scoped to who the
+ * CURRENT user is actually allowed to invite under (mirrors invite_user()'s
+ * RPC-level scoping — this is convenience/UX only, the RPC re-validates
+ * regardless). currentUser is the { id, role } shape from
+ * getCurrentUserProfile().
+ *   - Admin: unrestricted — any Manager, Associate Team Manager, or Admin.
+ *   - Manager: themself, plus their own Associate Team Managers.
+ *   - Associate Team Manager: themself only (RMs they invite always
+ *     report directly to them).
+ *   - anyone else: no valid choices.
+ */
+export async function getPossibleManagers(currentUser) {
+  if (!currentUser || currentUser.role === 'Admin') {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, roles!inner(name)')
+      .in('roles.name', ['Manager', 'Associate Team Manager', 'Admin'])
+      .eq('is_active', true)
+      .order('full_name');
+    if (error) throw error;
+    return data;
+  }
+
+  if (currentUser.role === 'Manager') {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, roles!inner(name)')
+      .eq('roles.name', 'Associate Team Manager')
+      .eq('reporting_manager_id', currentUser.id)
+      .eq('is_active', true)
+      .order('full_name');
+    if (error) throw error;
+    return [{ id: currentUser.id, full_name: `${currentUser.fullName} (you)`, roles: { name: 'Manager' } }, ...data];
+  }
+
+  if (currentUser.role === 'Associate Team Manager') {
+    return [{ id: currentUser.id, full_name: `${currentUser.fullName} (you)`, roles: { name: 'Associate Team Manager' } }];
+  }
+
+  return [];
 }
 
 export async function getLenders() {

@@ -15,6 +15,7 @@
 export const ROLE_HOME_ROUTES = {
   Admin: '/admin-dashboard/public/index.html',
   Manager: '/manager-dashboard/public/index.html',
+  'Associate Team Manager': '/manager-dashboard/public/index.html', // Manager Dashboard's RLS-driven queries already scope correctly to an ATM's own direct reports
   'Relationship Manager': '/rm-workspace/public/index.html',
   Consultant: '/consultant-portal/public/index.html',
   'Business Development': '/lead-management/public/index.html', // no dedicated BD app yet

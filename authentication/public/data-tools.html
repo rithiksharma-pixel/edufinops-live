@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Export / Import Data · EduFin Loan Ops</title>
+<title>Export / Import Data · Zolve Tangent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
@@ -27,7 +27,16 @@
 
     <section class="table-card" style="padding:20px;">
       <h2 class="section-title" style="padding:0 0 12px;">Import leads</h2>
-      <p class="subtitle" style="margin-bottom:14px;">CSV must have these columns: <code>student_name, student_phone, student_email, course_name, university_name, destination_country, loan_amount_requested, source_name</code>. <code>source_name</code> must exactly match an existing lead source's name.</p>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Required columns:</strong> <code>student_name, student_phone, student_email, course_name, university_name, destination_country, loan_amount_requested, source_name</code>. <code>source_name</code> must exactly match an existing lead source's name.</p>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Optional — for a historical migration</strong> (a lead that already has real history, not a brand-new lead created today):</p>
+      <ul class="subtitle" style="margin:0 0 14px;padding-left:20px;">
+        <li><code>stage_name</code> — the lead's current pipeline stage, matching an existing stage's name exactly (e.g. "Documents Received", "Sanctioned"). Blank = the opening stage, same as a fresh lead.</li>
+        <li><code>assigned_rm_email</code> — email of the Relationship Manager this lead is currently assigned to (must be an existing, active RM). Blank = unassigned.</li>
+        <li><code>created_date</code> — the lead's real creation date (<code>YYYY-MM-DD</code>), so it doesn't show up as "created today" in every dashboard/report. Blank = now.</li>
+        <li><code>loan_type</code> — <code>Collateral</code> or <code>Non Collateral</code>. Blank = unset.</li>
+        <li><code>consultancy_name</code> / <code>consultancy_other_name</code> — which consultancy referred this lead. <code>consultancy_name</code> must match an existing consultancy's name exactly; use <code>consultancy_other_name</code> for one not yet in the system. One of the two is <strong>required</strong> when <code>source_name</code> is "BD Partnership".</li>
+      </ul>
+      <p class="subtitle" style="margin-bottom:14px;">Every row is validated independently — one bad row is reported and skipped, it never blocks the rest of the file. Download the template below to see the full column set with an example historical row filled in.</p>
       <button class="btn btn-ghost" id="btnDownloadTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
       <div class="form-field"><input type="file" id="importFileInput" accept=".csv" /></div>
       <button class="btn btn-primary" id="btnValidateImport">Validate file</button>

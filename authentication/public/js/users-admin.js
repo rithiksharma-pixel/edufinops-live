@@ -20,6 +20,16 @@ let roles = [];
 let managers = [];
 let lenders = [];
 let teams = [];
+let currentUserProfile = null;
+
+// Which roles each inviter is allowed to hand out — mirrors invite_user()'s
+// RPC-level scoping (see deployment/009_associate_team_manager_role_migration.sql).
+// This is convenience/UX only; the RPC re-validates regardless.
+const INVITABLE_ROLES_BY_INVITER = {
+  Admin: null, // null = no restriction, every role is offered
+  Manager: ['Relationship Manager', 'Counselor', 'Business Development', 'Associate Team Manager'],
+  'Associate Team Manager': ['Relationship Manager', 'Counselor', 'Business Development'],
+};
 
 async function loadUsers() {
   const tbody = document.getElementById('usersTableBody');
@@ -142,16 +152,42 @@ function initInviteModal() {
   const lenderBranchField = document.getElementById('lenderBranchField');
   const lenderBranchSelect = document.getElementById('inviteLenderBranchSelect');
 
-  roleSelect.innerHTML = roles.map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
-  managerSelect.innerHTML = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('');
+  const isAdmin = currentUserProfile?.role === 'Admin';
+  const allowedRoleNames = INVITABLE_ROLES_BY_INVITER[currentUserProfile?.role] ?? [];
+  const invitableRoles = isAdmin ? roles : roles.filter((r) => allowedRoleNames.includes(r.name));
+
+  roleSelect.innerHTML = invitableRoles.map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   teamSelect.innerHTML = `<option value="">Select…</option>` + teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   lenderOrgSelect.innerHTML = `<option value="">Select…</option>` + lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
 
+  // For a non-Admin inviter, `managers` (from getPossibleManagers) is
+  // already scoped to their own reporting subtree — but an Associate
+  // Team Manager can't report to another Associate Team Manager, so
+  // when THAT role is selected, narrow further to Manager-level choices.
+  function managerChoicesFor(selectedName) {
+    if (isAdmin) {
+      return selectedName === 'Associate Team Manager'
+        ? managers.filter((m) => m.roles?.name === 'Manager')
+        : managers.filter((m) => ['Manager', 'Associate Team Manager'].includes(m.roles?.name));
+    }
+    return selectedName === 'Associate Team Manager'
+      ? managers.filter((m) => m.roles?.name === 'Manager')
+      : managers;
+  }
+
   function updateFieldVisibility() {
     const selectedName = roleSelect.selectedOptions[0]?.dataset.name;
-    managerField.hidden = !['Relationship Manager', 'Counselor', 'Business Development'].includes(selectedName);
-    teamField.hidden = selectedName !== 'Manager';
-    if (selectedName !== 'Manager') teamSelect.value = '';
+    managerField.hidden = !['Relationship Manager', 'Counselor', 'Business Development', 'Associate Team Manager'].includes(selectedName);
+    if (!managerField.hidden) {
+      const choices = managerChoicesFor(selectedName);
+      managerSelect.innerHTML = `<option value="">${isAdmin ? 'None' : 'Default (you, or pick a specific one below)'}</option>` + choices.map((m) => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('');
+    }
+    // Team is only meaningful for Manager/ATM invites, and only Admin needs
+    // to pick it explicitly — a Manager/ATM inviting someone auto-inherits
+    // their own team_id server-side (invite_user()).
+    const teamRelevant = isAdmin && ['Manager', 'Associate Team Manager'].includes(selectedName);
+    teamField.hidden = !teamRelevant;
+    if (!teamRelevant) teamSelect.value = '';
     const isLender = selectedName === 'Lender';
     lenderOrgField.hidden = !isLender;
     lenderBranchField.hidden = !isLender;
@@ -196,8 +232,8 @@ function initInviteModal() {
       showToast('Select the lender institution and branch for this person.', true);
       return;
     }
-    if (selectedRoleName === 'Manager' && !payload.team_id) {
-      showToast('Select the team this Manager leads.', true);
+    if (['Manager', 'Associate Team Manager'].includes(selectedRoleName) && !teamField.hidden && !payload.team_id) {
+      showToast(`Select the team this ${selectedRoleName} belongs to.`, true);
       return;
     }
     const btn = document.getElementById('btnSubmitInvite');
@@ -230,11 +266,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+const INVITE_CAPABLE_ROLES = ['Admin', 'Manager', 'Associate Team Manager'];
+
 async function bootstrap() {
   try {
-    const profile = await getCurrentUserProfile();
-    if (profile.role !== 'Admin') {
-      document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">This page is only available to Admins.</div>';
+    currentUserProfile = await getCurrentUserProfile();
+    if (!INVITE_CAPABLE_ROLES.includes(currentUserProfile.role)) {
+      document.body.innerHTML = '<div style="padding:48px;font-family:sans-serif;">This page is only available to Admins, Managers, and Associate Team Managers.</div>';
       return;
     }
   } catch (err) {
@@ -242,12 +280,25 @@ async function bootstrap() {
     return;
   }
 
+  const isAdmin = currentUserProfile.role === 'Admin';
+
+  // The full "Active team" roster + role/manager/team editing and the
+  // Pending Invitations table are Admin-only surfaces today (the
+  // underlying change_user_role / change_reporting_manager / deactivate_user
+  // RPCs and the invitations SELECT policy are still Admin-gated) — a
+  // Manager/Associate Team Manager only gets the Invite flow here.
+  if (!isAdmin) {
+    document.querySelectorAll('.table-card').forEach((section) => { section.hidden = true; });
+  }
+
   roles = await getRoles();
-  managers = await getPossibleManagers();
-  lenders = await getLenders();
+  managers = await getPossibleManagers(currentUserProfile);
+  lenders = isAdmin ? await getLenders() : [];
   teams = await getTeams();
   initInviteModal();
-  await Promise.all([loadUsers(), loadInvitations()]);
+  if (isAdmin) {
+    await Promise.all([loadUsers(), loadInvitations()]);
+  }
 }
 
 bootstrap();
