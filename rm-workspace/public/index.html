@@ -32,6 +32,7 @@
     <main class="main">
       <header class="main-header">
         <div><h1 id="viewTitle">Assigned leads</h1><p class="subtitle" id="viewSubtitle">Every lead currently assigned to you.</p></div>
+        <button class="btn btn-primary" id="btnNewLead"><i class="fa-solid fa-plus"></i> New lead</button>
       </header>
 
       <div id="dashboardView">
@@ -69,6 +70,33 @@
       </div>
     </main>
   </div>
+  <div class="modal-overlay" id="leadModalOverlay" hidden>
+    <div class="modal">
+      <div class="modal-header"><h2>New lead</h2><button class="icon-btn" id="btnCloseLeadModal"><i class="fa-solid fa-xmark"></i></button></div>
+      <form id="leadForm" class="modal-body" novalidate>
+        <div class="form-grid">
+          <div class="form-field"><label>Student name *</label><input name="student_name" type="text" required /></div>
+          <div class="form-field"><label>Phone *</label><input name="student_phone" type="tel" required /></div>
+          <div class="form-field"><label>Email</label><input name="student_email" type="email" /></div>
+          <div class="form-field"><label>Course</label><input name="course_name" type="text" /></div>
+          <div class="form-field"><label>University</label><input name="university_name" type="text" /></div>
+          <div class="form-field"><label>Destination country</label><input name="destination_country" type="text" /></div>
+          <div class="form-field"><label>Loan amount requested *</label><input name="loan_amount_requested" type="number" min="0" step="1000" required /></div>
+          <div class="form-field"><label>Lead source *</label><select id="f_lead_source_id" name="lead_source_id" required></select></div>
+          <div class="form-field" id="consultancyField" hidden><label>Consultancy name *</label>
+            <select id="f_consultancy_id" name="consultancy_id"></select>
+            <input id="f_consultancy_other_name" name="consultancy_other_name" type="text" placeholder="Enter consultancy name" hidden style="margin-top:6px;" />
+          </div>
+        </div>
+        <span class="field-error" id="leadFormError" style="display:block;margin-top:4px;"></span>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="btnCancelLeadModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitLead">Save lead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
   <script src="../../shared/env.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

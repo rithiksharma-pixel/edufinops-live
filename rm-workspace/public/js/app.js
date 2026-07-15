@@ -1,6 +1,7 @@
 import { getCurrentUser } from './services/authService.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
+import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
 
 let currentUser;
@@ -174,6 +175,126 @@ async function renderRmDashboard() {
     : overdueFollowUpHtml + overdueTaskHtml + tatBreachHtml;
 }
 
+const OTHER_CONSULTANCY_VALUE = '__other__';
+let leadSources = [];
+
+function initLeadModal() {
+  const overlay = document.getElementById('leadModalOverlay');
+  const form = document.getElementById('leadForm');
+  const sourceSelect = document.getElementById('f_lead_source_id');
+  const consultancyField = document.getElementById('consultancyField');
+  const consultancySelect = document.getElementById('f_consultancy_id');
+  const consultancyOtherInput = document.getElementById('f_consultancy_other_name');
+  const errorEl = document.getElementById('leadFormError');
+
+  function isBdPartnership() {
+    const selected = leadSources.find((s) => s.id === sourceSelect.value);
+    return selected?.name === 'BD Partnership';
+  }
+
+  function toggleConsultancyField() {
+    const show = isBdPartnership();
+    consultancyField.hidden = !show;
+    if (!show) {
+      consultancySelect.value = '';
+      consultancyOtherInput.hidden = true;
+      consultancyOtherInput.value = '';
+    }
+  }
+  sourceSelect.addEventListener('change', toggleConsultancyField);
+  consultancySelect.addEventListener('change', () => {
+    const isOther = consultancySelect.value === OTHER_CONSULTANCY_VALUE;
+    consultancyOtherInput.hidden = !isOther;
+    if (!isOther) consultancyOtherInput.value = '';
+  });
+
+  async function open() {
+    errorEl.textContent = '';
+    form.reset();
+    if (sourceSelect.options.length <= 0) {
+      leadSources = await getLeadSources();
+      sourceSelect.innerHTML = leadSources.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+    }
+    if (consultancySelect.options.length <= 0) {
+      const consultancies = await getConsultancies();
+      consultancySelect.innerHTML =
+        `<option value="">Select consultancy…</option>` +
+        consultancies.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') +
+        `<option value="${OTHER_CONSULTANCY_VALUE}">Other</option>`;
+    }
+    toggleConsultancyField();
+    overlay.hidden = false;
+  }
+  function close() { overlay.hidden = true; }
+
+  document.getElementById('btnNewLead').addEventListener('click', open);
+  document.getElementById('btnCloseLeadModal').addEventListener('click', close);
+  document.getElementById('btnCancelLeadModal').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.hidden) close(); });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.textContent = '';
+    const formData = new FormData(form);
+    const payload = Object.fromEntries(formData.entries());
+
+    if (!payload.student_name?.trim() || !payload.student_phone?.trim()) {
+      errorEl.textContent = 'Student name and phone are required.';
+      return;
+    }
+    const amount = Number(payload.loan_amount_requested);
+    if (!payload.loan_amount_requested || Number.isNaN(amount) || amount <= 0) {
+      errorEl.textContent = 'Enter a loan amount greater than zero.';
+      return;
+    }
+    if (!payload.lead_source_id) {
+      errorEl.textContent = 'Select where this lead came from.';
+      return;
+    }
+
+    let consultancyId = null;
+    let consultancyOtherName = null;
+    if (isBdPartnership()) {
+      if (!consultancySelect.value) { errorEl.textContent = 'Choose the consultancy this lead came from.'; return; }
+      if (consultancySelect.value === OTHER_CONSULTANCY_VALUE) {
+        consultancyOtherName = consultancyOtherInput.value.trim();
+        if (!consultancyOtherName) { errorEl.textContent = 'Enter the consultancy name.'; return; }
+      } else {
+        consultancyId = consultancySelect.value;
+      }
+    }
+
+    const submitBtn = document.getElementById('btnSubmitLead');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving…';
+    try {
+      await createLead({
+        student_name: payload.student_name.trim(),
+        student_phone: payload.student_phone.trim(),
+        student_email: payload.student_email?.trim() || null,
+        course_name: payload.course_name?.trim() || null,
+        university_name: payload.university_name?.trim() || null,
+        destination_country: payload.destination_country?.trim() || null,
+        loan_amount_requested: amount,
+        lead_source_id: payload.lead_source_id,
+        consultancy_id: consultancyId,
+        consultancy_other_name: consultancyOtherName,
+        source_user_id: currentUser.id,
+      }, currentUser.id);
+      showToast('Lead saved.');
+      close();
+      if (document.getElementById('dashboardView').hidden === false) await renderRmDashboard();
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'Could not save this lead. Please try again.', true);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save lead';
+    }
+  });
+}
+
 async function bootstrap() {
   try {
     currentUser = await getCurrentUser();
@@ -187,6 +308,7 @@ async function bootstrap() {
   document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });
   });
+  initLeadModal();
 
   const leadOptions = await getMyOpenLeadsForTaskLink();
   document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));
