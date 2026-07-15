@@ -10,6 +10,7 @@ import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from 
 
 let currentUser;
 const toastEl = document.getElementById('toast');
+const emptyState = (icon, title, hint) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div>${hint ? `<p class="hint">${escapeHtml(hint)}</p>` : ''}</div>`;
 function showToast(msg, isError = false) {
   toastEl.textContent = msg;
   toastEl.classList.toggle('error', isError);
@@ -32,7 +33,7 @@ async function refreshDealsList() {
   const tbody = document.getElementById('dealsBody');
   const deals = await getMyBankDeals();
   if (deals.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No cases shared with your institution yet.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="4">${emptyState('fa-building-columns', 'No cases yet', 'Cases your team shares with this institution will show up here.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = deals.map((d) => {
@@ -67,12 +68,12 @@ function fieldRow(label, value) {
 
 async function renderProfile(dealId) {
   const panel = document.getElementById('panelProfile');
-  panel.innerHTML = '<p class="empty-state">Loading student profile…</p>';
+  panel.innerHTML = emptyState('fa-spinner fa-spin', 'Loading student profile…');
   let profile;
   try {
     profile = await getLeadProfileForLender(dealId);
   } catch (err) {
-    panel.innerHTML = '<p class="empty-state">Could not load the student profile.</p>';
+    panel.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load the student profile', 'Try reopening this case, or check back in a moment.');
     return;
   }
   const lead = profile.lead || {};
@@ -469,12 +470,12 @@ async function showView(view) {
 
 async function renderDashboard() {
   const summary = await getDashboardSummary();
-  document.getElementById('dashStats').innerHTML = `
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;">${summary.totalDeals}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Total cases</div></div>
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;color:var(--danger);">${summary.needsAttention}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Need attention</div></div>
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;color:var(--success);">${summary.onTrack}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">On track</div></div>
-    <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;"><div class="amount" style="font-size:24px;font-weight:600;">${summary.closedWon}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">Closed won</div></div>
-  `;
+  document.getElementById('dashStats').innerHTML = [
+    [summary.totalDeals, 'Total cases', 'fa-building-columns', 'var(--accent)'],
+    [summary.needsAttention, 'Need attention', 'fa-triangle-exclamation', 'var(--danger)'],
+    [summary.onTrack, 'On track', 'fa-circle-check', 'var(--success)'],
+    [summary.closedWon, 'Closed won', 'fa-flag-checkered', 'var(--accent)'],
+  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">${label}</div></div>`).join('');
 
   const maxCount = Math.max(...Object.values(summary.stageCounts), 1);
   document.getElementById('dashStageBreakdown').innerHTML = Object.entries(summary.stageCounts).map(([name, count]) => `
@@ -482,14 +483,14 @@ async function renderDashboard() {
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(name)}</span><span class="amount">${count}</span></div>
       <div style="background:var(--bg-hover);border-radius:4px;height:8px;"><div style="background:var(--accent);width:${(count / maxCount) * 100}%;height:100%;border-radius:4px;"></div></div>
     </div>
-  `).join('') || '<p class="empty-state">No cases yet.</p>';
+  `).join('') || emptyState('fa-diagram-project', 'No cases yet', 'Stage breakdown will show up here once cases are shared with you.');
 
   const deals = await getMyBankDeals();
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const flagged = deals.filter((d) => d.is_on_hold || d.is_rejected);
   document.getElementById('dashAttentionList').innerHTML = flagged.length
     ? flagged.map((d) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.leads?.student_name || '–')}</span><span class="badge ${d.is_rejected ? 'badge-danger' : 'badge-warning'}">${d.is_rejected ? 'Rejected' : 'On hold'}</span></div>`).join('')
-    : '<p class="empty-state">Nothing needs attention right now.</p>';
+    : emptyState('fa-circle-check', 'Nothing needs attention', 'No cases are on hold or rejected right now.');
 }
 
 function initProfileForm() {
