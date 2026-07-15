@@ -184,7 +184,7 @@ async function bootstrap() {
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
-  document.querySelectorAll('.nav-item').forEach((el) => {
+  document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });
   });
 
