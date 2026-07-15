@@ -8,6 +8,7 @@ import {
   changeLeadStage,
   assignLeadToRm,
   logCall,
+  getHighestDealStage,
   CALL_STATUS_OPTIONS,
 } from '../services/leadService.js';
 import { initDealsTab } from './dealPanel.js';
@@ -33,14 +34,20 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
     if (e.target === overlay) close();
   });
 
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      tabs.forEach((t) => t.classList.remove('active'));
-      tab.classList.add('active');
-      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-      document.querySelector(`.tab-panel[data-panel="${tab.dataset.tab}"]`).classList.add('active');
-    });
-  });
+  function activateTab(name) {
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
+  }
+  tabs.forEach((tab) => tab.addEventListener('click', () => activateTab(tab.dataset.tab)));
+
+  function toggleCallForm() {
+    const form = document.getElementById('drawerCallForm');
+    const btn = document.getElementById('btnActionLogCall');
+    if (!form) return;
+    form.hidden = !form.hidden;
+    if (btn) btn.classList.toggle('active', !form.hidden);
+    if (!form.hidden) form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
 
   function close() {
     overlay.hidden = true;
@@ -56,20 +63,31 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
     document.getElementById('drawerStudentName').textContent = 'Loading…';
     document.getElementById('panelOverview').innerHTML = '<p class="empty-state">Loading…</p>';
 
+    const isExternalRole = currentUserRole === 'Consultant' || currentUserRole === 'Business Development';
+
     try {
-      const [{ lead, coApplicants }, extended, timeline, stages, rms] = await Promise.all([
+      const [{ lead, coApplicants }, extended, timeline, stages, rms, highestDealStage] = await Promise.all([
         getLeadDetail(leadId),
         getLeadExtendedDetail(leadId),
         getLeadTimeline(leadId),
         getLeadStages(),
         // Consultants/BD never see the RM-assignment control (RLS also blocks
         // the underlying write, this just avoids showing a dead-end control)
-        currentUserRole === 'Consultant' || currentUserRole === 'Business Development' ? [] : getAssignableRms(),
+        isExternalRole ? [] : getAssignableRms(),
+        // Effective status = furthest live deal stage (see getHighestDealStage).
+        // External roles can't read deals, so skip the call and fall back to
+        // the lead's own stage for them.
+        isExternalRole ? null : getHighestDealStage(leadId),
       ]);
 
-      renderHeader(lead);
+      // A lead in the pipeline is effectively at its furthest deal's stage.
+      const effectiveStatus = highestDealStage || lead.lead_stages?.name || '–';
+
+      renderHeader(lead, effectiveStatus);
       if (onOpen) onOpen(lead);
-      renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated);
+      renderActionBar(lead, { canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole), activateTab, toggleCallForm });
+      renderCallForm(lead, currentUser, showToast, onLeadUpdated);
+      renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToast, onLeadUpdated);
       renderTimeline(timeline);
 
       // Collateral & References only makes sense for a Collateral loan —
@@ -126,17 +144,17 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
   return { open, close };
 }
 
-function renderHeader(lead) {
+function renderHeader(lead, effectiveStatus) {
   document.getElementById('drawerStudentName').textContent = lead.student_name;
   document.getElementById('drawerSubtitle').textContent =
     [lead.course_name, lead.university_name].filter(Boolean).join(' · ') || 'No course details yet';
 
   // Pinned "at a glance" facts — visible above the tabs no matter which
-  // section is active, so you don't have to click into Overview to see
-  // the basics while working through Applicant/Academic/etc.
+  // section is active. Status reflects the furthest live deal stage when
+  // the lead is in the pipeline (see getHighestDealStage), else its own stage.
   const facts = [
     ['Phone', lead.student_phone],
-    ['Stage', lead.lead_stages?.name || '–'],
+    ['Status', effectiveStatus || lead.lead_stages?.name || '–'],
     ['Assigned RM', lead.assigned_rm?.full_name || 'Unassigned'],
     ['Loan type', lead.loan_type || '–'],
     ['Loan requested', formatCurrency(lead.loan_amount_requested, lead.currency)],
@@ -146,39 +164,42 @@ function renderHeader(lead) {
     .join('');
 }
 
-function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast, onLeadUpdated) {
-  const panel = document.getElementById('panelOverview');
-  const role = currentUser.role;
-  const canEdit = ['Admin', 'Manager', 'Relationship Manager'].includes(role);
+// Quick-action toolbar in the top panel: call the student, log a call,
+// jump to history/docs — all reachable without hunting through tabs.
+function renderActionBar(lead, { canEdit, activateTab, toggleCallForm }) {
+  const bar = document.getElementById('drawerActionBar');
+  const phone = (lead.student_phone || '').replace(/[^\d+]/g, '');
+  const buttons = [];
+  if (phone) {
+    buttons.push(`<a class="drawer-action-btn primary" href="tel:${escapeHtml(phone)}"><i class="fa-solid fa-phone"></i> Make a call</a>`);
+  }
+  if (canEdit) {
+    buttons.push('<button type="button" class="drawer-action-btn" id="btnActionLogCall"><i class="fa-solid fa-pen-to-square"></i> Log call</button>');
+  }
+  buttons.push('<button type="button" class="drawer-action-btn" data-goto="timeline"><i class="fa-solid fa-clock-rotate-left"></i> Lead history</button>');
+  buttons.push('<button type="button" class="drawer-action-btn" data-goto="documents"><i class="fa-solid fa-folder-open"></i> Documents</button>');
+  bar.innerHTML = buttons.join('');
 
-  const stageOptions = stages
-    .map((s) => `<option value="${s.id}" ${s.id === lead.current_stage_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
-    .join('');
+  const logBtn = document.getElementById('btnActionLogCall');
+  if (logBtn) logBtn.addEventListener('click', toggleCallForm);
+  bar.querySelectorAll('[data-goto]').forEach((btn) => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.goto));
+  });
+}
 
-  const rmOptions = rms
-    .map((u) => `<option value="${u.id}" ${u.id === lead.assigned_rm_id ? 'selected' : ''}>${escapeHtml(u.full_name)}</option>`)
-    .join('');
-
-  panel.innerHTML = `
-    <div class="detail-row"><span class="k">Phone</span><span class="v">${escapeHtml(lead.student_phone)}</span></div>
-    <div class="detail-row"><span class="k">Email</span><span class="v">${escapeHtml(lead.student_email || '–')}</span></div>
-    <div class="detail-row"><span class="k">Destination</span><span class="v">${escapeHtml(lead.destination_country || '–')}</span></div>
-    <div class="detail-row"><span class="k">Loan requested</span><span class="v">${formatCurrency(lead.loan_amount_requested, lead.currency)}</span></div>
-    <div class="detail-row"><span class="k">Source</span><span class="v">${escapeHtml(lead.lead_sources?.name || '–')}</span></div>
-    <div class="detail-row"><span class="k">Stage</span><span class="v">
-      ${canEdit
-        ? `<select class="stage-select-inline" id="drawerStageSelect">${stageOptions}</select>`
-        : escapeHtml(lead.lead_stages?.name || '–')}
-    </span></div>
-    <div class="detail-row"><span class="k">Assigned RM</span><span class="v">
-      ${canEdit && rms.length > 0
-        ? `<select class="stage-select-inline" id="drawerRmSelect"><option value="">Unassigned</option>${rmOptions}</select>`
-        : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}
-    </span></div>
-    <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${formatDateTime(lead.next_follow_up_at)}</span></div>
-
-    ${canEdit ? `
-    <h3 style="font-size:14px;font-weight:500;margin:20px 0 8px;">Log a call</h3>
+// The log-call form lives in the top panel now (toggled by the "Log call"
+// action), not buried in the Overview tab. Rendered only for roles that
+// can act on a lead; hidden until the user opts to log a call.
+function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
+  const container = document.getElementById('drawerCallForm');
+  if (!['Admin', 'Manager', 'Relationship Manager'].includes(currentUser.role)) {
+    container.innerHTML = '';
+    container.hidden = true;
+    return;
+  }
+  container.hidden = true;
+  container.innerHTML = `
+    <h3>Log a call</h3>
     <div class="form-grid">
       <div class="form-field">
         <label>Call status</label>
@@ -201,22 +222,95 @@ function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast,
     </div>
     <span class="field-error" id="callTaskError" style="display:block;margin-top:4px;"></span>
     <button class="btn btn-primary" id="btnLogCall" style="width:100%;justify-content:center;margin-top:10px;">Log call</button>
-    ` : ''}
+  `;
 
-    <h3 style="font-size:14px;font-weight:500;margin:20px 0 8px;">Co-applicants</h3>
-    ${
-      coApplicants.length === 0
-        ? '<p class="empty-state" style="padding:12px 0;">No co-applicant added yet.</p>'
-        : coApplicants
-            .map(
-              (c) => `
-        <div class="lender-app-card">
-          <div class="lender-name">${escapeHtml(c.full_name)} <span style="color:var(--ink-500);font-weight:400;">(${escapeHtml(c.relationship_to_student)})</span></div>
-          <div class="detail-row"><span class="k">Income</span><span class="v">${formatCurrency(c.annual_income)}</span></div>
-        </div>`
-            )
-            .join('')
+  const callStatusSelect = document.getElementById('callStatusSelect');
+  const taskFields = document.getElementById('callTaskFields');
+  const taskError = document.getElementById('callTaskError');
+  const syncTaskRequirement = () => {
+    const notInterested = callStatusSelect.value === 'Not Interested';
+    taskFields.style.opacity = notInterested ? '0.5' : '1';
+    taskFields.querySelectorAll('input').forEach((el) => { el.disabled = notInterested; });
+    taskError.textContent = '';
+  };
+  callStatusSelect.addEventListener('change', syncTaskRequirement);
+  syncTaskRequirement();
+
+  document.getElementById('btnLogCall').addEventListener('click', async () => {
+    const callStatus = callStatusSelect.value;
+    const notes = document.getElementById('callNotes').value;
+    const taskTitle = document.getElementById('callTaskTitle').value.trim();
+    const taskDueDate = document.getElementById('callTaskDueDate').value;
+
+    if (callStatus !== 'Not Interested' && (!taskTitle || !taskDueDate)) {
+      taskError.textContent = 'A follow-up task (title + due date) is required for this call outcome.';
+      return;
     }
+
+    const btn = document.getElementById('btnLogCall');
+    btn.disabled = true;
+    btn.textContent = 'Logging…';
+    try {
+      await logCall(
+        lead.id,
+        { callStatus, notes, taskTitle: callStatus === 'Not Interested' ? null : taskTitle, taskDueDate: callStatus === 'Not Interested' ? null : taskDueDate },
+        currentUser.id
+      );
+      showToast('Call logged.');
+      onLeadUpdated();
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || 'Could not log this call.', true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Log call';
+    }
+  });
+}
+
+const INTAKE_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function formatIntake(lead) {
+  const m = lead.intake_month;
+  const y = lead.intake_year;
+  if (m && y) return `${INTAKE_MONTHS[m - 1]} ${y}`;
+  if (y) return String(y);
+  if (m) return INTAKE_MONTHS[m - 1];
+  return '–';
+}
+
+// Overview = the lead's basics at a glance. Co-applicant, academic, and
+// deal detail each live in their own tab; this tab stays a clean summary.
+function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToast, onLeadUpdated) {
+  const panel = document.getElementById('panelOverview');
+  const canEdit = ['Admin', 'Manager', 'Relationship Manager'].includes(currentUser.role);
+
+  const stageOptions = stages
+    .map((s) => `<option value="${s.id}" ${s.id === lead.current_stage_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
+    .join('');
+  const rmOptions = rms
+    .map((u) => `<option value="${u.id}" ${u.id === lead.assigned_rm_id ? 'selected' : ''}>${escapeHtml(u.full_name)}</option>`)
+    .join('');
+
+  const basics = [
+    ['Contact number', lead.student_phone || '–'],
+    ['Email', lead.student_email || '–'],
+    ['Intake', formatIntake(lead)],
+    ['College / University', lead.university_name || '–'],
+    ['Course', lead.course_name || '–'],
+    ['Loan amount', formatCurrency(lead.loan_amount_requested, lead.currency)],
+    ['Lead status', effectiveStatus || lead.lead_stages?.name || '–'],
+  ];
+
+  panel.innerHTML = `
+    <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;">Lead basics</h3>
+    ${basics.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join('')}
+
+    ${canEdit ? `
+    <h3 style="font-size:14px;font-weight:600;margin:22px 0 10px;">Manage</h3>
+    <div class="detail-row"><span class="k">Pipeline stage</span><span class="v"><select class="stage-select-inline" id="drawerStageSelect">${stageOptions}</select></span></div>
+    <div class="detail-row"><span class="k">Assigned RM</span><span class="v">${rms.length > 0 ? `<select class="stage-select-inline" id="drawerRmSelect"><option value="">Unassigned</option>${rmOptions}</select>` : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}</span></div>
+    <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${escapeHtml(formatDateTime(lead.next_follow_up_at))}</span></div>
+    ` : ''}
   `;
 
   const stageSelect = document.getElementById('drawerStageSelect');
@@ -247,51 +341,6 @@ function renderOverview(lead, coApplicants, stages, rms, currentUser, showToast,
         console.error(err);
         showToast('Could not reassign this lead.', true);
         e.target.value = lead.assigned_rm_id || '';
-      }
-    });
-  }
-
-  const callStatusSelect = document.getElementById('callStatusSelect');
-  if (callStatusSelect) {
-    const taskFields = document.getElementById('callTaskFields');
-    const taskError = document.getElementById('callTaskError');
-    const syncTaskRequirement = () => {
-      const notInterested = callStatusSelect.value === 'Not Interested';
-      taskFields.style.opacity = notInterested ? '0.5' : '1';
-      taskFields.querySelectorAll('input').forEach((el) => { el.disabled = notInterested; });
-      taskError.textContent = '';
-    };
-    callStatusSelect.addEventListener('change', syncTaskRequirement);
-    syncTaskRequirement();
-
-    document.getElementById('btnLogCall').addEventListener('click', async () => {
-      const callStatus = callStatusSelect.value;
-      const notes = document.getElementById('callNotes').value;
-      const taskTitle = document.getElementById('callTaskTitle').value.trim();
-      const taskDueDate = document.getElementById('callTaskDueDate').value;
-
-      if (callStatus !== 'Not Interested' && (!taskTitle || !taskDueDate)) {
-        taskError.textContent = 'A follow-up task (title + due date) is required for this call outcome.';
-        return;
-      }
-
-      const btn = document.getElementById('btnLogCall');
-      btn.disabled = true;
-      btn.textContent = 'Logging…';
-      try {
-        await logCall(
-          lead.id,
-          { callStatus, notes, taskTitle: callStatus === 'Not Interested' ? null : taskTitle, taskDueDate: callStatus === 'Not Interested' ? null : taskDueDate },
-          currentUser.id
-        );
-        showToast('Call logged.');
-        onLeadUpdated();
-      } catch (err) {
-        console.error(err);
-        showToast(err.message || 'Could not log this call.', true);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Log call';
       }
     });
   }

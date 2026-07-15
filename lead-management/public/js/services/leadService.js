@@ -267,3 +267,27 @@ export async function assignLeadToRm(leadId, newRmId, reason) {
   });
   if (error) throw error;
 }
+
+/**
+ * A lead's effective status once it's in the lender pipeline is the
+ * furthest-along stage of any of its live deals — a deal at "Sanction"
+ * means the lead is effectively Sanctioned, regardless of the lead's own
+ * pipeline stage. Returns the highest deal-stage name among non-rejected
+ * deals, or null when the lead has no live deals (caller falls back to
+ * the lead's own stage). Rejected deals don't count as progress.
+ *
+ * For Consultant/BD, RLS returns zero deal rows, so this yields null and
+ * they see the lead's own stage — exactly what we want.
+ */
+export async function getHighestDealStage(leadId) {
+  const { data, error } = await supabase
+    .from('deals')
+    .select('current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name, sequence_order )')
+    .eq('lead_id', leadId)
+    .eq('is_deleted', false)
+    .eq('is_rejected', false);
+  if (error) throw error;
+  const stages = (data || []).map((d) => d.current_deal_stage).filter(Boolean);
+  if (stages.length === 0) return null;
+  return stages.sort((a, b) => b.sequence_order - a.sequence_order)[0].name;
+}
