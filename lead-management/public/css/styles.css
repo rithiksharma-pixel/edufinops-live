@@ -339,7 +339,8 @@ button, input, select { font-family: inherit; font-size: inherit; }
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
-.drawer-callform h3 { font-size: 13px; font-weight: 600; margin: 0 0 12px; }
+.drawer-callform h3 { font-size: 13px; font-weight: 600; margin: 0; }
+.callform-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 
 .drawer-content { flex: 1; display: flex; min-height: 0; }
 

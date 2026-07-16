@@ -43,11 +43,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
 
   function toggleCallForm() {
     const form = document.getElementById('drawerCallForm');
-    const btn = document.getElementById('btnActionLogCall');
-    if (!form) return;
-    form.hidden = !form.hidden;
-    if (btn) btn.classList.toggle('active', !form.hidden);
-    if (!form.hidden) form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (form) setCallFormOpen(form.hidden);
   }
 
   function close() {
@@ -191,6 +187,20 @@ function renderActionBar(lead, { canEdit, activateTab, toggleCallForm }) {
 // The log-call form lives in the top panel now (toggled by the "Log call"
 // action), not buried in the Overview tab. Rendered only for roles that
 // can act on a lead; hidden until the user opts to log a call.
+/**
+ * Open/close the log-call panel, keeping the "Log call" action button's
+ * highlighted state in sync. Shared by the toolbar toggle, the panel's
+ * own ✕, and the auto-close after a call is saved.
+ */
+function setCallFormOpen(open) {
+  const form = document.getElementById('drawerCallForm');
+  const btn = document.getElementById('btnActionLogCall');
+  if (!form) return;
+  form.hidden = !open;
+  if (btn) btn.classList.toggle('active', open);
+  if (open) form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
   const container = document.getElementById('drawerCallForm');
   if (!['Admin', 'Manager', 'Relationship Manager'].includes(currentUser.role)) {
@@ -200,7 +210,10 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
   }
   container.hidden = true;
   container.innerHTML = `
-    <h3>Log a call</h3>
+    <div class="callform-head">
+      <h3>Log a call</h3>
+      <button type="button" class="icon-btn" id="btnCloseCallForm" aria-label="Close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
     <div class="form-grid">
       <div class="form-field">
         <label>Call status</label>
@@ -224,6 +237,8 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
     <span class="field-error" id="callTaskError" style="display:block;margin-top:4px;"></span>
     <button class="btn btn-primary" id="btnLogCall" style="width:100%;justify-content:center;margin-top:10px;">Log call</button>
   `;
+
+  document.getElementById('btnCloseCallForm').addEventListener('click', () => setCallFormOpen(false));
 
   const callStatusSelect = document.getElementById('callStatusSelect');
   const taskFields = document.getElementById('callTaskFields');
@@ -258,6 +273,13 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
         currentUser.id
       );
       showToast('Call logged.');
+      // Done — clear the form for the next call and close the panel, so
+      // saving is the end of the interaction rather than leaving an open
+      // panel that needs a second toggle click to dismiss.
+      document.getElementById('callNotes').value = '';
+      document.getElementById('callTaskTitle').value = '';
+      document.getElementById('callTaskDueDate').value = '';
+      setCallFormOpen(false);
       onLeadUpdated();
     } catch (err) {
       console.error(err);
