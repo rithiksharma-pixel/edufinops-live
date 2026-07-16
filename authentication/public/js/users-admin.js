@@ -1,5 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
-import { escapeHtml } from '../../../shared/js/utils.js';
+import { escapeHtml, EMAIL_REGEX } from '../../../shared/js/utils.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
@@ -272,6 +272,111 @@ function initInviteModal() {
   });
 }
 
+// ---------- Bulk invite ----------
+// One role for the whole batch; individual roles/teams get adjusted
+// afterwards from the Active team roster (which already has inline
+// role/manager/team editing). Lender is deliberately excluded — a Lender
+// invite needs an institution + branch picked, so it stays one at a time.
+
+/** `Name, email, phone (optional)` per line → {name,email,phone} or {error}. */
+function parseBulkInviteLine(line) {
+  const parts = line.split(',').map((p) => p.trim());
+  if (parts.length < 2) return { error: 'needs at least "Name, email"' };
+  const [name, email, phone = ''] = parts;
+  if (!name) return { error: 'missing a name' };
+  if (!EMAIL_REGEX.test(email)) return { error: `"${email}" is not a valid email` };
+  return { name, email: email.toLowerCase(), phone };
+}
+
+function initBulkInviteModal() {
+  const overlay = document.getElementById('bulkInviteModalOverlay');
+  const roleSelect = document.getElementById('bulkInviteRoleSelect');
+  const textEl = document.getElementById('bulkInviteText');
+  const resultEl = document.getElementById('bulkInviteResult');
+  const submitBtn = document.getElementById('btnSubmitBulkInvite');
+
+  // Same role scoping as the single-invite modal, minus Lender.
+  const isAdmin = currentUserProfile?.role === 'Admin';
+  const allowedRoleNames = INVITABLE_ROLES_BY_INVITER[currentUserProfile?.role] ?? [];
+  const bulkRoles = (isAdmin ? roles : roles.filter((r) => allowedRoleNames.includes(r.name)))
+    .filter((r) => r.name !== 'Lender');
+  roleSelect.innerHTML = bulkRoles.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+
+  document.getElementById('bulkInviteFile').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (file) textEl.value = await file.text();
+  });
+
+  const close = () => { overlay.hidden = true; };
+  document.getElementById('btnBulkInvite').addEventListener('click', () => {
+    resultEl.hidden = true;
+    resultEl.textContent = '';
+    overlay.hidden = false;
+  });
+  document.getElementById('btnCloseBulkInviteModal').addEventListener('click', close);
+  document.getElementById('btnCancelBulkInvite').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  submitBtn.addEventListener('click', async () => {
+    const lines = textEl.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      resultEl.hidden = false;
+      resultEl.classList.add('bulk-error');
+      resultEl.textContent = 'Nothing to send — paste some lines first.';
+      return;
+    }
+
+    const seen = new Set();
+    const outcomes = [];
+    const toInvite = [];
+    for (const line of lines) {
+      const parsed = parseBulkInviteLine(line);
+      if (parsed.error) { outcomes.push(`✗ ${line} — ${parsed.error}`); continue; }
+      if (seen.has(parsed.email)) { outcomes.push(`✗ ${parsed.email} — repeated in this list`); continue; }
+      seen.add(parsed.email);
+      toInvite.push(parsed);
+    }
+
+    submitBtn.disabled = true;
+    resultEl.hidden = false;
+    resultEl.classList.remove('bulk-error');
+    let sent = 0;
+
+    // Sequential on purpose: each invite is an RPC plus an email send, and
+    // a per-row failure (say, a pending invite already exists) should name
+    // the row it belongs to rather than surfacing as a tangle of rejections.
+    for (const [i, person] of toInvite.entries()) {
+      resultEl.textContent = `Inviting ${i + 1} of ${toInvite.length} — ${person.email}…\n` + outcomes.join('\n');
+      try {
+        await inviteUser({
+          email: person.email,
+          fullName: person.name,
+          phone: person.phone || null,
+          roleId: roleSelect.value,
+          reportingManagerId: null,
+          lenderOrganizationId: null,
+          lenderBranchId: null,
+          teamId: null,
+        });
+        sent++;
+        outcomes.push(`✓ ${person.name} <${person.email}> — invited`);
+      } catch (err) {
+        outcomes.push(`✗ ${person.email} — ${err.message || 'failed'}`);
+      }
+    }
+
+    submitBtn.disabled = false;
+    const failed = outcomes.length - sent;
+    resultEl.classList.toggle('bulk-error', failed > 0);
+    resultEl.textContent = `Done: ${sent} invited${failed ? `, ${failed} skipped/failed` : ''}.\n` + outcomes.join('\n');
+    if (sent > 0) {
+      textEl.value = '';
+      showToast(`${sent} invitation${sent === 1 ? '' : 's'} sent.`);
+      if (currentUserProfile.role === 'Admin') await loadInvitations();
+    }
+  });
+}
+
 const INVITE_CAPABLE_ROLES = ['Admin', 'Manager', 'Associate Team Manager'];
 
 async function bootstrap() {
@@ -304,6 +409,7 @@ async function bootstrap() {
   lenders = isAdmin ? await getLenders() : [];
   teams = await getTeams();
   initInviteModal();
+  initBulkInviteModal();
   if (isAdmin) {
     await Promise.all([loadUsers(), loadInvitations()]);
   }

@@ -33,7 +33,8 @@
 .modal { width: min(480px, 92vw); max-height: none; overflow-y: visible; }
 .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--ink-700); }
-.form-field input, .form-field select { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); }
+.form-field input, .form-field select, .form-field textarea { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); font-family: inherit; font-size: inherit; }
+.form-field textarea { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; resize: vertical; }
 .modal-footer { padding-top: 12px; margin-top: 6px; }
 
 @media (max-width: 720px) {
