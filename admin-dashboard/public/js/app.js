@@ -6,6 +6,8 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
 import { CALL_STATUS_OPTIONS } from '../../../lead-management/public/js/services/leadService.js';
+import { createTrendsService } from '../../../shared/js/trendsService.js';
+import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => { const node = document.createElement('span'); node.textContent = value ?? ''; return node.innerHTML; };
@@ -59,7 +61,68 @@ async function loadOverview() {
 }
 
 async function loadDocuments() { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if ($('documentStatus').value) request = request.eq('verification_status', $('documentStatus').value); const { data, error } = await request; if (error) throw error; $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
+// ---------- Stage movement trends (lead + bank-wise deal) ----------
+const trends = createTrendsService(supabase);
+const trendState = { lead: 'day', deal: 'day', lenderId: '', wired: false, lendersLoaded: false };
+const DELTA_LABELS = { day: 'DoD', week: 'WoW', month: 'MoM' };
+
+async function renderLeadTrends() {
+  $('leadTrendPills').innerHTML = renderGranularityPills(trendState.lead);
+  try {
+    const { buckets, rows } = await trends.getLeadStageTrends(trendState.lead);
+    $('leadTrendMatrix').innerHTML = renderTrendMatrix({ buckets, rows, deltaLabel: DELTA_LABELS[trendState.lead] });
+  } catch (error) {
+    console.error(error);
+    $('leadTrendMatrix').innerHTML = emptyState('fa-triangle-exclamation', 'Could not load lead trends', 'Try refreshing the page.');
+  }
+}
+
+async function renderDealTrends() {
+  $('dealTrendPills').innerHTML = renderGranularityPills(trendState.deal);
+  try {
+    const { buckets, rows } = await trends.getDealStageTrends(trendState.deal, trendState.lenderId || null);
+    $('dealTrendMatrix').innerHTML = renderTrendMatrix({ buckets, rows, deltaLabel: DELTA_LABELS[trendState.deal] });
+  } catch (error) {
+    console.error(error);
+    $('dealTrendMatrix').innerHTML = emptyState('fa-triangle-exclamation', 'Could not load deal trends', 'Try refreshing the page.');
+  }
+}
+
+// Listeners are attached once; loadReports() can re-run on every visit to
+// the Reports view without stacking duplicate handlers.
+function initTrendControls() {
+  if (trendState.wired) return;
+  trendState.wired = true;
+  $('leadTrendPills').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-granularity]');
+    if (!button || button.dataset.granularity === trendState.lead) return;
+    trendState.lead = button.dataset.granularity;
+    renderLeadTrends();
+  });
+  $('dealTrendPills').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-granularity]');
+    if (!button || button.dataset.granularity === trendState.deal) return;
+    trendState.deal = button.dataset.granularity;
+    renderDealTrends();
+  });
+  $('dealTrendLender').addEventListener('change', (event) => {
+    trendState.lenderId = event.target.value;
+    renderDealTrends();
+  });
+}
+
+async function populateTrendLenders() {
+  if (trendState.lendersLoaded) return;
+  trendState.lendersLoaded = true;
+  const lenders = await trends.getTrendLenders();
+  $('dealTrendLender').insertAdjacentHTML('beforeend', lenders.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join(''));
+}
+
 async function loadReports() {
+  initTrendControls();
+  await populateTrendLenders();
+  await Promise.all([renderLeadTrends(), renderDealTrends()]);
+
   const [leads, deals] = await Promise.all([records('leads', 'id'), records('deals', 'id,is_on_hold,total_disbursed_amount')]);
   const total = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
   $('reportSnapshot').innerHTML = [[leads.length, 'Total leads'], [deals.length, 'Total deals'], [deals.filter((deal) => deal.is_on_hold).length, 'Deals on hold'], [inr(total), 'Disbursed']].map(([value, label]) => `<div class="stat-card"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');

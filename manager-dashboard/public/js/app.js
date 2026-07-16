@@ -5,6 +5,9 @@ import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
+import { createTrendsService } from '../../../shared/js/trendsService.js';
+import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
+import { supabase } from './config/supabaseClient.js';
 // Cross-app imports: app folders are top-level siblings (not nested), so
 // this reaches lead-management's own service layer three levels up. These
 // are the SAME functions Lead Management's own UI calls — assignLeadToRm
@@ -214,6 +217,66 @@ async function renderTatAnalysis() {
     : '<p class="empty-state">No stage transitions recorded yet.</p>';
 }
 
+// ---------- Stage movement trends (lead + bank-wise deal) ----------
+const trends = createTrendsService(supabase);
+const trendState = { lead: 'day', deal: 'day', lenderId: '' };
+const DELTA_LABELS = { day: 'DoD', week: 'WoW', month: 'MoM' };
+
+async function renderLeadTrends() {
+  const host = document.getElementById('leadTrendMatrix');
+  document.getElementById('leadTrendPills').innerHTML = renderGranularityPills(trendState.lead);
+  try {
+    const { buckets, rows } = await trends.getLeadStageTrends(trendState.lead);
+    host.innerHTML = renderTrendMatrix({ buckets, rows, deltaLabel: DELTA_LABELS[trendState.lead] });
+  } catch (err) {
+    console.error(err);
+    host.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load lead trends', 'Try refreshing the page.');
+  }
+}
+
+async function renderDealTrends() {
+  const host = document.getElementById('dealTrendMatrix');
+  document.getElementById('dealTrendPills').innerHTML = renderGranularityPills(trendState.deal);
+  try {
+    const { buckets, rows } = await trends.getDealStageTrends(trendState.deal, trendState.lenderId || null);
+    host.innerHTML = renderTrendMatrix({ buckets, rows, deltaLabel: DELTA_LABELS[trendState.deal] });
+  } catch (err) {
+    console.error(err);
+    host.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load deal trends', 'Try refreshing the page.');
+  }
+}
+
+function initTrendControls() {
+  document.getElementById('leadTrendPills').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-granularity]');
+    if (!btn || btn.dataset.granularity === trendState.lead) return;
+    trendState.lead = btn.dataset.granularity;
+    renderLeadTrends();
+  });
+  document.getElementById('dealTrendPills').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-granularity]');
+    if (!btn || btn.dataset.granularity === trendState.deal) return;
+    trendState.deal = btn.dataset.granularity;
+    renderDealTrends();
+  });
+  document.getElementById('dealTrendLender').addEventListener('change', (e) => {
+    trendState.lenderId = e.target.value;
+    renderDealTrends();
+  });
+}
+
+async function populateTrendLenders() {
+  try {
+    const lenders = await trends.getTrendLenders();
+    document.getElementById('dealTrendLender').insertAdjacentHTML(
+      'beforeend',
+      lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('')
+    );
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function bootstrap() {
   let user;
   try {
@@ -226,7 +289,10 @@ async function bootstrap() {
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   mountTopbar({ app: 'manager-dashboard', user });
 
-  await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis()]);
+  initTrendControls();
+  await populateTrendLenders();
+
+  await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 
 bootstrap();

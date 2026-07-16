@@ -57,6 +57,25 @@
         <canvas id="funnelChart" height="90"></canvas>
       </section>
 
+      <section class="chart-card" style="margin-top:22px;">
+        <h3>Lead stage movement</h3>
+        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">How many leads reached each stage per period — throughput, not the current snapshot.</p>
+        <div class="trend-toolbar">
+          <div class="period-toggle" id="leadTrendPills"></div>
+        </div>
+        <div id="leadTrendMatrix"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
+      </section>
+
+      <section class="chart-card" style="margin-top:22px;">
+        <h3>Deal stage movement — bank wise</h3>
+        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">Deals reaching each lender stage per period. Filter to a single bank to see just their pipeline.</p>
+        <div class="trend-toolbar">
+          <div class="period-toggle" id="dealTrendPills"></div>
+          <select class="trend-select" id="dealTrendLender"><option value="">All banks</option></select>
+        </div>
+        <div id="dealTrendMatrix"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
+      </section>
+
       <section class="table-card">
         <h3 class="section-title" style="padding:16px 20px 0;font-size:14px;font-weight:500;">RM performance</h3>
         <table class="data-table">

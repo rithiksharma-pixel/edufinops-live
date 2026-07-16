@@ -97,3 +97,48 @@
 }
 .spinner-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 20px; color: var(--ink-500); font-size: 13px; }
 @keyframes zt-spin { to { transform: rotate(360deg); } }
+
+/* =========================================================
+   TREND MATRIX — stage rows × time buckets (see shared/js/trendsView.js)
+   ========================================================= */
+.trend-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 14px; }
+.period-toggle { display: inline-flex; gap: 4px; background: var(--bg-hover); border-radius: var(--radius-sm); padding: 3px; }
+.pill-btn {
+  background: none; border: none; cursor: pointer; padding: 6px 13px;
+  font-family: inherit; font-size: 13px; font-weight: 500; color: var(--ink-500);
+  border-radius: 5px;
+}
+.pill-btn:hover { color: var(--ink-700); }
+.pill-btn.active { background: var(--bg-surface); color: var(--ink-900); box-shadow: 0 1px 3px rgba(21,24,29,0.08); }
+.trend-select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); font-family: inherit; font-size: 13px; color: var(--ink-700);
+}
+
+/* Wide matrices scroll inside their own container rather than pushing
+   the page sideways. */
+.trend-scroll { overflow-x: auto; }
+.trend-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.trend-table th, .trend-table td {
+  padding: 9px 12px; text-align: right; font-size: 13px;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.trend-table th {
+  font-size: 11px; font-weight: 600; color: var(--ink-500);
+  text-transform: uppercase; letter-spacing: 0.03em; background: var(--paper-sunken);
+}
+.trend-table td { font-family: 'IBM Plex Mono', monospace; color: var(--ink-900); }
+.trend-rowhead {
+  text-align: left !important; font-family: inherit !important;
+  font-weight: 500; color: var(--ink-700) !important; position: sticky; left: 0;
+  background: var(--bg-surface);
+}
+.trend-table th.trend-rowhead { background: var(--paper-sunken); }
+.trend-zero { color: var(--ink-300) !important; }
+.trend-total { font-weight: 600; background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.trend-delta { min-width: 62px; }
+.trend-up { color: var(--success); font-weight: 600; }
+.trend-down { color: var(--danger); font-weight: 600; }
+.trend-flat { color: var(--ink-300); }
+.trend-foot td { border-top: 2px solid var(--border); font-weight: 700; border-bottom: none; }
+.trend-foot .trend-rowhead { font-weight: 700; }
