@@ -234,6 +234,124 @@ function renderTeamPerformance() {
 }
 
 async function loadNotifications() { const { data, error } = await supabase.from('announcements').select('title,body,audience_role,created_at,users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }); if (error) throw error; $('notificationList').innerHTML = data.length ? data.map((item) => `<div class="notification-row"><strong>${esc(item.title)}</strong> <span class="badge">${esc(item.audience_role)}</span><div>${esc(item.body)}</div><div class="muted">${esc(item.users?.full_name || 'Admin')} · ${new Date(item.created_at).toLocaleString('en-IN')}</div></div>`).join('') : emptyState('fa-bullhorn', 'No announcements yet', 'Publish one above and it\'ll appear here for everyone to see next time they sign in.'); }
+// ---------- Bulk add (reference data) ----------
+// Deliberately not offered for Document types: those carry an applies_to +
+// is_required + ordering that wants deciding one at a time, not pasted.
+
+/** Non-empty trimmed lines, in order. */
+function parseBulkLines(text) {
+  return (text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
+function showBulkResult(id, message, isError = false) {
+  const el = $(id);
+  el.hidden = false;
+  el.textContent = message;
+  el.classList.toggle('bulk-error', isError);
+}
+
+/** Reads a picked .csv/.txt into the matching textarea. */
+function wireBulkFile(fileId, textId) {
+  $(fileId).addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    $(textId).value = await file.text();
+  });
+}
+
+/**
+ * Bulk insert for a name-only table (consultancies, teams). Existing names
+ * are filtered out client-side rather than relying on ON CONFLICT, so the
+ * user gets an accurate "skipped" count and no RLS RETURNING surprises.
+ */
+async function bulkAddNames({ table, textId, resultId, label, plural }) {
+  const names = parseBulkLines($(textId).value);
+  if (names.length === 0) return showBulkResult(resultId, 'Nothing to add — paste some lines first.', true);
+
+  const { data: existing, error: readError } = await supabase.from(table).select('name').eq('is_deleted', false);
+  if (readError) return showBulkResult(resultId, readError.message, true);
+
+  const seen = new Set((existing || []).map((r) => r.name.toLowerCase()));
+  const toAdd = [];
+  let skipped = 0;
+  for (const name of names) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) { skipped++; continue; } // already in the table, or a repeat within this paste
+    seen.add(key);
+    toAdd.push(name);
+  }
+  if (toAdd.length === 0) return showBulkResult(resultId, `Nothing new — all ${skipped} already exist.`, true);
+
+  const { data: auth } = await supabase.auth.getUser();
+  const rows = toAdd.map((name) => ({ name, created_by: auth.user.id, updated_by: auth.user.id }));
+  const { error } = await supabase.from(table).insert(rows);
+  if (error) return showBulkResult(resultId, error.message, true);
+
+  $(textId).value = '';
+  const noun = toAdd.length === 1 ? label : plural;
+  showBulkResult(resultId, `Added ${toAdd.length} ${noun}${skipped ? `, skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`);
+  showToast(`Added ${toAdd.length} ${noun}.`);
+  loadSettings();
+}
+
+/** Bulk insert branches from "Bank, Branch" lines. */
+async function bulkAddBranches() {
+  const lines = parseBulkLines($('branchBulkText').value);
+  if (lines.length === 0) return showBulkResult('branchBulkResult', 'Nothing to add — paste some lines first.', true);
+
+  const [lendersRes, branchesRes] = await Promise.all([
+    supabase.from('lenders').select('id,name').eq('is_deleted', false),
+    supabase.from('lender_branches').select('lender_id,name').eq('is_deleted', false),
+  ]);
+  if (lendersRes.error) return showBulkResult('branchBulkResult', lendersRes.error.message, true);
+  if (branchesRes.error) return showBulkResult('branchBulkResult', branchesRes.error.message, true);
+
+  const lenderByName = new Map(lendersRes.data.map((l) => [l.name.toLowerCase(), l.id]));
+  const seen = new Set((branchesRes.data || []).map((b) => `${b.lender_id}|${b.name.toLowerCase()}`));
+
+  const rows = [];
+  const unmatched = [];
+  let skipped = 0;
+  for (const line of lines) {
+    const idx = line.indexOf(',');
+    if (idx === -1) { unmatched.push(line); continue; }
+    const bank = line.slice(0, idx).trim();
+    const branch = line.slice(idx + 1).trim();
+    if (!bank || !branch) { unmatched.push(line); continue; }
+    const lenderId = lenderByName.get(bank.toLowerCase());
+    if (!lenderId) { unmatched.push(line); continue; }
+    const key = `${lenderId}|${branch.toLowerCase()}`;
+    if (seen.has(key)) { skipped++; continue; }
+    seen.add(key);
+    rows.push({ lender_id: lenderId, name: branch });
+  }
+
+  if (rows.length === 0) {
+    return showBulkResult('branchBulkResult', `Nothing added. ${skipped} duplicate(s), ${unmatched.length} unusable line(s)${unmatched.length ? `: ${unmatched.slice(0, 3).join(' | ')}` : ''}`, true);
+  }
+
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from('lender_branches').insert(rows.map((r) => ({ ...r, created_by: auth.user.id, updated_by: auth.user.id })));
+  if (error) return showBulkResult('branchBulkResult', error.message, true);
+
+  $('branchBulkText').value = '';
+  const bits = [`Added ${rows.length} branch${rows.length === 1 ? '' : 'es'}`];
+  if (skipped) bits.push(`skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
+  if (unmatched.length) bits.push(`${unmatched.length} line(s) had an unknown bank or bad format: ${unmatched.slice(0, 3).join(' | ')}`);
+  showBulkResult('branchBulkResult', `${bits.join(', ')}.`, unmatched.length > 0);
+  showToast(`Added ${rows.length} branch${rows.length === 1 ? '' : 'es'}.`);
+  loadSettings();
+}
+
+function initBulkAdd() {
+  wireBulkFile('branchBulkFile', 'branchBulkText');
+  wireBulkFile('consultancyBulkFile', 'consultancyBulkText');
+  wireBulkFile('teamBulkFile', 'teamBulkText');
+  $('branchBulkBtn').addEventListener('click', () => bulkAddBranches().catch((e) => showBulkResult('branchBulkResult', e.message, true)));
+  $('consultancyBulkBtn').addEventListener('click', () => bulkAddNames({ table: 'consultancies', textId: 'consultancyBulkText', resultId: 'consultancyBulkResult', label: 'consultancy', plural: 'consultancies' }).catch((e) => showBulkResult('consultancyBulkResult', e.message, true)));
+  $('teamBulkBtn').addEventListener('click', () => bulkAddNames({ table: 'teams', textId: 'teamBulkText', resultId: 'teamBulkResult', label: 'team', plural: 'teams' }).catch((e) => showBulkResult('teamBulkResult', e.message, true)));
+}
+
 async function loadSettings() {
   const { data, error } = await supabase.from('document_types').select('name,applies_to,is_required').eq('is_deleted', false).order('sequence_order');
   if (error) throw error;
@@ -262,4 +380,5 @@ $('documentTypeForm').addEventListener('submit', async (event) => { event.preven
 $('lenderBranchForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('lender_branches').insert({ lender_id: form.get('lender_id'), name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Branch added.'); loadSettings(); });
 $('consultancyForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('consultancies').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Consultancy added.'); loadSettings(); });
 $('teamForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('teams').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Team added.'); loadSettings(); });
+initBulkAdd();
 requireAdmin().then(loadActive).catch((error) => { document.body.innerHTML = `<main style="padding:48px;font-family:Inter,sans-serif"><h1>Access unavailable</h1><p>${esc(error.message)}</p><a href="../../authentication/public/login.html">Go to sign in</a></main>`; });
