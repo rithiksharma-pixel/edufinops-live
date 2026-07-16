@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/pipeline.css" />
 </head>
 <body>
@@ -29,8 +30,8 @@
       <div id="ztTopbar" class="zt-topbar"></div>
       <div id="dashboardPanel">
         <header class="main-header"><div><h1>Dashboard</h1><p class="subtitle">Your institution's pipeline at a glance.</p></div></header>
-        <section class="stat-cards" id="dashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <section class="stat-cards" id="dashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+        <div class="grid-two">
           <section class="table-card" style="padding:18px;">
             <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">By stage</h3>
             <div id="dashStageBreakdown"></div>
@@ -48,7 +49,7 @@
         <section class="table-card">
           <table class="data-table">
             <thead><tr><th>Student</th><th>Requested amount</th><th>Stage</th><th>Status</th></tr></thead>
-            <tbody id="dealsBody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+            <tbody id="dealsBody"><tr><td colspan="4"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
           </table>
         </section>
       </div>

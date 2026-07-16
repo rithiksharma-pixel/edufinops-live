@@ -1,5 +1,8 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
+import { showToast } from '../../../shared/js/toast.js';
+import { emptyState } from '../../../shared/js/emptyState.js';
 import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 // Cross-app imports: app folders are top-level siblings (not nested), so
@@ -13,17 +16,10 @@ import { getAssignableRms } from '../../../lead-management/public/js/services/lo
 
 const UNASSIGNED_WARNING_MS = 48 * 60 * 60 * 1000; // 48h — flagged with a warning badge
 
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str ?? '';
-  return d.innerHTML;
-}
 function formatCurrency(amount) {
   if (!amount) return '₹0';
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 }
-const emptyState = (icon, title, hint) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div><p class="hint">${escapeHtml(hint)}</p></div>`;
-
 async function renderDailyStats() {
   const stats = await getDailyBusiness();
   document.getElementById('dailyStats').innerHTML = [
@@ -73,15 +69,6 @@ async function renderRmPerformance() {
   }).join('');
 }
 
-function showToast(message, error = false) {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = message;
-  el.classList.toggle('error', error);
-  el.hidden = false;
-  clearTimeout(window.toastTimer);
-  window.toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
-}
 
 function formatWaiting(iso) {
   const hours = (Date.now() - new Date(iso).getTime()) / (60 * 60 * 1000);

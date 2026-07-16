@@ -3,6 +3,7 @@
 // =========================================================
 import { getDocumentTypes, getDocumentsForLead, uploadDocument, getDownloadUrl, verifyDocument, rejectDocument } from '../services/documentService.js';
 import { formatDateTime } from '../utils/validation.js';
+import { emptyState } from '../../../../shared/js/emptyState.js';
 
 export async function initDocumentsTab(panelEl, leadId, ctx) {
   const { currentUser, showToast, coApplicants } = ctx;
@@ -49,7 +50,7 @@ export async function initDocumentsTab(panelEl, leadId, ctx) {
   function renderDocList(docs) {
     const listEl = document.getElementById('docList');
     if (docs.length === 0) {
-      listEl.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-folder-open"></i></div><div class="title">No documents uploaded yet</div><p class="hint">Use the upload form above to add the student\'s first document.</p></div>';
+      listEl.innerHTML = emptyState('fa-folder-open', 'No documents uploaded yet', "Use the upload form above to add the student's first document.");
       return;
     }
     listEl.innerHTML = docs.map((d) => {

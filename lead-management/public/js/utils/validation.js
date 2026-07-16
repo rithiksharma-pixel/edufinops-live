@@ -3,9 +3,9 @@
 // Pure functions only. No DOM access, no network calls.
 // This is what unit tests target directly (see docs/TESTING.md).
 // =========================================================
+import { PHONE_REGEX, EMAIL_REGEX, formatCurrency, formatDate, formatDateTime, isOverdue } from '../../../../shared/js/utils.js';
 
-const PHONE_REGEX = /^[+]?[0-9\s-]{7,15}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export { formatCurrency, formatDate, formatDateTime, isOverdue };
 
 /**
  * Validates a new-lead form payload.
@@ -36,30 +36,4 @@ export function validateLeadForm(payload) {
   }
 
   return { valid: Object.keys(errors).length === 0, errors };
-}
-
-export function formatCurrency(amount, currency = 'INR') {
-  if (amount === null || amount === undefined) return '–';
-  try {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
-  } catch {
-    return `${currency} ${amount}`;
-  }
-}
-
-export function formatDate(isoString) {
-  if (!isoString) return '–';
-  const d = new Date(isoString);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-export function formatDateTime(isoString) {
-  if (!isoString) return '–';
-  const d = new Date(isoString);
-  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
-export function isOverdue(isoString) {
-  if (!isoString) return false;
-  return new Date(isoString).getTime() < Date.now();
 }

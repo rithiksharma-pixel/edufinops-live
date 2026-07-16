@@ -19,7 +19,7 @@ const LEAD_LIST_SELECT = `
  * the current user's role is allowed to see — this function does not
  * need to (and must not) apply its own role-based scoping.
  */
-export async function listLeads({ stageId, sourceId, rmId, search } = {}) {
+export async function listLeads({ stageId, sourceId, rmId, search, dateField, dateFrom, dateTo } = {}) {
   let query = supabase
     .from('leads')
     .select(LEAD_LIST_SELECT)
@@ -32,6 +32,13 @@ export async function listLeads({ stageId, sourceId, rmId, search } = {}) {
   if (search) {
     query = query.or(`student_name.ilike.%${search}%,student_phone.ilike.%${search}%`);
   }
+
+  // Date-range filter. Whitelist the column so only the two intended
+  // timestamps can ever be filtered on. `dateTo` is inclusive of the whole
+  // selected day (end-of-day), so a From==To picks that single day.
+  const field = dateField === 'updated_at' ? 'updated_at' : 'created_at';
+  if (dateFrom) query = query.gte(field, `${dateFrom}T00:00:00`);
+  if (dateTo) query = query.lte(field, `${dateTo}T23:59:59.999`);
 
   const { data, error } = await query;
   if (error) throw error;

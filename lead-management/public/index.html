@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
@@ -71,10 +72,26 @@
           <label for="filterRm">Assigned RM</label>
           <select id="filterRm"><option value="">All RMs</option></select>
         </div>
+        <div class="filter-field">
+          <label for="filterDateField">Date basis</label>
+          <select id="filterDateField">
+            <option value="created_at">Created date</option>
+            <option value="updated_at">Last modified</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="filterDateFrom">From</label>
+          <input id="filterDateFrom" type="date" />
+        </div>
+        <div class="filter-field">
+          <label for="filterDateTo">To</label>
+          <input id="filterDateTo" type="date" />
+        </div>
         <div class="filter-field filter-search">
           <label for="filterSearch">Search</label>
           <input id="filterSearch" type="text" placeholder="Student name or phone" />
         </div>
+        <button type="button" id="btnClearFilters" class="btn btn-ghost filter-clear">Clear</button>
       </section>
 
       <!-- Lead table -->
@@ -92,7 +109,7 @@
             </tr>
           </thead>
           <tbody id="leadTableBody">
-            <tr><td colspan="7" class="empty-state">Loading leads…</td></tr>
+            <tr><td colspan="7"><div class="spinner-block"><span class="spinner"></span><span>Loading leads…</span></div></td></tr>
           </tbody>
         </table>
       </section>

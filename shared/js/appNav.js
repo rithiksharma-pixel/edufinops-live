@@ -21,6 +21,8 @@
 // session from localStorage and returning to the login page.
 // =========================================================
 
+import { escapeHtml } from './utils.js';
+
 const SUPABASE_REF = 'wgzgqbfankdbqxxcesci';
 const LOGIN_PATH = '/authentication/public/login.html';
 
@@ -40,12 +42,6 @@ const state = { app: null, user: null, crumbs: [] };
 
 function accessibleApps(role) {
   return APPS.filter((a) => a.roles.includes(role));
-}
-
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str ?? '';
-  return d.innerHTML;
 }
 
 function initials(name) {

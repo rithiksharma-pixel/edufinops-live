@@ -1,4 +1,7 @@
 import { supabase } from '../config/supabaseClient.js';
+import { createAuthService } from '../../../../shared/js/authService.js';
+
+export const { signOut } = createAuthService(supabase);
 
 export async function getCurrentUser() {
   const { data: authData, error: authError } = await supabase.auth.getUser();
@@ -22,8 +25,4 @@ export async function updateMyProfile({ fullName, phone }) {
     .update({ full_name: fullName, phone })
     .eq('id', authData.user.id);
   if (error) throw error;
-}
-
-export async function signOut() {
-  await supabase.auth.signOut();
 }

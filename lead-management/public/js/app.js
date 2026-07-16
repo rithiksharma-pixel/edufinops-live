@@ -5,6 +5,8 @@
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
+import { showToast } from '../../../shared/js/toast.js';
 import { listLeads, getStageCounts } from './services/leadService.js';
 import { getLeadStages, getLeadSources, getAssignableRms } from './services/lookupService.js';
 import { renderLeadTable } from './components/leadTable.js';
@@ -17,19 +19,8 @@ const state = {
   stages: [],
   sources: [],
   rms: [],
-  filters: { stageId: '', sourceId: '', rmId: '', search: '' },
+  filters: { stageId: '', sourceId: '', rmId: '', search: '', dateField: 'created_at', dateFrom: '', dateTo: '' },
 };
-
-const toastEl = document.getElementById('toast');
-let toastTimer = null;
-
-function showToast(message, isError = false) {
-  clearTimeout(toastTimer);
-  toastEl.textContent = message;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  toastTimer = setTimeout(() => (toastEl.hidden = true), 3200);
-}
 
 async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
@@ -81,6 +72,37 @@ function populateFilterDropdowns() {
       state.filters.search = e.target.value.trim();
       refreshLeadsAndFunnel();
     }, 300);
+  });
+
+  const dateFieldSelect = document.getElementById('filterDateField');
+  const dateFromInput = document.getElementById('filterDateFrom');
+  const dateToInput = document.getElementById('filterDateTo');
+
+  dateFieldSelect.addEventListener('change', (e) => {
+    state.filters.dateField = e.target.value;
+    // Only re-query if a range is actually set — switching the basis with no
+    // dates chosen changes nothing.
+    if (state.filters.dateFrom || state.filters.dateTo) refreshLeadsAndFunnel();
+  });
+  dateFromInput.addEventListener('change', (e) => {
+    state.filters.dateFrom = e.target.value;
+    refreshLeadsAndFunnel();
+  });
+  dateToInput.addEventListener('change', (e) => {
+    state.filters.dateTo = e.target.value;
+    refreshLeadsAndFunnel();
+  });
+
+  document.getElementById('btnClearFilters').addEventListener('click', () => {
+    state.filters = { stageId: '', sourceId: '', rmId: '', search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
+    stageSelect.value = '';
+    sourceSelect.value = '';
+    rmSelect.value = '';
+    dateFieldSelect.value = 'created_at';
+    dateFromInput.value = '';
+    dateToInput.value = '';
+    document.getElementById('filterSearch').value = '';
+    refreshLeadsAndFunnel();
   });
 }
 
@@ -160,12 +182,6 @@ async function bootstrap() {
   if (openLeadId) {
     drawer.open(openLeadId);
   }
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
 }
 
 bootstrap();

@@ -5,16 +5,10 @@ import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink }
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
 import { getMyCalls } from './services/callService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
+import { showToast } from '../../../shared/js/toast.js';
+import { emptyState } from '../../../shared/js/emptyState.js';
 
 let currentUser;
-const toastEl = document.getElementById('toast');
-const emptyState = (icon, title, hint) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div><p class="hint">${escapeHtml(hint)}</p></div>`;
-function showToast(msg, isError = false) {
-  toastEl.textContent = msg;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  setTimeout(() => (toastEl.hidden = true), 3000);
-}
 
 const VIEWS = {
   assigned: { title: 'Assigned leads', subtitle: 'Every lead currently assigned to you.', load: getAssignedLeads, render: renderLeadRows },

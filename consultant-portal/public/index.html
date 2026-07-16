@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/portal.css" />
 </head>
 <body>
@@ -31,14 +32,14 @@
         <button class="btn btn-primary" id="btnAddLead"><i class="fa-solid fa-plus"></i> Add lead</button>
       </header>
 
-      <section class="stat-cards" id="cpDashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;"></section>
+      <section class="stat-cards" id="cpDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
 
       <input type="text" id="searchInput" class="search-input" placeholder="Search by name or phone" />
 
       <div class="table-card">
         <table class="data-table">
           <thead><tr><th>Student</th><th>Course / University</th><th>Loan amount</th><th>Status</th><th>Submitted</th></tr></thead>
-          <tbody id="leadsBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          <tbody id="leadsBody"><tr><td colspan="5"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
         </table>
       </div>
     </main>

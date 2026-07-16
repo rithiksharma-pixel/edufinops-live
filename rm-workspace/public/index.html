@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/workspace.css" />
 </head>
 <body>
@@ -38,8 +39,8 @@
       </header>
 
       <div id="dashboardView">
-        <section class="stat-cards" id="rmDashStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <section class="stat-cards" id="rmDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+        <div class="grid-two">
           <section class="table-card" style="padding:18px;">
             <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">My leads by stage</h3>
             <div id="rmDashStageBreakdown"></div>
@@ -64,7 +65,7 @@
           <button type="button" class="pill-btn active" data-period="today">Today</button>
           <button type="button" class="pill-btn" data-period="week">This week</button>
         </div>
-        <section class="stat-cards" id="callsStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></section>
+        <section class="stat-cards" id="callsStats"></section>
         <div class="table-card">
           <table class="data-table">
             <thead><tr><th>Student</th><th>Outcome</th><th>Notes</th><th>Logged at</th></tr></thead>

@@ -1,13 +1,6 @@
 import { getCurrentUser, updateMyProfile } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
-
-const toastEl = document.getElementById('toast');
-function showToast(msg, isError = false) {
-  toastEl.textContent = msg;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  setTimeout(() => (toastEl.hidden = true), 3000);
-}
+import { showToast } from '../../../shared/js/toast.js';
 
 async function bootstrap() {
   let user;

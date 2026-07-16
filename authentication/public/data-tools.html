@@ -8,9 +8,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,560;9..144,650&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
+<link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/users-admin.css" />
 </head>
 <body>
+  <div id="ztTopbar" class="zt-topbar"></div>
   <div class="page">
     <div style="margin-bottom:14px;"><a href="users-admin.html" style="font-size:13px;color:var(--accent);text-decoration:none;">← Manage Users</a></div>
     <header class="page-header">
@@ -27,7 +30,8 @@
 
     <section class="table-card" style="padding:20px;">
       <h2 class="section-title" style="padding:0 0 12px;">Import leads</h2>
-      <p class="subtitle" style="margin-bottom:6px;"><strong>Required columns:</strong> <code>student_name, student_phone, student_email, course_name, university_name, destination_country, loan_amount_requested, source_name</code>. <code>source_name</code> must exactly match an existing lead source's name.</p>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Upsert by phone:</strong> <code>student_phone</code> is matched against existing leads — a match <strong>updates</strong> that lead (a blank cell leaves the existing value untouched, it's never cleared), no match <strong>creates</strong> a new one. <code>student_name, loan_amount_requested, source_name</code> are required for new leads only.</p>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Other columns:</strong> <code>student_email, course_name, university_name, destination_country</code>. <code>source_name</code> must exactly match an existing lead source's name.</p>
       <p class="subtitle" style="margin-bottom:6px;"><strong>Optional — for a historical migration</strong> (a lead that already has real history, not a brand-new lead created today):</p>
       <ul class="subtitle" style="margin:0 0 14px;padding-left:20px;">
         <li><code>stage_name</code> — the lead's current pipeline stage, matching an existing stage's name exactly (e.g. "Documents Received", "Sanctioned"). Blank = the opening stage, same as a fresh lead.</li>
@@ -42,6 +46,32 @@
       <button class="btn btn-primary" id="btnValidateImport">Validate file</button>
 
       <div id="importPreview" style="margin-top:18px;"></div>
+    </section>
+
+    <section class="table-card" style="padding:20px;margin-top:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Import consultancies</h2>
+      <p class="subtitle" style="margin-bottom:14px;">CSV columns: <code>name, is_active</code>. <code>name</code> is matched case-insensitively against existing consultancies — a match updates <code>is_active</code>, anything else creates a new consultancy. <code>is_active</code> is optional (<code>TRUE</code>/<code>FALSE</code>; blank defaults to active on new rows, leaves it unchanged on updates).</p>
+      <button class="btn btn-ghost" id="btnDownloadConsultanciesTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
+      <div class="form-field"><input type="file" id="consultanciesImportFileInput" accept=".csv" /></div>
+      <button class="btn btn-primary" id="btnValidateConsultanciesImport">Validate file</button>
+
+      <div id="consultanciesImportPreview" style="margin-top:18px;"></div>
+    </section>
+
+    <section class="table-card" style="padding:20px;margin-top:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Import lenders &amp; branches</h2>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Required columns:</strong> <code>lender_name, lender_code</code>. <strong>Optional:</strong> <code>branch_name, contact_email, contact_phone</code>.</p>
+      <ul class="subtitle" style="margin:0 0 14px;padding-left:20px;">
+        <li>One row per branch — leave <code>branch_name</code> blank for a lender-only row (no branch created on that row).</li>
+        <li>Multiple rows sharing the same <code>lender_code</code> add multiple branches under one lender.</li>
+        <li><code>lender_code</code> is the match key for an existing lender (case-insensitive) — if it already exists with a <strong>different</strong> <code>lender_name</code>, that row is rejected rather than silently renaming it.</li>
+        <li><code>contact_email</code> / <code>contact_phone</code> are lender-level — set them on any one row for that lender_code.</li>
+      </ul>
+      <button class="btn btn-ghost" id="btnDownloadLendersTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
+      <div class="form-field"><input type="file" id="lendersImportFileInput" accept=".csv" /></div>
+      <button class="btn btn-primary" id="btnValidateLendersImport">Validate file</button>
+
+      <div id="lendersImportPreview" style="margin-top:18px;"></div>
     </section>
 
     <section class="table-card" style="padding:20px;margin-top:20px;">

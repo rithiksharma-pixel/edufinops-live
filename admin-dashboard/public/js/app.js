@@ -1,5 +1,7 @@
 import { supabase } from './config/supabaseClient.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { showToast } from '../../../shared/js/toast.js';
+import { emptyState } from '../../../shared/js/emptyState.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
@@ -8,10 +10,8 @@ import { CALL_STATUS_OPTIONS } from '../../../lead-management/public/js/services
 const $ = (id) => document.getElementById(id);
 const esc = (value) => { const node = document.createElement('span'); node.textContent = value ?? ''; return node.innerHTML; };
 const inr = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0));
-const emptyState = (icon, title, hint, cta) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${esc(title)}</div><p class="hint">${esc(hint)}</p>${cta ? `<a class="btn btn-secondary" href="${cta.href}">${esc(cta.label)}</a>` : ''}</div>`;
 let activeView = 'overview';
 
-function showToast(message, error = false) { const el = $('toast'); el.textContent = message; el.classList.toggle('error', error); el.hidden = false; clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => { el.hidden = true; }, 3200); }
 async function records(table, select) { const { data, error } = await supabase.from(table).select(select).eq('is_deleted', false); if (error) throw error; return data; }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); mountTopbar({ app: 'admin-dashboard', user: { fullName: data.full_name, role: 'Admin' } }); }
 

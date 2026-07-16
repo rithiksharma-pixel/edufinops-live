@@ -20,6 +20,7 @@ import { initCollateralReferencesTab } from './collateralReferencesPanel.js';
 import { initLenderStatusPanel } from './lenderStatusPanel.js';
 import { getLeadStages, getAssignableRms } from '../services/lookupService.js';
 import { formatCurrency, formatDateTime } from '../utils/validation.js';
+import { emptyState } from '../../../../shared/js/emptyState.js';
 
 let currentLeadId = null;
 
@@ -282,7 +283,11 @@ function formatIntake(lead) {
 // deal detail each live in their own tab; this tab stays a clean summary.
 function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToast, onLeadUpdated) {
   const panel = document.getElementById('panelOverview');
-  const canEdit = ['Admin', 'Manager', 'Relationship Manager'].includes(currentUser.role);
+  // An RM works their own leads (can advance the stage) but must not hand a
+  // lead to a different RM — reassignment is a management action, so only
+  // Admin/Manager/ATM get the Assigned-RM control. RMs see it read-only.
+  const canEditStage = ['Admin', 'Manager', 'Associate Team Manager', 'Relationship Manager'].includes(currentUser.role);
+  const canReassign = ['Admin', 'Manager', 'Associate Team Manager'].includes(currentUser.role);
 
   const stageOptions = stages
     .map((s) => `<option value="${s.id}" ${s.id === lead.current_stage_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
@@ -305,10 +310,10 @@ function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToa
     <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;">Lead basics</h3>
     ${basics.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join('')}
 
-    ${canEdit ? `
+    ${canEditStage ? `
     <h3 style="font-size:14px;font-weight:600;margin:22px 0 10px;">Manage</h3>
     <div class="detail-row"><span class="k">Pipeline stage</span><span class="v"><select class="stage-select-inline" id="drawerStageSelect">${stageOptions}</select></span></div>
-    <div class="detail-row"><span class="k">Assigned RM</span><span class="v">${rms.length > 0 ? `<select class="stage-select-inline" id="drawerRmSelect"><option value="">Unassigned</option>${rmOptions}</select>` : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}</span></div>
+    <div class="detail-row"><span class="k">Assigned RM</span><span class="v">${canReassign && rms.length > 0 ? `<select class="stage-select-inline" id="drawerRmSelect"><option value="">Unassigned</option>${rmOptions}</select>` : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}</span></div>
     <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${escapeHtml(formatDateTime(lead.next_follow_up_at))}</span></div>
     ` : ''}
   `;
@@ -349,7 +354,7 @@ function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToa
 function renderTimeline(events) {
   const panel = document.getElementById('panelTimeline');
   if (!events || events.length === 0) {
-    panel.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-clock-rotate-left"></i></div><div class="title">No activity recorded yet</div><p class="hint">Stage changes, calls, and updates on this lead will show up here.</p></div>';
+    panel.innerHTML = emptyState('fa-clock-rotate-left', 'No activity recorded yet', 'Stage changes, calls, and updates on this lead will show up here.');
     return;
   }
   panel.innerHTML = events

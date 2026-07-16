@@ -3,7 +3,7 @@
 .page-header h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
 .subtitle { margin: 0; color: var(--ink-500); font-size: 14px; }
 
-.table-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; padding: 4px 0 0; }
+.table-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; padding: 4px 0 0; }
 .section-title { font-size: 14px; font-weight: 500; margin: 0; padding: 16px 20px 10px; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-500); padding: 10px 20px; border-bottom: 1px solid var(--border); background: #FBFBFA; }
@@ -29,14 +29,15 @@
 .empty-state-block .hint { font-size: 12.5px; max-width: 34ch; margin: 0 auto; line-height: 1.5; }
 .empty-state-block .btn { margin-top: 14px; }
 
-.modal-overlay { position: fixed; inset: 0; background: rgba(23,23,26,0.42); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); width: min(480px, 92vw); }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); }
-.modal-header h2 { margin: 0; font-size: 17px; font-weight: 500; }
-.modal-body { padding: 20px 22px; }
+/* Narrower modal than the shared 640px default — this form is short. */
+.modal { width: min(480px, 92vw); max-height: none; overflow-y: visible; }
 .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--ink-700); }
 .form-field input, .form-field select { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); }
-.icon-btn { background: none; border: none; cursor: pointer; width: 30px; height: 30px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: var(--ink-500); }
-.icon-btn:hover { background: var(--bg-hover); }
-.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 12px; border-top: 1px solid var(--border); margin-top: 6px; }
+.modal-footer { padding-top: 12px; margin-top: 6px; }
+
+@media (max-width: 720px) {
+  .page { padding: 20px 14px 40px; }
+  .page-header { flex-direction: column; gap: 10px; }
+  .data-table th, .data-table td { padding: 10px 12px; }
+}

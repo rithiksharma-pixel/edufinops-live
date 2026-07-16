@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
+<link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="css/dashboard.css" />
 </head>
 <body>
@@ -27,7 +28,7 @@
       <div id="ztTopbar" class="zt-topbar"></div>
       <header class="main-header"><div><h1>Team dashboard</h1><p class="subtitle">Your team's pipeline, performance, and today's business.</p></div></header>
 
-      <section class="stat-cards" id="dailyStats"></section>
+      <section class="stat-cards" id="dailyStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
 
       <section class="table-card" style="margin-bottom:22px;">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 0;">
@@ -36,11 +37,11 @@
         </div>
         <table class="data-table">
           <thead><tr><th>Student</th><th>Source</th><th>Loan amount</th><th>Waiting</th><th>Assign to RM</th></tr></thead>
-          <tbody id="unassignedLeadsBody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          <tbody id="unassignedLeadsBody"><tr><td colspan="5"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
         </table>
       </section>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;">
+      <div class="grid-two" style="margin-bottom:22px;">
         <section class="chart-card">
           <h3>Needs attention</h3>
           <div id="attentionList"></div>
@@ -64,7 +65,7 @@
         </table>
       </section>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:22px;">
+      <div class="grid-two" style="margin-top:22px;">
         <section class="chart-card">
           <h3>TAT by stage transition</h3>
           <div id="tatAverages"></div>

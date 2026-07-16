@@ -7,6 +7,7 @@
 // =========================================================
 import { getLenderStatusForLead, getNotSharedReasons, updateNotSharedReason, shareLeadWithLender } from '../services/lenderStatusService.js';
 import { getLoanOfficers } from '../services/lookupService.js';
+import { emptyState } from '../../../../shared/js/emptyState.js';
 
 const OTHER_REASON_VALUE = '__other__';
 
@@ -22,7 +23,7 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
     if (tabCountEl) tabCountEl.textContent = `${rows.filter((r) => r.share_status === 'Shared').length}/${rows.length}`;
 
     if (rows.length === 0) {
-      panelEl.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-building-columns"></i></div><div class="title">No lenders configured yet</div><p class="hint">Add a lender in Admin Settings and it will appear here for sharing.</p></div>';
+      panelEl.innerHTML = emptyState('fa-building-columns', 'No lenders configured yet', 'Add a lender in Admin Settings and it will appear here for sharing.');
       return;
     }
 

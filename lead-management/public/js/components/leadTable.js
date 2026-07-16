@@ -2,6 +2,7 @@
 // PRESENTATION LAYER — Lead table
 // =========================================================
 import { formatCurrency, formatDateTime, isOverdue } from '../utils/validation.js';
+import { emptyState } from '../../../../shared/js/emptyState.js';
 
 /**
  * Renders lead rows into the given <tbody>.
@@ -13,7 +14,7 @@ export function renderLeadTable(tbody, leads, onRowClick) {
   tbody.innerHTML = '';
 
   if (!leads || leads.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state-block"><div class="icon"><i class="fa-solid fa-magnifying-glass"></i></div><div class="title">No leads match these filters</div><p class="hint">Try widening your search or clearing a filter to see more results.</p></div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7">${emptyState('fa-magnifying-glass', 'No leads match these filters', 'Try widening your search or clearing a filter to see more results.')}</td></tr>`;
     return;
   }
 

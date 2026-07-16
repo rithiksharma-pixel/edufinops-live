@@ -1,26 +1,13 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
+import { showToast } from '../../../shared/js/toast.js';
 import { listMyLeads, getLeadDetail, getLeadTimeline, createMyLead } from './services/leadService.js';
 import { getLeadStages, getLeadSources } from './services/lookupService.js';
 import { getMessages, sendMessage } from './services/messageService.js';
 import { validateLeadForm, formatCurrency, formatDateTime } from './utils/validation.js';
 
 let currentUser;
-const toastEl = document.getElementById('toast');
-let toastTimer = null;
-function showToast(msg, isError = false) {
-  clearTimeout(toastTimer);
-  toastEl.textContent = msg;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  toastTimer = setTimeout(() => (toastEl.hidden = true), 3000);
-}
-
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str ?? '';
-  return d.innerHTML;
-}
 
 async function refreshLeads(search) {
   const tbody = document.getElementById('leadsBody');

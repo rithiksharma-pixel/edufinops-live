@@ -24,6 +24,7 @@ import {
 } from '../services/lookupService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from '../services/dealQueryService.js';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/validation.js';
+import { emptyState } from '../../../../shared/js/emptyState.js';
 
 export async function initDealsTab(panelEl, leadId, ctx) {
   const { currentUser, showToast, onDealUpdated } = ctx;
@@ -39,7 +40,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
     const cardsWrap = document.getElementById('dealCards');
     if (deals.length === 0) {
-      cardsWrap.innerHTML = '<div class="empty-state-block"><div class="icon"><i class="fa-solid fa-building-columns"></i></div><div class="title">Not shared with any lender yet</div><p class="hint">Use the table above to share this lead with a lender and start a deal.</p></div>';
+      cardsWrap.innerHTML = emptyState('fa-building-columns', 'Not shared with any lender yet', 'Use the table above to share this lead with a lender and start a deal.');
     } else {
       deals.forEach((deal) => cardsWrap.appendChild(renderDealCard(deal, stages)));
     }

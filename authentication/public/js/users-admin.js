@@ -1,4 +1,8 @@
-import { getCurrentUserProfile } from './services/authService.js';
+import { getCurrentUser } from './services/authService.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
+import { mountTopbar } from '../../../shared/js/appNav.js';
+import { showToast } from '../../../shared/js/toast.js';
+import { emptyState } from '../../../shared/js/emptyState.js';
 import {
   getRoles, getAllUsers, getPossibleManagers, getPendingInvitations,
   inviteUser, revokeInvitation, changeUserRole, changeReportingManager,
@@ -6,16 +10,6 @@ import {
   getTeams, changeUserTeam,
 } from './services/userAdminService.js';
 
-const toastEl = document.getElementById('toast');
-const emptyState = (icon, title, hint, cta) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div><p class="hint">${escapeHtml(hint)}</p>${cta ? `<a class="btn btn-secondary" href="${cta.href}">${escapeHtml(cta.label)}</a>` : ''}</div>`;
-let toastTimer = null;
-function showToast(message, isError = false) {
-  clearTimeout(toastTimer);
-  toastEl.textContent = message;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  toastTimer = setTimeout(() => (toastEl.hidden = true), 3000);
-}
 
 let roles = [];
 let managers = [];
@@ -261,17 +255,11 @@ function initInviteModal() {
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
-
 const INVITE_CAPABLE_ROLES = ['Admin', 'Manager', 'Associate Team Manager'];
 
 async function bootstrap() {
   try {
-    currentUserProfile = await getCurrentUserProfile();
+    currentUserProfile = await getCurrentUser();
     if (!INVITE_CAPABLE_ROLES.includes(currentUserProfile.role)) {
       document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-lock" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Restricted</strong><span style="color:var(--ink-500);font-size:13px;">This page is only available to Admins, Managers, and Associate Team Managers.</span></div>';
       return;
@@ -280,6 +268,8 @@ async function bootstrap() {
     document.body.innerHTML = '<div style="max-width:420px;margin:80px auto;padding:36px;text-align:center;font-family:Inter,sans-serif;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-lg,14px);"><i class="fa-solid fa-right-to-bracket" style="font-size:20px;color:var(--ink-300);margin-bottom:12px;display:block;"></i><strong style="display:block;margin-bottom:4px;">Sign-in required</strong><span style="color:var(--ink-500);font-size:13px;">Please <a href="login.html" style="color:var(--accent);">sign in</a> first.</span></div>';
     return;
   }
+
+  mountTopbar({ app: 'user-management', user: currentUserProfile });
 
   const isAdmin = currentUserProfile.role === 'Admin';
 

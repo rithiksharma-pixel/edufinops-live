@@ -29,22 +29,11 @@
 .data-table tbody tr { cursor: pointer; transition: background 0.1s ease; }
 .data-table tbody tr:hover { background: var(--bg-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
-.empty-state { text-align: center; color: var(--ink-500); padding: 32px !important; }
 
 .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--ink-700); }
 .form-field input, .form-field select { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); }
-.field-error { font-size: 12px; color: var(--danger); min-height: 14px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-
-.modal-overlay { position: fixed; inset: 0; background: rgba(23,23,26,0.42); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: var(--bg-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); width: min(640px, 92vw); max-height: 88vh; overflow-y: auto; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; border-bottom: 1px solid var(--border); }
-.modal-header h2 { margin: 0; font-size: 17px; font-weight: 500; }
-.modal-body { padding: 20px 22px; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); margin-top: 8px; }
-.icon-btn { background: none; border: none; cursor: pointer; width: 30px; height: 30px; border-radius: var(--radius-sm); color: var(--ink-500); }
-.icon-btn:hover { background: var(--bg-hover); }
 
 .drawer-overlay { position: fixed; inset: 0; background: rgba(23,23,26,0.32); z-index: 90; display: flex; justify-content: flex-end; }
 .drawer { width: min(420px, 100vw); background: var(--bg-surface); box-shadow: var(--shadow-drawer); display: flex; flex-direction: column; height: 100vh; }
@@ -97,13 +86,3 @@
 }
 .stat-card .amount { font: 600 22px/1.1 'IBM Plex Mono', Fraunces, serif; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .stat-card .stat-label { font-size: 12px; color: var(--ink-500); margin-top: 3px; }
-
-/* ---------- Empty states — icon + heading + hint, not just bare text ---------- */
-.empty-state-block { text-align: center; padding: 36px 20px; color: var(--ink-500); }
-.empty-state-block .icon {
-  width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%;
-  background: var(--bg-hover); display: flex; align-items: center; justify-content: center;
-  font-size: 15px; color: var(--ink-300);
-}
-.empty-state-block .title { font-size: 13.5px; font-weight: 600; color: var(--ink-700); margin-bottom: 3px; }
-.empty-state-block .hint { font-size: 12px; max-width: 32ch; margin: 0 auto; line-height: 1.5; }

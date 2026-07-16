@@ -1,0 +1,99 @@
+/* =========================================================
+   SHARED COMPONENTS — canonical modal, stat card, empty state,
+   field error, spinner, and grid utilities.
+   Previously copy-pasted (with drift) into every app's own CSS
+   file — this is the single source of truth going forward. Link
+   this file after shared/css/app-nav.css in every app's HTML entry
+   point(s). Values below reflect the majority pattern already in
+   use across the apps, not a new visual language.
+   ========================================================= */
+
+/* ---------- Modal ---------- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(23,23,26,0.42);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  width: min(640px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { margin: 0; font-size: 17px; font-weight: 500; }
+.modal-body { padding: 20px 22px; }
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding-top: 14px; margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  width: 30px; height: 30px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-500);
+}
+.icon-btn:hover { background: var(--bg-hover); }
+
+/* ---------- Form field error ---------- */
+.field-error { font-size: 12px; color: var(--danger); min-height: 14px; }
+
+/* ---------- Stat cards ---------- */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.stat-card {
+  position: relative; overflow: hidden;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 16px 18px 16px 20px;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.stat-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--stat-accent, var(--accent));
+}
+.stat-card:hover { box-shadow: 0 6px 20px rgba(21, 24, 29, 0.06); transform: translateY(-1px); }
+.stat-card .stat-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; margin-bottom: 9px;
+  background: color-mix(in srgb, var(--stat-accent, var(--accent)) 14%, transparent);
+  color: var(--stat-accent, var(--accent)); font-size: 12px;
+}
+.stat-card .value, .stat-card .amount, .stat-value {
+  font: 600 24px/1.1 'IBM Plex Mono', Fraunces, serif;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.stat-card .label, .stat-card .stat-label, .stat-label { font-size: 12px; color: var(--ink-500); margin-top: 5px; }
+
+/* ---------- Grid utilities ---------- */
+.grid-two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+/* ---------- Empty states ---------- */
+.empty-state { text-align: center; color: var(--ink-500); padding: 32px !important; }
+.empty-state-block { text-align: center; padding: 36px 20px; color: var(--ink-500); }
+.empty-state-block .icon {
+  width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%;
+  background: var(--bg-hover); display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: var(--ink-300);
+}
+.empty-state-block .title { font-size: 13.5px; font-weight: 600; color: var(--ink-700); margin-bottom: 3px; }
+.empty-state-block .hint { font-size: 12px; max-width: 32ch; margin: 0 auto; line-height: 1.5; }
+.empty-state-block .btn { margin-top: 14px; }
+
+/* ---------- Spinner ---------- */
+.spinner {
+  display: inline-block;
+  width: var(--spinner-size, 20px); height: var(--spinner-size, 20px);
+  border: 2.5px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: zt-spin 0.7s linear infinite;
+}
+.spinner-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 20px; color: var(--ink-500); font-size: 13px; }
+@keyframes zt-spin { to { transform: rotate(360deg); } }

@@ -1,4 +1,4 @@
-import { confirmPasswordReset, acceptMyInvitation, getCurrentUserProfile } from './services/authService.js';
+import { confirmPasswordReset, acceptMyInvitation, getCurrentUser } from './services/authService.js';
 import { getHomeRouteForRole } from './config/roleRoutes.js';
 
 const form = document.getElementById('setPasswordForm');
@@ -47,7 +47,7 @@ form.addEventListener('submit', async (e) => {
     document.getElementById('setPasswordCard').hidden = true;
     document.getElementById('doneCard').hidden = false;
 
-    const profile = await getCurrentUserProfile();
+    const profile = await getCurrentUser();
     const route = getHomeRouteForRole(profile.role);
     setTimeout(() => {
       if (route) window.location.href = route;

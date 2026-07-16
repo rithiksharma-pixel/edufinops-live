@@ -5,8 +5,6 @@
 // never through this client, keeping the layers separable.
 // =========================================================
 
-// TODO: move these to environment-injected values before deploying
-// (Vercel build-time env vars), never hardcode real keys in source control.
 const SUPABASE_URL = window.__ENV__?.SUPABASE_URL || 'https://YOUR-PROJECT.supabase.co';
 const SUPABASE_ANON_KEY = window.__ENV__?.SUPABASE_ANON_KEY || 'YOUR-ANON-KEY';
 

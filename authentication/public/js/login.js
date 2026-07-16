@@ -1,4 +1,4 @@
-import { signIn, getCurrentUserProfile } from './services/authService.js';
+import { signIn, getCurrentUser } from './services/authService.js';
 import { getHomeRouteForRole } from './config/roleRoutes.js';
 
 const form = document.getElementById('loginForm');
@@ -21,7 +21,7 @@ form.addEventListener('submit', async (e) => {
 
   try {
     await signIn(email, password);
-    const profile = await getCurrentUserProfile();
+    const profile = await getCurrentUser();
     const route = getHomeRouteForRole(profile.role);
     if (route) {
       window.location.href = route;

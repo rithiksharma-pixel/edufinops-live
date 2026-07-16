@@ -1,7 +1,7 @@
 // =========================================================
 // SERVICE LAYER — Deal queries (structured Lender <-> RM questions)
-// RLS (can_view_deal) already scopes every query here to deals the
-// current user can see — no client-side re-filtering needed.
+// RLS (can_view_deal, which already covers belongs_to_lender_org)
+// scopes every query here — no client-side re-filtering needed.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
 

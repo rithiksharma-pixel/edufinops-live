@@ -1,5 +1,6 @@
-const PHONE_REGEX = /^[+]?[0-9\s-]{7,15}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { PHONE_REGEX, EMAIL_REGEX, formatCurrency, formatDateTime } from '../../../../shared/js/utils.js';
+
+export { formatCurrency, formatDateTime };
 
 export function validateLeadForm(payload) {
   const errors = {};
@@ -10,14 +11,4 @@ export function validateLeadForm(payload) {
   if (!payload.loan_amount_requested || Number.isNaN(amount) || amount <= 0) errors.loan_amount_requested = 'Enter a loan amount greater than zero.';
   if (!payload.lead_source_id) errors.lead_source_id = 'Select a source.';
   return { valid: Object.keys(errors).length === 0, errors };
-}
-
-export function formatCurrency(amount, currency = 'INR') {
-  if (amount === null || amount === undefined) return '–';
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
-}
-
-export function formatDateTime(iso) {
-  if (!iso) return '–';
-  return new Date(iso).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }

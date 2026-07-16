@@ -1,5 +1,8 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
+import { showToast } from '../../../shared/js/toast.js';
+import { emptyState } from '../../../shared/js/emptyState.js';
 import {
   getMyBankDeals, getDealDetail, getDealStages, getDealHoldReasons, getDealRejectionReasons,
   updateStageDetails, changeDealStage, putDealOnHold, releaseDealHold, rejectDeal, reinstateDeal,
@@ -10,19 +13,6 @@ import {
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
 
 let currentUser;
-const toastEl = document.getElementById('toast');
-const emptyState = (icon, title, hint) => `<div class="empty-state-block"><div class="icon"><i class="fa-solid ${icon}"></i></div><div class="title">${escapeHtml(title)}</div>${hint ? `<p class="hint">${escapeHtml(hint)}</p>` : ''}</div>`;
-function showToast(msg, isError = false) {
-  toastEl.textContent = msg;
-  toastEl.classList.toggle('error', isError);
-  toastEl.hidden = false;
-  setTimeout(() => (toastEl.hidden = true), 3000);
-}
-function escapeHtml(str) {
-  const d = document.createElement('div');
-  d.textContent = str ?? '';
-  return d.innerHTML;
-}
 function formatCurrency(amount) {
   if (!amount) return '–';
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);

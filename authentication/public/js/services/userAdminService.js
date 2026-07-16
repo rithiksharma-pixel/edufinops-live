@@ -27,7 +27,7 @@ export async function getTeams() {
  * CURRENT user is actually allowed to invite under (mirrors invite_user()'s
  * RPC-level scoping — this is convenience/UX only, the RPC re-validates
  * regardless). currentUser is the { id, role } shape from
- * getCurrentUserProfile().
+ * getCurrentUser().
  *   - Admin: unrestricted — any Manager, Associate Team Manager, or Admin.
  *   - Manager: themself, plus their own Associate Team Managers.
  *   - Associate Team Manager: themself only (RMs they invite always
