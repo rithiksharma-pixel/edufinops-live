@@ -44,3 +44,13 @@
 
 /* Sub-label hint under an optional form field. */
 .field-hint { font-size: 11.5px; color: var(--ink-500); line-height: 1.45; }
+
+/* Row action cluster — keeps WhatsApp + Revoke/Deactivate on one line. */
+.row-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.row-action-btn:disabled { color: var(--ink-300); cursor: not-allowed; }
+.wa-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  text-decoration: none; color: #128C7E; font-weight: 500;
+}
+.wa-link:hover { text-decoration: underline; }
+.wa-link i { font-size: 13px; }

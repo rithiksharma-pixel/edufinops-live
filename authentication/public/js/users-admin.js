@@ -9,7 +9,23 @@ import {
   deactivateUser, reactivateUser, getLenders, getLenderBranches,
   getTeams, changeUserTeam,
 } from './services/userAdminService.js';
+import { whatsappPortalUrl } from './whatsappLink.js';
 
+/**
+ * "Send portal link" button for a roster/invite row. Renders a disabled
+ * hint instead of a dead link when there's no phone on record, so it's
+ * obvious WHY the action isn't available rather than the button just
+ * being missing. Deactivated users get nothing — there's no portal to
+ * send them to.
+ */
+function waButton({ fullName, email, phone, roleName, pending, active }) {
+  if (!active) return '';
+  const url = whatsappPortalUrl({ fullName, email, phone, roleName, origin: window.location.origin, pending });
+  if (!url) {
+    return '<button class="row-action-btn" disabled title="No phone number on record for this person">WhatsApp</button>';
+  }
+  return `<a class="row-action-btn wa-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="Opens WhatsApp with the message ready — you tap send"><i class="fa-brands fa-whatsapp"></i> Send link</a>`;
+}
 
 let roles = [];
 let managers = [];
@@ -48,7 +64,7 @@ async function loadUsers() {
       <td><select class="inline-select" data-manager-for="${u.id}">${managerOptions}</select></td>
       <td>${teamCell}</td>
       <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-neutral'}">${u.is_active ? 'Active' : 'Deactivated'}</span></td>
-      <td><button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
+      <td class="row-actions">${waButton({ fullName: u.full_name, email: u.email, phone: u.phone, roleName: u.roles?.name, pending: false, active: u.is_active })}<button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -117,7 +133,7 @@ async function loadInvitations() {
       <td><span class="badge badge-accent">${escapeHtml(inv.roles?.name || '–')}</span></td>
       <td>${new Date(inv.invited_at).toLocaleDateString()}</td>
       <td>${new Date(inv.expires_at).toLocaleDateString()}</td>
-      <td><button class="row-action-btn danger" data-revoke="${inv.id}">Revoke</button></td>
+      <td class="row-actions">${waButton({ fullName: inv.full_name, email: inv.email, phone: inv.phone, roleName: inv.roles?.name, pending: true, active: true })}<button class="row-action-btn danger" data-revoke="${inv.id}">Revoke</button></td>
     </tr>
   `).join('');
 

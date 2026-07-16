@@ -9,7 +9,7 @@ export async function getRoles() {
 export async function getAllUsers() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, email, is_active, team_id, roles ( name ), reporting_manager:users!reporting_manager_id ( full_name )')
+    .select('id, full_name, email, phone, is_active, team_id, roles ( name ), reporting_manager:users!reporting_manager_id ( full_name )')
     .eq('is_deleted', false)
     .order('full_name');
   if (error) throw error;
@@ -86,7 +86,7 @@ export async function getLenderBranches(lenderId) {
 export async function getPendingInvitations() {
   const { data, error } = await supabase
     .from('invitations')
-    .select('id, email, full_name, invited_at, expires_at, roles ( name )')
+    .select('id, email, full_name, phone, invited_at, expires_at, roles ( name )')
     .eq('status', 'pending')
     .order('invited_at', { ascending: false });
   if (error) throw error;
