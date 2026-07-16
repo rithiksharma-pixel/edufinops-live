@@ -22,6 +22,31 @@ function leadLink(leadId) {
   return `../../lead-management/public/index.html?openLead=${leadId}`;
 }
 
+/**
+ * Marks a row as opening a lead. Rows are navigated via one delegated
+ * listener (see initRowNavigation) rather than an inline onclick: the
+ * production CSP sets `script-src 'self'` with no 'unsafe-inline', so
+ * inline handlers are silently dropped by the browser — they only ever
+ * appeared to work against a local server that sends no CSP header.
+ * A row with no lead id gets no attribute, so it simply isn't clickable
+ * instead of navigating to `?openLead=undefined`.
+ */
+function leadRowAttr(leadId) {
+  return leadId ? ` data-lead-id="${escapeHtml(leadId)}"` : '';
+}
+
+function initRowNavigation() {
+  ['listBody', 'callsListBody'].forEach((id) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+    container.addEventListener('click', (e) => {
+      const row = e.target.closest('tr[data-lead-id]');
+      if (!row || !container.contains(row)) return;
+      window.location.href = leadLink(row.dataset.leadId);
+    });
+  });
+}
+
 function renderLeadRows(leads) {
   document.getElementById('listHead').innerHTML = '<tr><th>Student</th><th>Course / University</th><th>Loan amount</th><th>Stage</th><th>Next follow-up</th></tr>';
   const body = document.getElementById('listBody');
@@ -30,7 +55,7 @@ function renderLeadRows(leads) {
     return;
   }
   body.innerHTML = leads.map((l) => `
-    <tr onclick="window.location.href='${leadLink(l.id)}'">
+    <tr${leadRowAttr(l.id)}>
       <td><strong>${escapeHtml(l.student_name)}</strong><div style="font-size:12px;color:var(--ink-500);">${escapeHtml(l.student_phone)}</div></td>
       <td>${escapeHtml(l.course_name || '–')}${l.university_name ? ' · ' + escapeHtml(l.university_name) : ''}</td>
       <td>${formatCurrency(l.loan_amount_requested, l.currency)}</td>
@@ -48,7 +73,7 @@ function renderDocumentRows(docs) {
     return;
   }
   body.innerHTML = docs.map((d) => `
-    <tr onclick="window.location.href='${leadLink(d.leads?.id)}'">
+    <tr${leadRowAttr(d.leads?.id)}>
       <td>${escapeHtml(d.document_types?.name || 'Document')}<div style="font-size:12px;color:var(--ink-500);">${escapeHtml(d.file_name)}</div></td>
       <td>${escapeHtml(d.leads?.student_name || '–')}</td>
       <td>${formatDateTime(d.uploaded_at)}</td>
@@ -64,7 +89,7 @@ function renderLenderUpdateRows(events) {
     return;
   }
   body.innerHTML = events.map((ev) => `
-    <tr onclick="window.location.href='${leadLink(ev.deals?.leads?.id)}'">
+    <tr${leadRowAttr(ev.deals?.leads?.id)}>
       <td><span class="badge badge-accent">${escapeHtml(ev.event_type)}</span>${ev.remarks ? '<div style="font-size:12px;color:var(--ink-500);margin-top:3px;">' + escapeHtml(ev.remarks) + '</div>' : ''}</td>
       <td>${escapeHtml(ev.deals?.lenders?.name || '–')}</td>
       <td>${escapeHtml(ev.deals?.leads?.student_name || '–')}</td>
@@ -183,7 +208,7 @@ async function renderCallsView() {
     return;
   }
   body.innerHTML = calls.map((c) => `
-    <tr onclick="window.location.href='${leadLink(c.leads?.id)}'">
+    <tr${leadRowAttr(c.leads?.id)}>
       <td><strong>${escapeHtml(c.leads?.student_name || '–')}</strong></td>
       <td><span class="badge ${c.event_type === 'Connected' ? 'badge-success' : 'badge-neutral'}">${escapeHtml(c.event_type)}</span></td>
       <td>${escapeHtml(truncate(c.remarks, 60))}</td>
@@ -377,6 +402,7 @@ async function bootstrap() {
   });
   initLeadModal();
   initCallsPeriodToggle();
+  initRowNavigation();
 
   const leadOptions = await getMyOpenLeadsForTaskLink();
   document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));
