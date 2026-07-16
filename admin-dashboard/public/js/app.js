@@ -294,6 +294,65 @@ async function bulkAddNames({ table, textId, resultId, label, plural }) {
   loadSettings();
 }
 
+/**
+ * Bulk UPSERT for consultancies from "Consultancy, BD manager" lines
+ * (manager optional). Unlike the name-only tables this one updates too:
+ * an existing consultancy with a manager on the line gets its BD manager
+ * set — that's how the whole list gets annotated in one paste. A line
+ * with just an existing name is skipped rather than nulling out a
+ * manager someone already recorded.
+ */
+async function bulkUpsertConsultancies() {
+  const resultId = 'consultancyBulkResult';
+  const lines = parseBulkLines($('consultancyBulkText').value);
+  if (lines.length === 0) return showBulkResult(resultId, 'Nothing to add — paste some lines first.', true);
+
+  const { data: existing, error: readError } = await supabase.from('consultancies').select('id, name, bd_manager').eq('is_deleted', false);
+  if (readError) return showBulkResult(resultId, readError.message, true);
+  const byName = new Map((existing || []).map((c) => [c.name.toLowerCase(), c]));
+
+  const { data: auth } = await supabase.auth.getUser();
+  const inserts = [];
+  const failures = [];
+  const seenInPaste = new Set();
+  let updated = 0;
+  let skipped = 0;
+
+  for (const line of lines) {
+    const idx = line.indexOf(',');
+    const name = (idx === -1 ? line : line.slice(0, idx)).trim();
+    const manager = idx === -1 ? '' : line.slice(idx + 1).trim();
+    if (!name) { failures.push(`"${line}" — missing a name`); continue; }
+    const key = name.toLowerCase();
+    if (seenInPaste.has(key)) { skipped++; continue; }
+    seenInPaste.add(key);
+
+    const found = byName.get(key);
+    if (!found) {
+      inserts.push({ name, bd_manager: manager || null, created_by: auth.user.id, updated_by: auth.user.id });
+    } else if (manager && manager !== (found.bd_manager || '')) {
+      const { error } = await supabase.from('consultancies').update({ bd_manager: manager, updated_by: auth.user.id }).eq('id', found.id);
+      if (error) failures.push(`${name} — ${error.message}`);
+      else updated++;
+    } else {
+      skipped++; // already exists with nothing new to apply
+    }
+  }
+
+  let added = 0;
+  if (inserts.length) {
+    const { error } = await supabase.from('consultancies').insert(inserts);
+    if (error) failures.push(`could not add ${inserts.length} new: ${error.message}`);
+    else added = inserts.length;
+  }
+
+  if (added || updated) $('consultancyBulkText').value = '';
+  const bits = [`Added ${added}`, `updated ${updated} BD manager${updated === 1 ? '' : 's'}`, `skipped ${skipped}`];
+  if (failures.length) bits.push(`${failures.length} failed: ${failures.slice(0, 3).join(' | ')}`);
+  showBulkResult(resultId, `${bits.join(', ')}.`, failures.length > 0);
+  if (added || updated) { showToast(`Consultancies: ${added} added, ${updated} updated.`); loadSettings(); }
+}
+
 /** Bulk insert branches from "Bank, Branch" lines. */
 async function bulkAddBranches() {
   const lines = parseBulkLines($('branchBulkText').value);
@@ -348,7 +407,7 @@ function initBulkAdd() {
   wireBulkFile('consultancyBulkFile', 'consultancyBulkText');
   wireBulkFile('teamBulkFile', 'teamBulkText');
   $('branchBulkBtn').addEventListener('click', () => bulkAddBranches().catch((e) => showBulkResult('branchBulkResult', e.message, true)));
-  $('consultancyBulkBtn').addEventListener('click', () => bulkAddNames({ table: 'consultancies', textId: 'consultancyBulkText', resultId: 'consultancyBulkResult', label: 'consultancy', plural: 'consultancies' }).catch((e) => showBulkResult('consultancyBulkResult', e.message, true)));
+  $('consultancyBulkBtn').addEventListener('click', () => bulkUpsertConsultancies().catch((e) => showBulkResult('consultancyBulkResult', e.message, true)));
   $('teamBulkBtn').addEventListener('click', () => bulkAddNames({ table: 'teams', textId: 'teamBulkText', resultId: 'teamBulkResult', label: 'team', plural: 'teams' }).catch((e) => showBulkResult('teamBulkResult', e.message, true)));
 }
 
@@ -360,7 +419,7 @@ async function loadSettings() {
   const [{ data: lenders, error: lendersError }, { data: branches, error: branchesError }, { data: consultancies, error: consultanciesError }, { data: teams, error: teamsError }] = await Promise.all([
     supabase.from('lenders').select('id,name').eq('is_deleted', false).order('name'),
     supabase.from('lender_branches').select('name,lenders(name)').eq('is_deleted', false).order('name'),
-    supabase.from('consultancies').select('name').eq('is_deleted', false).order('name'),
+    supabase.from('consultancies').select('name, bd_manager').eq('is_deleted', false).order('name'),
     supabase.from('teams').select('name').eq('is_deleted', false).order('name'),
   ]);
   if (lendersError) throw lendersError;
@@ -369,7 +428,7 @@ async function loadSettings() {
   if (teamsError) throw teamsError;
   $('branchLenderSelect').innerHTML = lenders.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   $('lenderBranchesList').innerHTML = branches.map((b) => `<div class="simple-row"><strong>${esc(b.name)}</strong><div class="muted">${esc(b.lenders?.name || '–')}</div></div>`).join('') || '<p class="muted">No branches configured.</p>';
-  $('consultanciesList').innerHTML = consultancies.map((c) => `<div class="simple-row"><strong>${esc(c.name)}</strong></div>`).join('') || '<p class="muted">No consultancies configured.</p>';
+  $('consultanciesList').innerHTML = consultancies.map((c) => `<div class="simple-row"><strong>${esc(c.name)}</strong><div class="muted">${c.bd_manager ? `BD manager: ${esc(c.bd_manager)}` : 'No BD manager yet'}</div></div>`).join('') || '<p class="muted">No consultancies configured.</p>';
   $('teamsList').innerHTML = teams.map((t) => `<div class="simple-row"><strong>${esc(t.name)}</strong></div>`).join('') || '<p class="muted">No teams configured.</p>';
 }
 async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
@@ -378,7 +437,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEven
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
 $('lenderBranchForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('lender_branches').insert({ lender_id: form.get('lender_id'), name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Branch added.'); loadSettings(); });
-$('consultancyForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('consultancies').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Consultancy added.'); loadSettings(); });
+$('consultancyForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('consultancies').insert({ name: form.get('name').trim(), bd_manager: (form.get('bd_manager') || '').trim() || null, created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Consultancy added.'); loadSettings(); });
 $('teamForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('teams').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Team added.'); loadSettings(); });
 initBulkAdd();
 requireAdmin().then(loadActive).catch((error) => { document.body.innerHTML = `<main style="padding:48px;font-family:Inter,sans-serif"><h1>Access unavailable</h1><p>${esc(error.message)}</p><a href="../../authentication/public/login.html">Go to sign in</a></main>`; });
