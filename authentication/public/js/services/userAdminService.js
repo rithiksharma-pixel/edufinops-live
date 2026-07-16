@@ -101,10 +101,11 @@ export async function getPendingInvitations() {
  * will still create the invitations row; the email step will fail
  * loudly rather than silently, so it's obvious it needs deploying.
  */
-export async function inviteUser({ email, fullName, roleId, reportingManagerId, lenderOrganizationId, lenderBranchId, teamId }) {
+export async function inviteUser({ email, fullName, phone, roleId, reportingManagerId, lenderOrganizationId, lenderBranchId, teamId }) {
   const { data: invitationId, error } = await supabase.rpc('invite_user', {
     p_email: email,
     p_full_name: fullName,
+    p_phone: phone || null,
     p_role_id: roleId,
     p_reporting_manager_id: reportingManagerId || null,
     p_lender_organization_id: lenderOrganizationId || null,

@@ -54,6 +54,7 @@
       <form id="inviteForm" class="modal-body" novalidate>
         <div class="form-field"><label>Full name *</label><input name="full_name" type="text" required /></div>
         <div class="form-field"><label>Email *</label><input name="email" type="email" required /></div>
+        <div class="form-field"><label>Phone</label><input name="phone" type="tel" placeholder="e.g. +91 98765 43210" /><span class="field-hint" id="phoneHint">Kept on their record so the team can reach them.</span></div>
         <div class="form-field"><label>Role *</label><select name="role_id" id="inviteRoleSelect" required></select></div>
         <div class="form-field" id="managerField" hidden><label>Reporting manager</label><select name="reporting_manager_id" id="inviteManagerSelect"></select></div>
         <div class="form-field" id="teamField" hidden><label>Team *</label><select name="team_id" id="inviteTeamSelect"></select></div>

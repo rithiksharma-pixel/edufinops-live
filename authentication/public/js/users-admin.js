@@ -237,6 +237,7 @@ function initInviteModal() {
       await inviteUser({
         email: payload.email.trim(),
         fullName: payload.full_name.trim(),
+        phone: payload.phone?.trim() || null,
         roleId: payload.role_id,
         reportingManagerId: payload.reporting_manager_id || null,
         lenderOrganizationId: payload.lender_organization_id || null,
