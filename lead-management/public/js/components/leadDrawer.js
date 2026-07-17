@@ -9,7 +9,8 @@ import {
   assignLeadToRm,
   logCall,
   getHighestDealStage,
-  CALL_STATUS_OPTIONS,
+  CALL_DISPOSITIONS,
+  FOLLOWUP_REQUIRED_DISPOSITIONS,
 } from '../services/leadService.js';
 import { initDealsTab } from './dealPanel.js';
 import { initDocumentsTab } from './documentPanel.js';
@@ -216,21 +217,25 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
     </div>
     <div class="form-grid">
       <div class="form-field">
-        <label>Call status</label>
-        <select id="callStatusSelect">${CALL_STATUS_OPTIONS.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select>
+        <label>Outcome</label>
+        <select id="callOutcomeSelect">${Object.keys(CALL_DISPOSITIONS).map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('')}</select>
       </div>
       <div class="form-field">
-        <label>Notes</label>
-        <textarea id="callNotes" rows="1"></textarea>
+        <label>Disposition</label>
+        <select id="callStatusSelect"></select>
       </div>
+    </div>
+    <div class="form-field" style="margin-top:10px;">
+      <label>Notes</label>
+      <textarea id="callNotes" rows="1"></textarea>
     </div>
     <div class="form-grid" id="callTaskFields" style="margin-top:10px;">
       <div class="form-field">
-        <label>Follow-up task *</label>
+        <label>Follow-up task <span id="callTaskReq">*</span></label>
         <input type="text" id="callTaskTitle" placeholder="e.g. Call back to confirm documents" />
       </div>
       <div class="form-field">
-        <label>Due date *</label>
+        <label>Due date <span id="callDateReq">*</span></label>
         <input type="date" id="callTaskDueDate" />
       </div>
     </div>
@@ -240,13 +245,25 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
 
   document.getElementById('btnCloseCallForm').addEventListener('click', () => setCallFormOpen(false));
 
+  const outcomeSelect = document.getElementById('callOutcomeSelect');
   const callStatusSelect = document.getElementById('callStatusSelect');
-  const taskFields = document.getElementById('callTaskFields');
   const taskError = document.getElementById('callTaskError');
+
+  // Sub-disposition list follows the chosen outcome.
+  const populateDispositions = () => {
+    callStatusSelect.innerHTML = CALL_DISPOSITIONS[outcomeSelect.value]
+      .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  };
+  outcomeSelect.addEventListener('change', () => { populateDispositions(); syncTaskRequirement(); });
+  populateDispositions();
+
+  // A follow-up date is required for some dispositions (see
+  // FOLLOWUP_REQUIRED_DISPOSITIONS); for the rest it's optional.
+  const followupRequired = () => FOLLOWUP_REQUIRED_DISPOSITIONS.includes(callStatusSelect.value);
   const syncTaskRequirement = () => {
-    const notInterested = callStatusSelect.value === 'Not Interested';
-    taskFields.style.opacity = notInterested ? '0.5' : '1';
-    taskFields.querySelectorAll('input').forEach((el) => { el.disabled = notInterested; });
+    const req = followupRequired();
+    document.getElementById('callTaskReq').style.visibility = req ? 'visible' : 'hidden';
+    document.getElementById('callDateReq').style.visibility = req ? 'visible' : 'hidden';
     taskError.textContent = '';
   };
   callStatusSelect.addEventListener('change', syncTaskRequirement);
@@ -258,8 +275,8 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
     const taskTitle = document.getElementById('callTaskTitle').value.trim();
     const taskDueDate = document.getElementById('callTaskDueDate').value;
 
-    if (callStatus !== 'Not Interested' && (!taskTitle || !taskDueDate)) {
-      taskError.textContent = 'A follow-up task (title + due date) is required for this call outcome.';
+    if (followupRequired() && (!taskTitle || !taskDueDate)) {
+      taskError.textContent = 'A follow-up task (title + due date) is required for this disposition.';
       return;
     }
 
@@ -267,9 +284,11 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
     btn.disabled = true;
     btn.textContent = 'Logging…';
     try {
+      // Save the follow-up whenever one was entered, even if optional.
+      const withTask = taskTitle && taskDueDate;
       await logCall(
         lead.id,
-        { callStatus, notes, taskTitle: callStatus === 'Not Interested' ? null : taskTitle, taskDueDate: callStatus === 'Not Interested' ? null : taskDueDate },
+        { callStatus, notes, taskTitle: withTask ? taskTitle : null, taskDueDate: withTask ? taskDueDate : null },
         currentUser.id
       );
       showToast('Call logged.');

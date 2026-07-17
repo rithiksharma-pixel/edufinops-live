@@ -169,9 +169,21 @@ export async function upsertCollateralDetails(leadId, collateralId, fields, curr
 }
 
 // Fixed list for now — matches the roadmap's "adjust the list on request".
-export const CALL_STATUS_OPTIONS = [
-  'Connected', 'No Answer', 'Busy', 'Call Back Requested', 'Interested', 'Not Interested', 'Wrong Number',
-];
+// Call outcome is two-level: an outcome (Connected / Not Connected) and a
+// sub-disposition. We store the SUB-disposition as the lead_event's
+// event_type — it's the granular signal, and 'Interested' specifically is
+// what the stage automation watches to advance a lead to App Start.
+export const CALL_DISPOSITIONS = {
+  'Connected': ['Interested', 'In-follow up', 'Not Interested'],
+  'Not Connected': ['Switched off', 'RNR', 'Call Back', 'Others'],
+};
+// Flat list of every sub-disposition — used to tell "this lead_event is a
+// call" apart from stage changes etc. when counting call activity.
+export const CALL_STATUS_OPTIONS = Object.values(CALL_DISPOSITIONS).flat();
+// Which sub-dispositions count as a connected call (for connect-rate).
+export const CONNECTED_DISPOSITIONS = CALL_DISPOSITIONS['Connected'];
+// Which sub-dispositions force a follow-up date before the call can save.
+export const FOLLOWUP_REQUIRED_DISPOSITIONS = ['Interested', 'In-follow up', 'Call Back', 'Switched off', 'RNR'];
 
 /**
  * Logs a call as a lead_events row (shows up in the Timeline tab with no

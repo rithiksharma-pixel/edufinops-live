@@ -5,7 +5,7 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
-import { CALL_STATUS_OPTIONS } from '../../../lead-management/public/js/services/leadService.js';
+import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../lead-management/public/js/services/leadService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
 
@@ -174,7 +174,7 @@ async function loadTeamPerformance() {
       if (!ev.created_by) return;
       if (!callStats[ev.created_by]) callStats[ev.created_by] = { callCount: 0, connectedCount: 0 };
       callStats[ev.created_by].callCount += 1;
-      if (ev.event_type === 'Connected') callStats[ev.created_by].connectedCount += 1;
+      if (CONNECTED_DISPOSITIONS.includes(ev.event_type)) callStats[ev.created_by].connectedCount += 1;
     });
 
     teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes.data, deals: dealsRes.data, callStats };

@@ -10,9 +10,9 @@
 // call activity" rather than "activity on my leads by anyone".
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
-import { CALL_STATUS_OPTIONS } from '../../../../lead-management/public/js/services/leadService.js';
+import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
-export { CALL_STATUS_OPTIONS };
+export { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS };
 
 function startOfToday() {
   const d = new Date();

@@ -14,7 +14,7 @@ import { supabase } from '../config/supabaseClient.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
-import { CALL_STATUS_OPTIONS } from '../../../../lead-management/public/js/services/leadService.js';
+import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
 export async function getTeamFunnel() {
   const { data, error } = await supabase
@@ -102,7 +102,7 @@ export async function getRmCallStats() {
     if (!ev.created_by) return;
     if (!byRm[ev.created_by]) byRm[ev.created_by] = { callCount: 0, connectedCount: 0 };
     byRm[ev.created_by].callCount += 1;
-    if (ev.event_type === 'Connected') byRm[ev.created_by].connectedCount += 1;
+    if (CONNECTED_DISPOSITIONS.includes(ev.event_type)) byRm[ev.created_by].connectedCount += 1;
   });
   return byRm;
 }

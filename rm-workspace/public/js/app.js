@@ -3,7 +3,7 @@ import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
-import { getMyCalls } from './services/callService.js';
+import { getMyCalls, CONNECTED_DISPOSITIONS } from './services/callService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
@@ -194,7 +194,7 @@ async function renderCallsView() {
     return;
   }
 
-  const connected = calls.filter((c) => c.event_type === 'Connected').length;
+  const connected = calls.filter((c) => CONNECTED_DISPOSITIONS.includes(c.event_type)).length;
   const rate = calls.length ? Math.round((connected / calls.length) * 100) : 0;
 
   document.getElementById('callsStats').innerHTML = [
@@ -210,7 +210,7 @@ async function renderCallsView() {
   body.innerHTML = calls.map((c) => `
     <tr${leadRowAttr(c.leads?.id)}>
       <td><strong>${escapeHtml(c.leads?.student_name || '–')}</strong></td>
-      <td><span class="badge ${c.event_type === 'Connected' ? 'badge-success' : 'badge-neutral'}">${escapeHtml(c.event_type)}</span></td>
+      <td><span class="badge ${CONNECTED_DISPOSITIONS.includes(c.event_type) ? 'badge-success' : 'badge-neutral'}">${escapeHtml(c.event_type)}</span></td>
       <td>${escapeHtml(truncate(c.remarks, 60))}</td>
       <td>${formatDateTime(c.created_at)}</td>
     </tr>
