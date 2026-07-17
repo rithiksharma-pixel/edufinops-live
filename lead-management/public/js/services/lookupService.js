@@ -105,6 +105,23 @@ export async function getDealHoldReasons() {
   return data;
 }
 
+/**
+ * Deliberately not cached — an Admin can bulk-add branches for a lender
+ * while a counselor/RM already has a deal panel open, and a stale cache
+ * would keep showing "no branches" until they reload the page.
+ */
+export async function getLenderBranches(lenderId) {
+  const { data, error } = await supabase
+    .from('lender_branches')
+    .select('id, name')
+    .eq('lender_id', lenderId)
+    .eq('is_active', true)
+    .eq('is_deleted', false)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 export async function getLenders() {
   if (lenderCache) return lenderCache;
   const { data, error } = await supabase

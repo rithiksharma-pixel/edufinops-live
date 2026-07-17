@@ -4,13 +4,11 @@ import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending,
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
 import { getMyCalls, CONNECTED_DISPOSITIONS } from './services/callService.js';
-import { initLenderDealPanel } from './components/lenderDealPanel.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell } from './utils/validation.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 
 let currentUser;
-let lenderPanelReady = false;
 
 const VIEWS = {
   assigned: { title: 'Assigned leads', subtitle: 'Every lead currently assigned to you.', load: getAssignedLeads, render: renderLeadRows },
@@ -84,28 +82,17 @@ function renderDocumentRows(docs) {
 
 const VIEW_CRUMBS = {
   dashboard: '', assigned: 'Assigned Leads', followups: "Today's Follow-ups",
-  new: 'New Leads', documents: 'Documents Pending', lenders: 'Lender Updates',
+  new: 'New Leads', documents: 'Documents Pending',
   calls: 'Calls', tasks: 'Tasks',
 };
 
 async function loadView(key) {
   document.getElementById('dashboardView').hidden = key !== 'dashboard';
-  document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls' || key === 'lenders';
+  document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls';
   document.getElementById('tasksView').hidden = key !== 'tasks';
   document.getElementById('callsView').hidden = key !== 'calls';
-  document.getElementById('lenderManageWrap').hidden = key !== 'lenders';
   document.querySelectorAll('.nav-item').forEach((el) => el.classList.toggle('active', el.dataset.view === key));
   setBreadcrumb(VIEW_CRUMBS[key] ? [VIEW_CRUMBS[key]] : []);
-
-  if (key === 'lenders') {
-    document.getElementById('viewTitle').textContent = 'Lender Updates';
-    document.getElementById('viewSubtitle').textContent = 'Start and manage a deal with a lender, lead by lead.';
-    if (!lenderPanelReady) {
-      lenderPanelReady = true;
-      await initLenderDealPanel(document.getElementById('lenderManageWrap'), { showToast, getLeads: getAssignedLeads });
-    }
-    return;
-  }
 
   if (key === 'dashboard') {
     document.getElementById('viewTitle').textContent = 'Dashboard';

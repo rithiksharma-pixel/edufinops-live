@@ -7,6 +7,7 @@
 import {
   getDealsForLead,
   getDealDetail,
+  updateDealRegion,
   updateStageDetails,
   changeDealStage,
   putDealOnHold,
@@ -21,6 +22,7 @@ import {
   getDealStageStatuses,
   getDealRejectionReasons,
   getDealHoldReasons,
+  getLenderBranches,
 } from '../services/lookupService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from '../services/dealQueryService.js';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/validation.js';
@@ -101,8 +103,9 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       getQueriesForDeal(dealId),
       getQueryCategories(),
     ]);
+    const branches = await getLenderBranches(deal.lender_id);
     slot.innerHTML = '';
-    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories));
+    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, branches, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories));
   }
 
   function renderQueriesSection(deal, queries, queryCategories) {
@@ -166,7 +169,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     });
   }
 
-  function renderDealDetail(deal, stageDetails, disbursements, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories) {
+  function renderDealDetail(deal, stageDetails, disbursements, branches, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories) {
     const el = document.createElement('div');
     el.style.cssText = 'border-top:1px solid var(--border);margin-top:12px;padding-top:12px;';
     const stageName = deal.current_deal_stage?.name;
@@ -211,6 +214,8 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     const stageOptions = nextStages.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     const holdReasonOptions = holdReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
     const rejectionReasonOptions = rejectionReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+    const branchOptions = '<option value="">No region set</option>' +
+      branches.map((b) => `<option value="${b.id}" ${b.id === deal.lender_branch_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('');
 
     let disbursementHtml = '';
     if (stageName === 'Disbursement' || stageName === 'Closed Won') {
@@ -233,15 +238,27 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     }
 
     el.innerHTML = `
+      <div class="form-field" style="max-width:320px;">
+        <label>Region</label>
+        <select data-action-field="region">${branchOptions}</select>
+      </div>
+      <button class="btn btn-ghost" style="margin-bottom:14px;" data-action="save-region">Save region</button>
+
       ${stageConfig ? `<h4 style="font-size:13px;font-weight:500;margin:0 0 8px;">${escapeHtml(stageName)} details</h4><div class="form-grid">${stageFormHtml}</div>
       <button class="btn btn-ghost" style="margin-top:8px;" data-action="save-stage-fields">Save details</button>` : ''}
 
       ${disbursementHtml}
 
       <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Actions</h4>
-      <div class="form-field">
-        <label>Advance to stage</label>
-        <select data-action-field="next_stage_id"><option value="">Select a stage…</option>${stageOptions}</select>
+      <div class="form-grid">
+        <div class="form-field">
+          <label>Advance to stage</label>
+          <select data-action-field="next_stage_id"><option value="">Select a stage…</option>${stageOptions}</select>
+        </div>
+        <div class="form-field">
+          <label>Disposition</label>
+          <select data-action-field="next_status_id"><option value="">Select a stage first…</option></select>
+        </div>
       </div>
       <button class="btn btn-ghost" data-action="advance-stage">Move stage</button>
 
@@ -263,6 +280,16 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       ${renderQueriesSection(deal, queries, queryCategories)}
     `;
 
+    el.querySelector('[data-action="save-region"]').addEventListener('click', async () => {
+      const branchId = el.querySelector('[data-action-field="region"]').value;
+      try {
+        await updateDealRegion(deal.id, branchId);
+        showToast('Region saved.');
+      } catch (err) {
+        showToast('Could not save the region.', true);
+      }
+    });
+
     if (stageConfig) {
       el.querySelector('[data-action="save-stage-fields"]').addEventListener('click', async () => {
         const fields = {};
@@ -279,11 +306,20 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       });
     }
 
+    const nextStageSelect = el.querySelector('[data-action-field="next_stage_id"]');
+    const nextStatusSelect = el.querySelector('[data-action-field="next_status_id"]');
+    nextStageSelect.addEventListener('change', () => {
+      const stageId = nextStageSelect.value;
+      const options = stageStatuses.filter((s) => s.deal_stage_id === stageId);
+      nextStatusSelect.innerHTML = stageId
+        ? '<option value="">No disposition</option>' + options.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')
+        : '<option value="">Select a stage first…</option>';
+    });
+
     el.querySelector('[data-action="advance-stage"]').addEventListener('click', async () => {
-      const select = el.querySelector('[data-action-field="next_stage_id"]');
-      if (!select.value) { showToast('Choose a stage to move to.', true); return; }
+      if (!nextStageSelect.value) { showToast('Choose a stage to move to.', true); return; }
       try {
-        await changeDealStage(deal.id, select.value, null, null);
+        await changeDealStage(deal.id, nextStageSelect.value, nextStatusSelect.value || null, null);
         showToast('Deal moved to new stage.');
         onDealUpdated();
         await refresh();

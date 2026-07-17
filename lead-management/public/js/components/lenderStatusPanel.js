@@ -85,19 +85,17 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
         <button class="btn btn-primary" data-confirm-share style="font-size:12px;padding:6px 12px;">Confirm share</button>
         <button class="btn btn-ghost" data-cancel-share style="font-size:12px;padding:6px 12px;">Cancel</button>
       </div>
-      <p class="empty-state" style="padding:4px 0;font-size:12px;">Only the officer picked here will be able to see this deal.</p>
+      <p class="empty-state" style="padding:4px 0;font-size:12px;">Only the officer picked here will be able to see this deal — leave it unset if this lender isn't onboarded yet, and assign one later.</p>
     `;
 
     const officerSelect = slot.querySelector('[data-share-officer]');
     const officers = await getLoanOfficers(row.lenders.id);
-    officerSelect.innerHTML = officers.length
-      ? `<option value="">Select…</option>` + officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('')
-      : '<option value="">No one at this lender yet — invite them first</option>';
+    officerSelect.innerHTML = '<option value="">No officer yet</option>' +
+      officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('');
 
     slot.querySelector('[data-cancel-share]').addEventListener('click', () => { slot.innerHTML = ''; });
     slot.querySelector('[data-confirm-share]').addEventListener('click', async () => {
-      const officerId = officerSelect.value;
-      if (!officerId) { showToast('Choose the loan officer this deal should be assigned to.', true); return; }
+      const officerId = officerSelect.value || null;
       try {
         await shareLeadWithLender(row.id, officerId, null);
         showToast(`Shared with ${row.lenders.name}.`);
