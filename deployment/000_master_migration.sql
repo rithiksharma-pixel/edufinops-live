@@ -2487,6 +2487,7 @@ create trigger trg_lender_branches_updated_at
 alter table users add column if not exists lender_branch_id uuid references lender_branches(id);
 alter table invitations add column if not exists lender_organization_id uuid references lenders(id);
 alter table invitations add column if not exists lender_branch_id uuid references lender_branches(id);
+alter table deals add column if not exists lender_branch_id uuid references lender_branches(id);
 
 alter table lender_branches enable row level security;
 alter table lender_branches force row level security;
@@ -3019,7 +3020,7 @@ create policy users_select_lender_officers_for_internal_staff on users
 
 create or replace function share_lead_with_lender(
   p_lead_lender_status_id uuid,
-  p_loan_officer_id uuid,
+  p_loan_officer_id uuid default null,
   p_remarks text default null
 )
 returns uuid
@@ -3040,9 +3041,11 @@ begin
     raise exception 'This lender is already marked Shared for this lead';
   end if;
 
-  select lender_organization_id into v_officer_org from users where id = p_loan_officer_id;
-  if v_officer_org is null or v_officer_org != v_row.lender_id then
-    raise exception 'Selected officer does not belong to this lender';
+  if p_loan_officer_id is not null then
+    select lender_organization_id into v_officer_org from users where id = p_loan_officer_id;
+    if v_officer_org is null or v_officer_org != v_row.lender_id then
+      raise exception 'Selected officer does not belong to this lender';
+    end if;
   end if;
 
   select id into v_opening_stage_id from deal_stages where sequence_order = (select min(sequence_order) from deal_stages where is_deleted = false) and is_deleted = false;

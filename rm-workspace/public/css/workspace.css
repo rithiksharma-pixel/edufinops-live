@@ -32,8 +32,32 @@
 
 .form-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--ink-700); }
-.form-field input, .form-field select { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); }
+.form-field input, .form-field select, .form-field textarea { padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); font-family: inherit; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+/* Manual lender-deal management (Lender Updates view) — ported from
+   lead-management/public/css/styles.css for the same lender-row /
+   deal-detail look used there. */
+.detail-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.detail-row:last-child { border-bottom: none; }
+.detail-row .k { color: var(--ink-500); }
+.detail-row .v { color: var(--ink-900); font-weight: 500; text-align: right; }
+
+.lender-app-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 10px; }
+.lender-app-card .lender-name { font-weight: 500; font-size: 14px; }
+
+.lender-matrix-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lender-matrix-table th { text-align: left; font-weight: 500; color: var(--ink-500); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.lender-matrix-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.lender-matrix-table tr:last-child td { border-bottom: none; }
+.lender-matrix-table select, .lender-matrix-table input { font-size: 13px; padding: 5px 8px; }
+.lender-matrix-reason-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.lender-matrix-reason-who { display: block; font-size: 11px; color: var(--ink-300); margin-top: 3px; }
+
+.lender-status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.lender-status-badge.shared { background: var(--success-soft, #E3EEE8); color: var(--success-soft-ink, #1F4A37); }
+.lender-status-badge.not-shared { background: var(--bg-hover); color: var(--ink-500); }
+.lender-status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 .drawer-overlay { position: fixed; inset: 0; background: rgba(23,23,26,0.32); z-index: 90; display: flex; justify-content: flex-end; }
 .drawer { width: min(420px, 100vw); background: var(--bg-surface); box-shadow: var(--shadow-drawer); display: flex; flex-direction: column; height: 100vh; }
