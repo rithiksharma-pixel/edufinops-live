@@ -23,6 +23,7 @@ export const STAGE_TABLE_MAP = {
   Login: {
     table: 'deal_login_details',
     fields: [
+      { key: 'login_id', label: 'Login ID', type: 'text' },
       { key: 'loan_required_amount', label: 'Loan required amount', type: 'number' },
       { key: 'login_amount', label: 'Login amount', type: 'number' },
       { key: 'login_date', label: 'Login date', type: 'date' },

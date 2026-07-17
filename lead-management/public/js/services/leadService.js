@@ -72,6 +72,7 @@ export async function getLeadDetail(leadId) {
       *,
       lead_stages ( name, color ),
       lead_sources ( name, category ),
+      lost_reason:lead_lost_reasons ( name ),
       assigned_rm:users!leads_assigned_rm_id_fkey ( full_name )
     `)
     .eq('id', leadId)
@@ -284,6 +285,27 @@ export async function assignLeadToRm(leadId, newRmId, reason) {
     p_new_rm_id: newRmId,
     p_reason: reason ?? null,
   });
+  if (error) throw error;
+}
+
+export async function getLostReasons() {
+  const { data, error } = await supabase
+    .from('lead_lost_reasons')
+    .select('id, name')
+    .eq('is_deleted', false)
+    .eq('is_active', true)
+    .order('sequence_order');
+  if (error) throw error;
+  return data;
+}
+
+export async function markLeadLost(leadId, reasonId, remarks) {
+  const { error } = await supabase.rpc('mark_lead_lost', { p_lead_id: leadId, p_reason_id: reasonId, p_remarks: remarks ?? null });
+  if (error) throw error;
+}
+
+export async function reopenLead(leadId) {
+  const { error } = await supabase.rpc('reopen_lead', { p_lead_id: leadId });
   if (error) throw error;
 }
 

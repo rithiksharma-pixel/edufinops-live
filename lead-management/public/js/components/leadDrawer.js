@@ -5,10 +5,12 @@ import {
   getLeadDetail,
   getLeadExtendedDetail,
   getLeadTimeline,
-  changeLeadStage,
   assignLeadToRm,
   logCall,
   getHighestDealStage,
+  getLostReasons,
+  markLeadLost,
+  reopenLead,
   CALL_DISPOSITIONS,
   FOLLOWUP_REQUIRED_DISPOSITIONS,
 } from '../services/leadService.js';
@@ -19,8 +21,8 @@ import { initAcademicDetailsTab } from './academicDetailsPanel.js';
 import { initFamilyTab } from './familyPanel.js';
 import { initCollateralReferencesTab } from './collateralReferencesPanel.js';
 import { initLenderStatusPanel } from './lenderStatusPanel.js';
-import { getLeadStages, getAssignableRms } from '../services/lookupService.js';
-import { formatCurrency, formatDateTime } from '../utils/validation.js';
+import { getAssignableRms } from '../services/lookupService.js';
+import { formatCurrency, formatDateTime, followUpCell } from '../utils/validation.js';
 import { emptyState } from '../../../../shared/js/emptyState.js';
 
 let currentLeadId = null;
@@ -64,11 +66,10 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
     const isExternalRole = currentUserRole === 'Consultant' || currentUserRole === 'Business Development';
 
     try {
-      const [{ lead, coApplicants }, extended, timeline, stages, rms, highestDealStage] = await Promise.all([
+      const [{ lead, coApplicants }, extended, timeline, rms, highestDealStage, lostReasons] = await Promise.all([
         getLeadDetail(leadId),
         getLeadExtendedDetail(leadId),
         getLeadTimeline(leadId),
-        getLeadStages(),
         // Consultants/BD never see the RM-assignment control (RLS also blocks
         // the underlying write, this just avoids showing a dead-end control)
         isExternalRole ? [] : getAssignableRms(),
@@ -76,16 +77,18 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
         // External roles can't read deals, so skip the call and fall back to
         // the lead's own stage for them.
         isExternalRole ? null : getHighestDealStage(leadId),
+        isExternalRole ? [] : getLostReasons(),
       ]);
 
-      // A lead in the pipeline is effectively at its furthest deal's stage.
-      const effectiveStatus = highestDealStage || lead.lead_stages?.name || '–';
+      // A lead in the pipeline is effectively at its furthest deal's stage —
+      // unless it's been marked Lost, which overrides everything.
+      const effectiveStatus = lead.lost_reason_id ? 'Lead Lost' : (highestDealStage || lead.lead_stages?.name || '–');
 
       renderHeader(lead, effectiveStatus);
       if (onOpen) onOpen(lead);
       renderActionBar(lead, { canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole), activateTab, toggleCallForm });
       renderCallForm(lead, currentUser, showToast, onLeadUpdated);
-      renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToast, onLeadUpdated);
+      renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, () => open(leadId));
       renderTimeline(timeline);
 
       // Collateral & References only makes sense for a Collateral loan —
@@ -322,20 +325,22 @@ function formatIntake(lead) {
 
 // Overview = the lead's basics at a glance. Co-applicant, academic, and
 // deal detail each live in their own tab; this tab stays a clean summary.
-function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToast, onLeadUpdated) {
+function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, reload) {
   const panel = document.getElementById('panelOverview');
-  // An RM works their own leads (can advance the stage) but must not hand a
-  // lead to a different RM — reassignment is a management action, so only
-  // Admin/Manager/ATM get the Assigned-RM control. RMs see it read-only.
-  const canEditStage = ['Admin', 'Manager', 'Associate Team Manager', 'Relationship Manager'].includes(currentUser.role);
+  // The stage is computed from activity now (see recompute_lead_stage) — it
+  // isn't hand-picked. The one manual override is marking a lead Lost.
+  // Reassignment stays a management action: only Admin/Manager/ATM.
+  const canManage = ['Admin', 'Manager', 'Associate Team Manager', 'Relationship Manager'].includes(currentUser.role);
   const canReassign = ['Admin', 'Manager', 'Associate Team Manager'].includes(currentUser.role);
+  const isLost = !!lead.lost_reason_id;
 
-  const stageOptions = stages
-    .map((s) => `<option value="${s.id}" ${s.id === lead.current_stage_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
-    .join('');
   const rmOptions = rms
     .map((u) => `<option value="${u.id}" ${u.id === lead.assigned_rm_id ? 'selected' : ''}>${escapeHtml(u.full_name)}</option>`)
     .join('');
+
+  const statusText = isLost
+    ? `Lead Lost — ${escapeHtml(lead.lost_reason?.name || 'reason not recorded')}`
+    : (effectiveStatus || lead.lead_stages?.name || '–');
 
   const basics = [
     ['Contact number', lead.student_phone || '–'],
@@ -344,36 +349,40 @@ function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToa
     ['College / University', lead.university_name || '–'],
     ['Course', lead.course_name || '–'],
     ['Loan amount', formatCurrency(lead.loan_amount_requested, lead.currency)],
-    ['Lead status', effectiveStatus || lead.lead_stages?.name || '–'],
+    ['Lead status', statusText],
   ];
+
+  const reasonOptions = lostReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
 
   panel.innerHTML = `
     <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;">Lead basics</h3>
     ${basics.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join('')}
 
-    ${canEditStage ? `
+    ${canManage ? `
     <h3 style="font-size:14px;font-weight:600;margin:22px 0 10px;">Manage</h3>
-    <div class="detail-row"><span class="k">Pipeline stage</span><span class="v"><select class="stage-select-inline" id="drawerStageSelect">${stageOptions}</select></span></div>
+    <div class="detail-row"><span class="k">Pipeline stage</span><span class="v">${escapeHtml(lead.lead_stages?.name || '–')} <span style="color:var(--ink-500);font-weight:400;font-size:12px;">· updates automatically</span></span></div>
     <div class="detail-row"><span class="k">Assigned RM</span><span class="v">${canReassign && rms.length > 0 ? `<select class="stage-select-inline" id="drawerRmSelect"><option value="">Unassigned</option>${rmOptions}</select>` : escapeHtml(lead.assigned_rm?.full_name || 'Unassigned')}</span></div>
-    <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${escapeHtml(formatDateTime(lead.next_follow_up_at))}</span></div>
+    <div class="detail-row"><span class="k">Next follow-up</span><span class="v">${followUpCell(lead.next_follow_up_at)}</span></div>
+
+    ${isLost ? `
+    <div class="lost-banner">
+      <div><strong>Marked as Lost</strong>${lead.lost_remarks ? ` — ${escapeHtml(lead.lost_remarks)}` : ''}</div>
+      <button type="button" class="btn btn-ghost" id="btnReopenLead">Reopen lead</button>
+    </div>
+    ` : `
+    <div id="lostControls" style="margin-top:14px;">
+      <button type="button" class="btn btn-ghost" id="btnShowLost"><i class="fa-solid fa-ban"></i> Mark as Lost</button>
+      <div id="lostForm" hidden style="margin-top:10px;">
+        <div class="form-grid">
+          <div class="form-field"><label>Reason</label><select id="lostReasonSelect">${reasonOptions}</select></div>
+          <div class="form-field"><label>Remarks (optional)</label><input type="text" id="lostRemarks" placeholder="Anything worth noting" /></div>
+        </div>
+        <button type="button" class="btn btn-primary" id="btnConfirmLost" style="margin-top:10px;">Confirm — mark Lost</button>
+      </div>
+    </div>
+    `}
     ` : ''}
   `;
-
-  const stageSelect = document.getElementById('drawerStageSelect');
-  if (stageSelect) {
-    stageSelect.addEventListener('change', async (e) => {
-      const newStageId = e.target.value;
-      try {
-        await changeLeadStage(lead.id, newStageId);
-        showToast('Stage updated.');
-        onLeadUpdated();
-      } catch (err) {
-        console.error(err);
-        showToast('Could not update stage.', true);
-        e.target.value = lead.current_stage_id;
-      }
-    });
-  }
 
   const rmSelect = document.getElementById('drawerRmSelect');
   if (rmSelect) {
@@ -387,6 +396,45 @@ function renderOverview(lead, effectiveStatus, stages, rms, currentUser, showToa
         console.error(err);
         showToast('Could not reassign this lead.', true);
         e.target.value = lead.assigned_rm_id || '';
+      }
+    });
+  }
+
+  const showLostBtn = document.getElementById('btnShowLost');
+  if (showLostBtn) {
+    showLostBtn.addEventListener('click', () => {
+      document.getElementById('lostForm').hidden = false;
+      showLostBtn.hidden = true;
+    });
+    document.getElementById('btnConfirmLost').addEventListener('click', async () => {
+      const btn = document.getElementById('btnConfirmLost');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        await markLeadLost(lead.id, document.getElementById('lostReasonSelect').value, document.getElementById('lostRemarks').value);
+        showToast('Lead marked as Lost.');
+        onLeadUpdated();
+        reload();
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Could not mark this lead Lost.', true);
+        btn.disabled = false; btn.textContent = 'Confirm — mark Lost';
+      }
+    });
+  }
+
+  const reopenBtn = document.getElementById('btnReopenLead');
+  if (reopenBtn) {
+    reopenBtn.addEventListener('click', async () => {
+      reopenBtn.disabled = true; reopenBtn.textContent = 'Reopening…';
+      try {
+        await reopenLead(lead.id);
+        showToast('Lead reopened.');
+        onLeadUpdated();
+        reload();
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Could not reopen this lead.', true);
+        reopenBtn.disabled = false; reopenBtn.textContent = 'Reopen lead';
       }
     });
   }

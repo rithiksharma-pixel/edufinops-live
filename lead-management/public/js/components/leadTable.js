@@ -1,7 +1,7 @@
 // =========================================================
 // PRESENTATION LAYER — Lead table
 // =========================================================
-import { formatCurrency, formatDateTime, isOverdue } from '../utils/validation.js';
+import { formatCurrency, followUpCell } from '../utils/validation.js';
 import { emptyState } from '../../../../shared/js/emptyState.js';
 
 /**
@@ -24,7 +24,6 @@ export function renderLeadTable(tbody, leads, onRowClick) {
 
     const stageName = lead.lead_stages?.name || '–';
     const rmName = lead.assigned_rm?.full_name || 'Unassigned';
-    const followUpClass = isOverdue(lead.next_follow_up_at) ? 'follow-up-overdue' : '';
 
     tr.innerHTML = `
       <td>
@@ -35,7 +34,7 @@ export function renderLeadTable(tbody, leads, onRowClick) {
       <td>${formatCurrency(lead.loan_amount_requested, lead.currency)}</td>
       <td><span class="badge badge-accent">${escapeHtml(stageName)}</span></td>
       <td>${escapeHtml(rmName)}</td>
-      <td class="${followUpClass}">${formatDateTime(lead.next_follow_up_at)}</td>
+      <td>${followUpCell(lead.next_follow_up_at)}</td>
       <td><i class="fa-solid fa-chevron-right" style="color:var(--ink-300)"></i></td>
     `;
 

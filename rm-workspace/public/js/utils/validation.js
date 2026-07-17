@@ -1,1 +1,1 @@
-export { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from '../../../../shared/js/utils.js';
+export { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell } from '../../../../shared/js/utils.js';

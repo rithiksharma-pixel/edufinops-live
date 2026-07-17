@@ -1,10 +1,10 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
-import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getLenderUpdates, getMyTatBreachedDeals } from './services/dashboardService.js';
+import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
 import { getMyCalls, CONNECTED_DISPOSITIONS } from './services/callService.js';
-import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml } from './utils/validation.js';
+import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell } from './utils/validation.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 
@@ -15,7 +15,6 @@ const VIEWS = {
   followups: { title: "Today's follow-ups", subtitle: 'Leads due for contact today or overdue.', load: getTodaysFollowUps, render: renderLeadRows },
   new: { title: 'New leads', subtitle: "Assigned to you, not yet actioned.", load: getNewLeads, render: renderLeadRows },
   documents: { title: 'Documents pending', subtitle: 'Uploaded documents awaiting your verification.', load: getDocumentsPending, render: renderDocumentRows },
-  lenders: { title: 'Lender updates', subtitle: 'Recent activity across your leads\' lender deals.', load: getLenderUpdates, render: renderLenderUpdateRows },
 };
 
 function leadLink(leadId) {
@@ -60,7 +59,7 @@ function renderLeadRows(leads) {
       <td>${escapeHtml(l.course_name || '–')}${l.university_name ? ' · ' + escapeHtml(l.university_name) : ''}</td>
       <td>${formatCurrency(l.loan_amount_requested, l.currency)}</td>
       <td><span class="badge badge-accent">${escapeHtml(l.lead_stages?.name || '–')}</span></td>
-      <td class="${isOverdue(l.next_follow_up_at) ? 'overdue-text' : ''}">${formatDateTime(l.next_follow_up_at)}</td>
+      <td>${followUpCell(l.next_follow_up_at)}</td>
     </tr>
   `).join('');
 }
@@ -81,26 +80,9 @@ function renderDocumentRows(docs) {
   `).join('');
 }
 
-function renderLenderUpdateRows(events) {
-  document.getElementById('listHead').innerHTML = '<tr><th>Event</th><th>Lender</th><th>Student</th><th>When</th></tr>';
-  const body = document.getElementById('listBody');
-  if (events.length === 0) {
-    body.innerHTML = `<tr><td colspan="4">${emptyState('fa-building-columns', 'No recent lender activity', 'Updates will appear here as lenders act on your shared deals.')}</td></tr>`;
-    return;
-  }
-  body.innerHTML = events.map((ev) => `
-    <tr${leadRowAttr(ev.deals?.leads?.id)}>
-      <td><span class="badge badge-accent">${escapeHtml(ev.event_type)}</span>${ev.remarks ? '<div style="font-size:12px;color:var(--ink-500);margin-top:3px;">' + escapeHtml(ev.remarks) + '</div>' : ''}</td>
-      <td>${escapeHtml(ev.deals?.lenders?.name || '–')}</td>
-      <td>${escapeHtml(ev.deals?.leads?.student_name || '–')}</td>
-      <td>${formatDateTime(ev.created_at)}</td>
-    </tr>
-  `).join('');
-}
-
 const VIEW_CRUMBS = {
   dashboard: '', assigned: 'Assigned Leads', followups: "Today's Follow-ups",
-  new: 'New Leads', documents: 'Documents Pending', lenders: 'Lender Updates',
+  new: 'New Leads', documents: 'Documents Pending',
   calls: 'Calls', tasks: 'Tasks',
 };
 

@@ -3,9 +3,9 @@
 // Pure functions only. No DOM access, no network calls.
 // This is what unit tests target directly (see docs/TESTING.md).
 // =========================================================
-import { PHONE_REGEX, EMAIL_REGEX, formatCurrency, formatDate, formatDateTime, isOverdue } from '../../../../shared/js/utils.js';
+import { PHONE_REGEX, EMAIL_REGEX, formatCurrency, formatDate, formatDateTime, isOverdue, followUpCell, followUpStatus } from '../../../../shared/js/utils.js';
 
-export { formatCurrency, formatDate, formatDateTime, isOverdue };
+export { formatCurrency, formatDate, formatDateTime, isOverdue, followUpCell, followUpStatus };
 
 /**
  * Validates a new-lead form payload.

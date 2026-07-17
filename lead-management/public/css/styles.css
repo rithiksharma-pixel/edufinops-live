@@ -342,6 +342,14 @@ button, input, select { font-family: inherit; font-size: inherit; }
 .drawer-callform h3 { font-size: 13px; font-weight: 600; margin: 0; }
 .callform-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 
+.lost-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 14px; padding: 12px 14px;
+  background: var(--danger-soft); color: var(--danger-soft-ink);
+  border-radius: var(--radius-md); font-size: 13px;
+}
+.lost-banner .btn { flex-shrink: 0; }
+
 .drawer-content { flex: 1; display: flex; min-height: 0; }
 
 .drawer-tabs {
