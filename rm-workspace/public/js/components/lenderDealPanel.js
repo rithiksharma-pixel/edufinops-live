@@ -9,6 +9,13 @@
 // since no lender exists yet to drive these from their own portal. The
 // disposition picker is new there too — the data (deal_stage_statuses)
 // and RPC support it, but no UI in this codebase rendered it before this.
+//
+// One panel per lender, not two separate steps: clicking "Manage" opens
+// the same slot whether or not a deal exists yet — if not, it shows a
+// "Start deal" prompt that, once clicked, reveals the rest of the form
+// right there. Every save/advance/hold/reject/tranche action re-renders
+// that same slot in place (reloadDealPanel) instead of collapsing the
+// whole table back to a list of rows.
 // =========================================================
 import {
   getDealStages,
@@ -67,7 +74,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         <tbody>${rows.map(renderRow).join('')}</tbody>
       </table>
     `;
-    wireRows(stages, stageStatuses, holdReasons, rejectionReasons);
+    wireRows(rows, stages, stageStatuses, holdReasons, rejectionReasons);
   }
 
   function renderRow(row) {
@@ -79,63 +86,98 @@ export async function initLenderDealPanel(containerEl, ctx) {
       : '<span class="lender-status-badge not-shared"><span class="dot"></span>Not Shared</span>';
 
     return `
-      <tr>
+      <tr data-row="${row.id}">
         <td><strong>${escapeHtml(row.lenders?.name || 'Unknown')}</strong></td>
-        <td>${statusCell}</td>
-        <td>${isShared ? escapeHtml(stageName || '–') + (statusName ? ' · ' + escapeHtml(statusName) : '') : '–'}</td>
-        <td>
-          ${isShared
-            ? `<button class="btn btn-ghost" data-manage="${row.deals.id}" style="font-size:12px;padding:5px 10px;">Manage</button>`
-            : `<button class="btn btn-ghost" data-start="${row.id}" style="font-size:12px;padding:5px 10px;">Start deal</button>`}
-          <div class="deal-detail-slot" data-slot="${row.id}"></div>
-        </td>
+        <td data-cell="status">${statusCell}</td>
+        <td data-cell="stage">${isShared ? escapeHtml(stageName || '–') + (statusName ? ' · ' + escapeHtml(statusName) : '') : '–'}</td>
+        <td><button class="btn btn-ghost" data-toggle-row="${row.id}" style="font-size:12px;padding:5px 10px;">Manage</button></td>
+      </tr>
+      <tr class="deal-detail-row" data-slot-row="${row.id}" hidden>
+        <td colspan="4"><div class="deal-detail-slot" data-slot="${row.id}"></div></td>
       </tr>
     `;
   }
 
-  function wireRows(stages, stageStatuses, holdReasons, rejectionReasons) {
-    rowsEl.querySelectorAll('[data-start]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        try {
-          await startDeal(btn.dataset.start, null);
-          showToast('Deal started.');
-          await refresh();
-        } catch (err) {
-          showToast(err.message || 'Could not start this deal.', true);
-          btn.disabled = false;
-        }
-      });
-    });
+  function updateRowSummary(rowId, deal) {
+    const tr = rowsEl.querySelector(`tr[data-row="${rowId}"]`);
+    if (!tr) return;
+    let statusHtml = '<span class="lender-status-badge shared"><span class="dot"></span>Shared</span>';
+    if (deal.is_rejected) statusHtml += ' <span class="badge badge-danger">Rejected</span>';
+    else if (deal.is_on_hold) statusHtml += ' <span class="badge badge-warning">On hold</span>';
+    tr.querySelector('[data-cell="status"]').innerHTML = statusHtml;
+    const stageName = deal.current_deal_stage?.name;
+    const statusName = deal.current_stage_status?.name;
+    tr.querySelector('[data-cell="stage"]').innerHTML = `${escapeHtml(stageName || '–')}${statusName ? ' · ' + escapeHtml(statusName) : ''}`;
+  }
 
-    rowsEl.querySelectorAll('[data-manage]').forEach((btn) => {
+  function wireRows(rows, stages, stageStatuses, holdReasons, rejectionReasons) {
+    const rowsById = new Map(rows.map((r) => [r.id, r]));
+
+    rowsEl.querySelectorAll('[data-toggle-row]').forEach((btn) => {
       btn.addEventListener('click', async () => {
-        const slot = btn.closest('tr').querySelector('.deal-detail-slot');
-        if (slot.dataset.open === 'true') {
+        const rowId = btn.dataset.toggleRow;
+        const slotRow = rowsEl.querySelector(`[data-slot-row="${rowId}"]`);
+        const slot = slotRow.querySelector('.deal-detail-slot');
+        if (!slotRow.hidden) {
+          slotRow.hidden = true;
           slot.innerHTML = '';
-          slot.dataset.open = 'false';
           btn.textContent = 'Manage';
           return;
         }
-        slot.innerHTML = '<p class="empty-state" style="padding:10px 0;">Loading…</p>';
-        slot.dataset.open = 'true';
+        slotRow.hidden = false;
         btn.textContent = 'Hide';
-        await loadManageForm(btn.dataset.manage, slot, stages, stageStatuses, holdReasons, rejectionReasons);
+        const row = rowsById.get(rowId);
+        if (row.share_status === 'Shared') {
+          slot.innerHTML = '<p class="empty-state" style="padding:10px 0;">Loading…</p>';
+          await reloadDealPanel(rowId, row.deals.id, slot, stages, stageStatuses, holdReasons, rejectionReasons);
+        } else {
+          slot.innerHTML = renderStartPrompt(row);
+          wireStartPrompt(slot, row, stages, stageStatuses, holdReasons, rejectionReasons);
+        }
       });
     });
   }
 
-  async function loadManageForm(dealId, slot, stages, stageStatuses, holdReasons, rejectionReasons) {
-    const { deal, stageDetails, disbursements } = await getDealDetail(dealId);
-    const branches = await getLenderBranches(deal.lender_id);
-    slot.innerHTML = '';
-    slot.appendChild(renderManageForm(deal, stageDetails, disbursements, branches, stages, stageStatuses, holdReasons, rejectionReasons));
+  function renderStartPrompt(row) {
+    return `
+      <div style="padding:10px 0;text-align:left;">
+        <p class="empty-state" style="padding:0 0 10px;text-align:left;">Not shared with ${escapeHtml(row.lenders?.name || 'this lender')} yet — starting a deal opens it at the Bank Prospect stage, ready to move forward.</p>
+        <button class="btn btn-primary" data-action="start-deal">Start deal</button>
+      </div>
+    `;
   }
 
-  function renderManageForm(deal, stageDetails, disbursements, branches, stages, stageStatuses, holdReasons, rejectionReasons) {
+  function wireStartPrompt(slot, row, stages, stageStatuses, holdReasons, rejectionReasons) {
+    slot.querySelector('[data-action="start-deal"]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Starting…';
+      try {
+        const dealId = await startDeal(row.id, null);
+        showToast('Deal started.');
+        slot.innerHTML = '<p class="empty-state" style="padding:10px 0;">Loading…</p>';
+        await reloadDealPanel(row.id, dealId, slot, stages, stageStatuses, holdReasons, rejectionReasons);
+      } catch (err) {
+        showToast(err.message || 'Could not start this deal.', true);
+        btn.disabled = false;
+        btn.textContent = 'Start deal';
+      }
+    });
+  }
+
+  async function reloadDealPanel(rowId, dealId, slot, stages, stageStatuses, holdReasons, rejectionReasons) {
+    const { deal, stageDetails, disbursements } = await getDealDetail(dealId);
+    const branches = await getLenderBranches(deal.lender_id);
+    updateRowSummary(rowId, deal);
+    slot.innerHTML = '';
+    slot.appendChild(renderManageForm(rowId, deal, stageDetails, disbursements, branches, stages, stageStatuses, holdReasons, rejectionReasons, slot));
+  }
+
+  function renderManageForm(rowId, deal, stageDetails, disbursements, branches, stages, stageStatuses, holdReasons, rejectionReasons, slot) {
     const el = document.createElement('div');
-    el.style.cssText = 'border-top:1px solid var(--border);margin-top:10px;padding-top:10px;text-align:left;';
+    el.style.cssText = 'padding:12px 0;text-align:left;';
     const stageName = deal.current_deal_stage?.name;
+    const reload = () => reloadDealPanel(rowId, deal.id, slot, stages, stageStatuses, holdReasons, rejectionReasons);
 
     if (deal.is_rejected) {
       el.innerHTML = `
@@ -148,7 +190,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         try {
           await reinstateDeal(deal.id, 'Reinstated from RM Workspace');
           showToast('Deal reinstated.');
-          await refresh();
+          await reload();
         } catch (err) {
           showToast('Could not reinstate this deal.', true);
         }
@@ -289,7 +331,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         try {
           await recordDisbursement(deal.id, trancheNumber, amount, disbursedDate, academicTerm, null);
           showToast('Tranche recorded.');
-          await refresh();
+          await reload();
         } catch (err) {
           showToast('Could not record this tranche.', true);
         }
@@ -301,7 +343,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
       try {
         await changeDealStage(deal.id, stageSelect.value, statusSelect.value || null, null);
         showToast('Deal updated.');
-        await refresh();
+        await reload();
       } catch (err) {
         showToast('Could not update this deal.', true);
       }
@@ -312,7 +354,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         try {
           await releaseDealHold(deal.id, null);
           showToast('Hold released.');
-          await refresh();
+          await reload();
         } catch (err) {
           showToast('Could not release hold.', true);
         }
@@ -335,7 +377,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         try {
           await putDealOnHold(deal.id, reasonId, remarks);
           showToast('Deal put on hold.');
-          await refresh();
+          await reload();
         } catch (err) {
           showToast('Could not put this deal on hold.', true);
         }
@@ -350,7 +392,7 @@ export async function initLenderDealPanel(containerEl, ctx) {
         try {
           await rejectDeal(deal.id, reasonId, remarks);
           showToast('Deal rejected.');
-          await refresh();
+          await reload();
         } catch (err) {
           showToast('Could not reject this deal.', true);
         }

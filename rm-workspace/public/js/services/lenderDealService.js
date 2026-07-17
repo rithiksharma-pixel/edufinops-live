@@ -56,7 +56,6 @@ let dealStageCache = null;
 let dealStageStatusCache = null;
 let holdReasonCache = null;
 let rejectionReasonCache = null;
-const branchCacheByLender = new Map();
 
 export async function getDealStages() {
   if (dealStageCache) return dealStageCache;
@@ -109,8 +108,13 @@ export async function getDealRejectionReasons() {
   return data;
 }
 
+/**
+ * Deliberately not cached — unlike stages/statuses, branches are edited
+ * by an Admin while an RM's tab may already be open, and a per-lender
+ * cache would keep returning "no branches" indefinitely for anyone who
+ * opened a deal before the Admin's bulk-add finished.
+ */
 export async function getLenderBranches(lenderId) {
-  if (branchCacheByLender.has(lenderId)) return branchCacheByLender.get(lenderId);
   const { data, error } = await supabase
     .from('lender_branches')
     .select('id, name')
@@ -119,7 +123,6 @@ export async function getLenderBranches(lenderId) {
     .eq('is_deleted', false)
     .order('name', { ascending: true });
   if (error) throw error;
-  branchCacheByLender.set(lenderId, data);
   return data;
 }
 
