@@ -214,8 +214,9 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     const stageOptions = nextStages.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     const holdReasonOptions = holdReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
     const rejectionReasonOptions = rejectionReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
-    const branchOptions = '<option value="">No region set</option>' +
-      branches.map((b) => `<option value="${b.id}" ${b.id === deal.lender_branch_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('');
+    const branchOptions = branches.length
+      ? '<option value="">No region set</option>' + branches.map((b) => `<option value="${b.id}" ${b.id === deal.lender_branch_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')
+      : `<option value="">No branches added for ${escapeHtml(deal.lenders?.name || 'this lender')} yet</option>`;
 
     let disbursementHtml = '';
     if (stageName === 'Disbursement' || stageName === 'Closed Won') {
