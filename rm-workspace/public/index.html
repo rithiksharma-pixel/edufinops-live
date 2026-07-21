@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
+<link rel="stylesheet" href="../../shared/css/lead-drawer.css" />
 <link rel="stylesheet" href="css/workspace.css" />
 </head>
 <body>
@@ -111,6 +112,51 @@
         </div>
       </form>
     </div>
+  </div>
+
+  <!-- ============ LEAD DETAIL DRAWER — shared with lead-management, see shared/css/lead-drawer.css ============ -->
+  <div class="drawer-overlay" id="drawerOverlay" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerStudentName">
+      <div class="drawer-toppanel">
+        <div class="drawer-header">
+          <div>
+            <h2 id="drawerStudentName">–</h2>
+            <span class="drawer-subtitle" id="drawerSubtitle">–</span>
+            <div class="drawer-header-facts" id="drawerHeaderFacts"></div>
+          </div>
+          <button class="icon-btn" id="btnCloseDrawer" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="drawer-actionbar" id="drawerActionBar"></div>
+        <div class="drawer-callform" id="drawerCallForm" hidden></div>
+      </div>
+
+      <div class="drawer-content">
+        <nav class="drawer-tabs">
+          <button class="tab-btn active" data-tab="overview">Overview</button>
+          <button class="tab-btn" data-tab="applicant">Applicant Details</button>
+          <button class="tab-btn" data-tab="academic">Academic</button>
+          <button class="tab-btn" data-tab="family">Family & Co-Applicant</button>
+          <button class="tab-btn" data-tab="collateral" id="tabBtnCollateral">Collateral & References</button>
+          <button class="tab-btn" data-tab="lenders">Lenders <span class="tab-count" id="lendersTabCount"></span></button>
+          <button class="tab-btn" data-tab="documents">Documents</button>
+          <button class="tab-btn" data-tab="timeline">Timeline</button>
+        </nav>
+
+        <div class="drawer-body">
+          <div class="tab-panel active" data-panel="overview" id="panelOverview"></div>
+          <div class="tab-panel" data-panel="applicant" id="panelApplicant"></div>
+          <div class="tab-panel" data-panel="academic" id="panelAcademic"></div>
+          <div class="tab-panel" data-panel="family" id="panelFamily"></div>
+          <div class="tab-panel" data-panel="collateral" id="panelCollateral"></div>
+          <div class="tab-panel" data-panel="lenders">
+            <div id="panelLenderMatrix"></div>
+            <div id="panelLenders" style="margin-top:26px;"></div>
+          </div>
+          <div class="tab-panel" data-panel="documents" id="panelDocuments"></div>
+          <div class="tab-panel" data-panel="timeline" id="panelTimeline"></div>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <div class="toast" id="toast" hidden></div>

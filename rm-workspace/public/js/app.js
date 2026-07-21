@@ -7,8 +7,16 @@ import { getMyCalls, CONNECTED_DISPOSITIONS } from './services/callService.js';
 import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell } from './utils/validation.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
+// Cross-app import, not a duplicate — same drawer lead-management uses,
+// so a lead opens in place here instead of navigating to a whole other
+// app. No bundler in this repo, so a relative import across app
+// boundaries is normal; the shared markup/CSS live in index.html /
+// shared/css/lead-drawer.css.
+import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 
 let currentUser;
+let leadDrawer;
+let currentViewKey = 'dashboard';
 
 const VIEWS = {
   assigned: { title: 'Assigned leads', subtitle: 'Every lead currently assigned to you.', load: getAssignedLeads, render: renderLeadRows },
@@ -16,10 +24,6 @@ const VIEWS = {
   new: { title: 'New leads', subtitle: "Assigned to you, not yet actioned.", load: getNewLeads, render: renderLeadRows },
   documents: { title: 'Documents pending', subtitle: 'Uploaded documents awaiting your verification.', load: getDocumentsPending, render: renderDocumentRows },
 };
-
-function leadLink(leadId) {
-  return `../../lead-management/public/index.html?openLead=${leadId}`;
-}
 
 /**
  * Marks a row as opening a lead. Rows are navigated via one delegated
@@ -41,7 +45,7 @@ function initRowNavigation() {
     container.addEventListener('click', (e) => {
       const row = e.target.closest('tr[data-lead-id]');
       if (!row || !container.contains(row)) return;
-      window.location.href = leadLink(row.dataset.leadId);
+      leadDrawer.open(row.dataset.leadId);
     });
   });
 }
@@ -87,6 +91,7 @@ const VIEW_CRUMBS = {
 };
 
 async function loadView(key) {
+  currentViewKey = key;
   document.getElementById('dashboardView').hidden = key !== 'dashboard';
   document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls';
   document.getElementById('tasksView').hidden = key !== 'tasks';
@@ -299,6 +304,7 @@ function initLeadModal() {
     overlay.hidden = false;
   }
   function close() { overlay.hidden = true; }
+  window.__closeLeadModal = close;
 
   document.getElementById('btnNewLead').addEventListener('click', open);
   document.getElementById('btnCloseLeadModal').addEventListener('click', close);
@@ -378,6 +384,12 @@ async function bootstrap() {
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   mountTopbar({ app: 'rm-workspace', user: currentUser });
+
+  leadDrawer = initLeadDrawer({
+    showToast,
+    onLeadUpdated: () => loadView(currentViewKey),
+    currentUser,
+  });
 
   document.querySelectorAll('.nav-item[data-view]').forEach((el) => {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });

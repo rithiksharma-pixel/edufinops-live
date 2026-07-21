@@ -8,6 +8,7 @@ import {
   getDealsForLead,
   getDealDetail,
   updateDealRegion,
+  updateDealLoanOfficer,
   updateStageDetails,
   changeDealStage,
   putDealOnHold,
@@ -23,6 +24,7 @@ import {
   getDealRejectionReasons,
   getDealHoldReasons,
   getLenderBranches,
+  getLoanOfficers,
 } from '../services/lookupService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from '../services/dealQueryService.js';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/validation.js';
@@ -107,9 +109,9 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       getQueriesForDeal(dealId),
       getQueryCategories(),
     ]);
-    const branches = await getLenderBranches(deal.lender_id);
+    const [branches, officers] = await Promise.all([getLenderBranches(deal.lender_id), getLoanOfficers(deal.lender_id)]);
     slot.innerHTML = '';
-    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, branches, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories));
+    slot.appendChild(renderDealDetail(deal, stageDetails, disbursements, branches, officers, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories));
   }
 
   function renderQueriesSection(deal, queries, queryCategories) {
@@ -173,7 +175,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     });
   }
 
-  function renderDealDetail(deal, stageDetails, disbursements, branches, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories) {
+  function renderDealDetail(deal, stageDetails, disbursements, branches, officers, stages, stageStatuses, rejectionReasons, holdReasons, queries, queryCategories) {
     const el = document.createElement('div');
     el.style.cssText = 'border-top:1px solid var(--border);margin-top:12px;padding-top:12px;';
     const stageName = deal.current_deal_stage?.name;
@@ -226,6 +228,9 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     const branchOptions = branches.length
       ? '<option value="">No region set</option>' + branches.map((b) => `<option value="${b.id}" ${b.id === deal.lender_branch_id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')
       : `<option value="">No branches added for ${escapeHtml(deal.lenders?.name || 'this lender')} yet</option>`;
+    const officerOptions = officers.length
+      ? '<option value="">No officer yet</option>' + officers.map((o) => `<option value="${o.id}" ${o.id === deal.assigned_loan_officer_id ? 'selected' : ''}>${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('')
+      : `<option value="">No one at ${escapeHtml(deal.lenders?.name || 'this lender')} yet</option>`;
 
     let disbursementHtml = '';
     if (stageName === 'Disbursement' || stageName === 'Closed Won') {
@@ -255,9 +260,12 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       </div>
 
       <div class="deal-section">
-        <div class="deal-section-label">Region</div>
-        <select data-action-field="region" style="max-width:320px;">${branchOptions}</select>
-        <div><button class="btn btn-ghost" style="margin-top:10px;" data-action="save-region">Save region</button></div>
+        <div class="deal-section-label">Region &amp; loan officer</div>
+        <div class="form-grid">
+          <div class="form-field"><label>Region</label><select data-action-field="region">${branchOptions}</select></div>
+          <div class="form-field"><label>Loan officer</label><select data-action-field="officer">${officerOptions}</select></div>
+        </div>
+        <button class="btn btn-ghost" style="margin-top:8px;" data-action="save-region-officer">Save</button>
       </div>
 
       ${stageConfig ? `
@@ -305,13 +313,15 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       ${renderQueriesSection(deal, queries, queryCategories)}
     `;
 
-    el.querySelector('[data-action="save-region"]').addEventListener('click', async () => {
+    el.querySelector('[data-action="save-region-officer"]').addEventListener('click', async () => {
       const branchId = el.querySelector('[data-action-field="region"]').value;
+      const officerId = el.querySelector('[data-action-field="officer"]').value;
       try {
-        await updateDealRegion(deal.id, branchId);
-        showToast('Region saved.');
+        await Promise.all([updateDealRegion(deal.id, branchId), updateDealLoanOfficer(deal.id, officerId)]);
+        showToast('Saved.');
+        onDealUpdated();
       } catch (err) {
-        showToast('Could not save the region.', true);
+        showToast('Could not save region/loan officer.', true);
       }
     });
 

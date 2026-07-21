@@ -164,6 +164,11 @@ export async function updateDealRegion(dealId, lenderBranchId) {
   if (error) throw error;
 }
 
+export async function updateDealLoanOfficer(dealId, loanOfficerId) {
+  const { error } = await supabase.from('deals').update({ assigned_loan_officer_id: loanOfficerId || null }).eq('id', dealId);
+  if (error) throw error;
+}
+
 export async function updateStageDetails(stageName, dealId, fields) {
   const stageConfig = STAGE_TABLE_MAP[stageName];
   if (!stageConfig) throw new Error(`No editable fields for stage "${stageName}"`);

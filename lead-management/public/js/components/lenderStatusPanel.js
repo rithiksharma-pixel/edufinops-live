@@ -1,13 +1,12 @@
 // =========================================================
 // PRESENTATION LAYER — Lender status list (top of the Lenders tab)
-// One row per active lender for this lead. "Not Shared" rows can set a
-// reason and/or Share; "Shared" rows show the officer + deal stage.
-// Reason-edit and Share both expand inline into the same per-row slot
-// (only one open at a time) rather than showing form controls on every
-// row up front — keeps the list scannable when there are 15+ lenders.
+// One row per active lender for this lead. "Share" creates the deal
+// immediately (no loan-officer gate — most lenders have no officer
+// user yet), skipping straight to Bank Prospect; assigning an officer,
+// if/when one exists, happens later from "Manage this deal" alongside
+// region/stage, not as a precondition to sharing at all.
 // =========================================================
 import { getLenderStatusForLead, getNotSharedReasons, updateNotSharedReason, shareLeadWithLender } from '../services/lenderStatusService.js';
-import { getLoanOfficers } from '../services/lookupService.js';
 import { emptyState } from '../../../../shared/js/emptyState.js';
 
 const OTHER_REASON_VALUE = '__other__';
@@ -52,13 +51,25 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
       panelEl.querySelector(`[data-reason-toggle="${row.id}"]`)?.addEventListener('click', () => {
         toggleExpand(row.id, 'reason', () => renderReasonForm(row, buildReasonOptions, isOtherSelected, otherReason));
       });
-      panelEl.querySelector(`[data-share="${row.id}"]`)?.addEventListener('click', () => {
-        toggleExpand(row.id, 'share', () => renderShareForm(row));
+      panelEl.querySelector(`[data-share="${row.id}"]`)?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = 'Sharing…';
+        try {
+          await shareLeadWithLender(row.id, null, null);
+          showToast(`Shared with ${row.lenders.name}.`);
+          await refresh();
+          onShared?.();
+        } catch (err) {
+          showToast(err.message || 'Could not share with this lender.', true);
+          btn.disabled = false;
+          btn.textContent = 'Share';
+        }
       });
     });
   }
 
-  /** Only one expand (reason-edit or share) open per row at a time. */
+  /** Only one expand (reason-edit) open per row at a time. */
   function toggleExpand(rowId, mode, render) {
     const slot = panelEl.querySelector(`[data-expand-slot="${rowId}"]`);
     if (!slot) return;
@@ -98,37 +109,6 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
         await refresh();
       } catch (err) {
         showToast('Could not save this reason.', true);
-      }
-    });
-  }
-
-  function renderShareForm(row) {
-    const slot = panelEl.querySelector(`[data-expand-slot="${row.id}"]`);
-    slot.innerHTML = `
-      <div class="lender-matrix-reason-row">
-        <select data-share-officer style="min-width:220px;"><option value="">Loading officers…</option></select>
-        <button class="btn btn-primary" data-confirm-share style="font-size:12px;padding:6px 12px;">Confirm share</button>
-        <button class="btn btn-ghost" data-cancel-share style="font-size:12px;padding:6px 12px;">Cancel</button>
-      </div>
-      <p class="empty-state" style="padding:4px 0;font-size:12px;text-align:left;">Only the officer picked here will be able to see this deal — leave it unset if this lender isn't onboarded yet, and assign one later.</p>
-    `;
-
-    const officerSelect = slot.querySelector('[data-share-officer]');
-    getLoanOfficers(row.lenders.id).then((officers) => {
-      officerSelect.innerHTML = '<option value="">No officer yet</option>' +
-        officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('');
-    });
-
-    slot.querySelector('[data-cancel-share]').addEventListener('click', () => { slot.innerHTML = ''; slot.dataset.mode = ''; });
-    slot.querySelector('[data-confirm-share]').addEventListener('click', async () => {
-      const officerId = officerSelect.value || null;
-      try {
-        await shareLeadWithLender(row.id, officerId, null);
-        showToast(`Shared with ${row.lenders.name}.`);
-        await refresh();
-        onShared?.();
-      } catch (err) {
-        showToast(err.message || 'Could not share with this lender.', true);
       }
     });
   }
