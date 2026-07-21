@@ -369,24 +369,35 @@ async function bulkAddBranches() {
   const seen = new Set((branchesRes.data || []).map((b) => `${b.lender_id}|${b.name.toLowerCase()}`));
 
   const rows = [];
-  const unmatched = [];
+  const badFormat = [];
+  const unknownBank = [];
   let skipped = 0;
   for (const line of lines) {
     const idx = line.indexOf(',');
-    if (idx === -1) { unmatched.push(line); continue; }
+    if (idx === -1) { badFormat.push(line); continue; }
     const bank = line.slice(0, idx).trim();
     const branch = line.slice(idx + 1).trim();
-    if (!bank || !branch) { unmatched.push(line); continue; }
+    if (!bank || !branch) { badFormat.push(line); continue; }
     const lenderId = lenderByName.get(bank.toLowerCase());
-    if (!lenderId) { unmatched.push(line); continue; }
+    if (!lenderId) { unknownBank.push(line); continue; }
     const key = `${lenderId}|${branch.toLowerCase()}`;
     if (seen.has(key)) { skipped++; continue; }
     seen.add(key);
     rows.push({ lender_id: lenderId, name: branch });
   }
 
+  const unmatched = badFormat.length + unknownBank.length;
+  // This tool only ever adds branches to a lender that already exists —
+  // it deliberately can't create one, unlike Data Tools' CSV importer.
+  // A bank name with zero matches almost always means the lender itself
+  // was never created, not a typo in this paste — worth saying outright
+  // rather than lumping it in with "bad format" lines.
+  const unknownBankHint = unknownBank.length
+    ? ` ${unknownBank.length} line(s) named a bank that doesn't exist yet as a lender — add it first via Data Tools → Import lenders, then re-paste: ${unknownBank.slice(0, 3).join(' | ')}`
+    : '';
+
   if (rows.length === 0) {
-    return showBulkResult('branchBulkResult', `Nothing added. ${skipped} duplicate(s), ${unmatched.length} unusable line(s)${unmatched.length ? `: ${unmatched.slice(0, 3).join(' | ')}` : ''}`, true);
+    return showBulkResult('branchBulkResult', `Nothing added. ${skipped} duplicate(s), ${badFormat.length} bad-format line(s).${unknownBankHint}`, true);
   }
 
   const { data: auth } = await supabase.auth.getUser();
@@ -396,8 +407,9 @@ async function bulkAddBranches() {
   $('branchBulkText').value = '';
   const bits = [`Added ${rows.length} branch${rows.length === 1 ? '' : 'es'}`];
   if (skipped) bits.push(`skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
-  if (unmatched.length) bits.push(`${unmatched.length} line(s) had an unknown bank or bad format: ${unmatched.slice(0, 3).join(' | ')}`);
-  showBulkResult('branchBulkResult', `${bits.join(', ')}.`, unmatched.length > 0);
+  if (badFormat.length) bits.push(`${badFormat.length} bad-format line(s): ${badFormat.slice(0, 3).join(' | ')}`);
+  if (unknownBankHint) bits.push(unknownBankHint.trim());
+  showBulkResult('branchBulkResult', `${bits.join(', ')}.`, unmatched > 0);
   showToast(`Added ${rows.length} branch${rows.length === 1 ? '' : 'es'}.`);
   loadSettings();
 }
