@@ -11,6 +11,7 @@ create table document_types (
   id              uuid primary key default gen_random_uuid(),
   name            text not null unique,
   applies_to      text not null default 'Student' check (applies_to in ('Student','Co-applicant','Both')),
+  category        text not null default 'Other' check (category in ('KYC','Academics','Financials','Other')),
   is_required     boolean not null default false,
   sequence_order  integer not null default 100,
   created_at      timestamptz not null default now(),

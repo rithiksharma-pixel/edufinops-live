@@ -10,7 +10,7 @@ const BUCKET = 'lead-documents';
 export async function getDocumentTypes() {
   const { data, error } = await supabase
     .from('document_types')
-    .select('id, name, applies_to, is_required')
+    .select('id, name, applies_to, category, is_required')
     .eq('is_deleted', false)
     .order('sequence_order');
   if (error) throw error;
@@ -21,8 +21,8 @@ export async function getDocumentsForLead(leadId) {
   const { data, error } = await supabase
     .from('documents')
     .select(`
-      id, file_name, file_size_bytes, uploaded_at, verification_status, rejection_reason, remarks, storage_path,
-      document_types ( name ),
+      id, file_name, file_size_bytes, uploaded_at, verification_status, rejection_reason, remarks, storage_path, co_applicant_id,
+      document_types ( name, category ),
       uploaded_by_user:users!documents_uploaded_by_fkey ( full_name ),
       co_applicants ( full_name )
     `)
