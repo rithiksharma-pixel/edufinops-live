@@ -38,7 +38,7 @@ export async function getPossibleManagers(currentUser) {
   if (!currentUser || currentUser.role === 'Admin') {
     const { data, error } = await supabase
       .from('users')
-      .select('id, full_name, roles!inner(name)')
+      .select('id, full_name, team_id, roles!inner(name)')
       .in('roles.name', ['Manager', 'Associate Team Manager', 'Admin'])
       .eq('is_active', true)
       .order('full_name');
@@ -49,7 +49,7 @@ export async function getPossibleManagers(currentUser) {
   if (currentUser.role === 'Manager') {
     const { data, error } = await supabase
       .from('users')
-      .select('id, full_name, roles!inner(name)')
+      .select('id, full_name, team_id, roles!inner(name)')
       .eq('roles.name', 'Associate Team Manager')
       .eq('reporting_manager_id', currentUser.id)
       .eq('is_active', true)

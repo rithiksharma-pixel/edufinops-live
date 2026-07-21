@@ -33,6 +33,19 @@ let lenders = [];
 let teams = [];
 let currentUserProfile = null;
 
+/**
+ * "Full Name — Team" for a manager-picker option. The reporting-manager
+ * dropdowns used to show only names, with no way to tell a Bangalore
+ * manager from a Hyderabad one apart — the likely real cause behind any
+ * "why can this RM see the other team's leads" report, since nothing
+ * stops a reporting_manager_id from crossing team lines and this was
+ * the one place a person picking it had no visual cue they'd done so.
+ */
+function managerLabel(m) {
+  const teamName = teams.find((t) => t.id === m.team_id)?.name;
+  return `${m.full_name}${teamName ? ` — ${teamName}` : ''}`;
+}
+
 // Which roles each inviter is allowed to hand out — mirrors invite_user()'s
 // RPC-level scoping (see deployment/009_associate_team_manager_role_migration.sql).
 // This is convenience/UX only; the RPC re-validates regardless.
@@ -53,7 +66,7 @@ async function loadUsers() {
   users.forEach((u) => {
     const tr = document.createElement('tr');
     const roleOptions = roles.map((r) => `<option value="${r.id}" ${r.name === u.roles?.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
-    const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.full_name === u.reporting_manager?.full_name ? 'selected' : ''}>${escapeHtml(m.full_name)}</option>`).join('');
+    const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.full_name === u.reporting_manager?.full_name ? 'selected' : ''}>${escapeHtml(managerLabel(m))}</option>`).join('');
     const isManager = u.roles?.name === 'Manager';
     const teamCell = isManager
       ? `<select class="inline-select" data-team-for="${u.id}"><option value="">None</option>${teams.map((t) => `<option value="${t.id}" ${t.id === u.team_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>`
@@ -191,7 +204,7 @@ function initInviteModal() {
     managerField.hidden = !['Relationship Manager', 'Counselor', 'Business Development', 'Associate Team Manager'].includes(selectedName);
     if (!managerField.hidden) {
       const choices = managerChoicesFor(selectedName);
-      managerSelect.innerHTML = `<option value="">${isAdmin ? 'None' : 'Default (you, or pick a specific one below)'}</option>` + choices.map((m) => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('');
+      managerSelect.innerHTML = `<option value="">${isAdmin ? 'None' : 'Default (you, or pick a specific one below)'}</option>` + choices.map((m) => `<option value="${m.id}">${escapeHtml(managerLabel(m))}</option>`).join('');
     }
     // Team is only meaningful for Manager/ATM invites, and only Admin needs
     // to pick it explicitly — a Manager/ATM inviting someone auto-inherits
