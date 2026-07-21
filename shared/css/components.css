@@ -173,3 +173,49 @@
   background: var(--success-soft); color: var(--success-soft-ink);
 }
 .bulk-result.bulk-error { background: var(--warning-soft); color: var(--warning-soft-ink); }
+
+/* =========================================================
+   STAGE PROGRESS — horizontal stepper for a deal's pipeline position.
+   Default variant is labeled (deal detail panel); .stage-progress-compact
+   drops labels/borders down to dots+lines for a collapsed card header.
+   ========================================================= */
+.stage-progress { display: flex; align-items: center; flex-wrap: wrap; row-gap: 8px; }
+.stage-progress-step { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.stage-progress-dot {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  border: 1.5px solid var(--line); color: var(--ink-300); background: var(--bg-surface);
+}
+.stage-progress-label { font-size: 11.5px; color: var(--ink-300); white-space: nowrap; }
+.stage-progress-line { width: 28px; height: 1.5px; background: var(--line); margin: 0 6px; flex-shrink: 0; }
+
+.stage-progress-step.done .stage-progress-dot { border-color: var(--success); background: var(--success); color: #fff; }
+.stage-progress-step.done .stage-progress-label { color: var(--ink-700); }
+.stage-progress-line.done { background: var(--success); }
+
+.stage-progress-step.current .stage-progress-dot { border-color: var(--accent); background: var(--accent); color: var(--accent-ink, #fff); }
+.stage-progress-step.current .stage-progress-label { color: var(--ink-900); font-weight: 600; }
+
+.stage-progress-step.rejected .stage-progress-dot,
+.stage-progress-step.rejected .stage-progress-dot { border-color: var(--danger); background: var(--danger); color: #fff; }
+.stage-progress-step.rejected .stage-progress-label { color: var(--danger); font-weight: 600; }
+
+.stage-progress-compact .stage-progress-label { display: none; }
+.stage-progress-compact .stage-progress-dot { width: 9px; height: 9px; border-width: 0; }
+.stage-progress-compact .stage-progress-line { width: 14px; margin: 0 2px; }
+
+/* =========================================================
+   DEAL SECTION — groups a management panel into distinct, scannable
+   blocks instead of one flat stack of fields. Default is a tinted
+   card (matches this app's `.drawer-toppanel` "separated region"
+   treatment); .deal-section-quiet is a flatter outlined variant for
+   lower-emphasis content like Hold/Reject at the bottom of a panel.
+   ========================================================= */
+.deal-section { background: var(--paper-sunken); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 14px; }
+.deal-section:last-child { margin-bottom: 0; }
+.deal-section-label {
+  font-size: 11px; font-weight: 600; color: var(--ink-500);
+  text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 10px;
+}
+.deal-section-quiet { background: transparent; border: 1px solid var(--border); padding: 12px 16px; }

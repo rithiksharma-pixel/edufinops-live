@@ -1,9 +1,10 @@
 // =========================================================
-// PRESENTATION LAYER — Lender status matrix (top of the Lenders tab)
-// One row per active lender for this lead. "Not Shared" rows get a
-// reason picker; "Shared" rows show which officer + deal stage. Marking
-// a row Shared opens an inline officer picker (required — a deal is
-// only visible to the specific person it's assigned to at a lender).
+// PRESENTATION LAYER — Lender status list (top of the Lenders tab)
+// One row per active lender for this lead. "Not Shared" rows can set a
+// reason and/or Share; "Shared" rows show the officer + deal stage.
+// Reason-edit and Share both expand inline into the same per-row slot
+// (only one open at a time) rather than showing form controls on every
+// row up front — keeps the list scannable when there are 15+ lenders.
 // =========================================================
 import { getLenderStatusForLead, getNotSharedReasons, updateNotSharedReason, shareLeadWithLender } from '../services/lenderStatusService.js';
 import { getLoanOfficers } from '../services/lookupService.js';
@@ -37,63 +38,88 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
 
     panelEl.innerHTML = `
       <h4 style="font-size:13px;font-weight:500;margin:0 0 10px;">Lenders</h4>
-      <table class="lender-matrix-table">
-        <thead><tr><th>Lender</th><th>Status</th><th>Detail</th><th></th></tr></thead>
-        <tbody>
-          ${rows.map((row) => renderRow(row, buildReasonOptions, canEdit)).join('')}
-        </tbody>
-      </table>
+      <div class="lender-row-list">
+        ${rows.map((row) => renderRow(row)).join('')}
+      </div>
     `;
 
     if (!canEdit) return;
 
     rows.forEach((row) => {
       if (row.share_status === 'Shared') return;
+      const isOtherSelected = row.lead_lender_not_shared_reasons?.name === 'Other';
 
-      const reasonSelect = panelEl.querySelector(`[data-reason-for="${row.id}"]`);
-      const otherInput = panelEl.querySelector(`[data-reason-other-for="${row.id}"]`);
-      reasonSelect?.addEventListener('change', () => {
-        const isOther = reasonSelect.value === OTHER_REASON_VALUE;
-        if (otherInput) otherInput.hidden = !isOther;
+      panelEl.querySelector(`[data-reason-toggle="${row.id}"]`)?.addEventListener('click', () => {
+        toggleExpand(row.id, 'reason', () => renderReasonForm(row, buildReasonOptions, isOtherSelected, otherReason));
       });
-
-      const saveReasonBtn = panelEl.querySelector(`[data-save-reason="${row.id}"]`);
-      saveReasonBtn?.addEventListener('click', async () => {
-        const isOther = reasonSelect.value === OTHER_REASON_VALUE;
-        const reasonId = isOther ? otherReason?.id ?? null : reasonSelect.value || null;
-        const otherText = isOther ? otherInput.value.trim() : null;
-        try {
-          await updateNotSharedReason(row.id, reasonId, otherText);
-          showToast('Reason saved.');
-          await refresh();
-        } catch (err) {
-          showToast('Could not save this reason.', true);
-        }
+      panelEl.querySelector(`[data-share="${row.id}"]`)?.addEventListener('click', () => {
+        toggleExpand(row.id, 'share', () => renderShareForm(row));
       });
-
-      const shareBtn = panelEl.querySelector(`[data-share="${row.id}"]`);
-      shareBtn?.addEventListener('click', () => showShareForm(row));
     });
   }
 
-  async function showShareForm(row) {
-    const slot = panelEl.querySelector(`[data-share-slot="${row.id}"]`);
+  /** Only one expand (reason-edit or share) open per row at a time. */
+  function toggleExpand(rowId, mode, render) {
+    const slot = panelEl.querySelector(`[data-expand-slot="${rowId}"]`);
     if (!slot) return;
+    if (slot.dataset.mode === mode) {
+      slot.innerHTML = '';
+      slot.dataset.mode = '';
+      return;
+    }
+    slot.dataset.mode = mode;
+    render(slot);
+  }
+
+  function renderReasonForm(row, buildReasonOptions, isOtherSelected, otherReason) {
+    const slot = panelEl.querySelector(`[data-expand-slot="${row.id}"]`);
     slot.innerHTML = `
-      <div class="lender-matrix-reason-row" style="margin-top:8px;">
+      <div class="lender-matrix-reason-row">
+        <select data-reason-for="${row.id}">${buildReasonOptions(row.not_shared_reason_id, isOtherSelected)}</select>
+        <input type="text" data-reason-other-for="${row.id}" placeholder="Reason…" value="${escapeHtml(row.not_shared_other_text || '')}" ${isOtherSelected ? '' : 'hidden'} style="min-width:160px;" />
+        <button class="btn btn-primary" data-save-reason="${row.id}" style="font-size:12px;padding:6px 12px;">Save</button>
+        <button class="btn btn-ghost" data-cancel-reason style="font-size:12px;padding:6px 12px;">Cancel</button>
+      </div>
+    `;
+    const reasonSelect = slot.querySelector(`[data-reason-for="${row.id}"]`);
+    const otherInput = slot.querySelector(`[data-reason-other-for="${row.id}"]`);
+    reasonSelect.addEventListener('change', () => {
+      const isOther = reasonSelect.value === OTHER_REASON_VALUE;
+      otherInput.hidden = !isOther;
+    });
+    slot.querySelector('[data-cancel-reason]').addEventListener('click', () => { slot.innerHTML = ''; slot.dataset.mode = ''; });
+    slot.querySelector(`[data-save-reason="${row.id}"]`).addEventListener('click', async () => {
+      const isOther = reasonSelect.value === OTHER_REASON_VALUE;
+      const reasonId = isOther ? otherReason?.id ?? null : reasonSelect.value || null;
+      const otherText = isOther ? otherInput.value.trim() : null;
+      try {
+        await updateNotSharedReason(row.id, reasonId, otherText);
+        showToast('Reason saved.');
+        await refresh();
+      } catch (err) {
+        showToast('Could not save this reason.', true);
+      }
+    });
+  }
+
+  function renderShareForm(row) {
+    const slot = panelEl.querySelector(`[data-expand-slot="${row.id}"]`);
+    slot.innerHTML = `
+      <div class="lender-matrix-reason-row">
         <select data-share-officer style="min-width:220px;"><option value="">Loading officers…</option></select>
         <button class="btn btn-primary" data-confirm-share style="font-size:12px;padding:6px 12px;">Confirm share</button>
         <button class="btn btn-ghost" data-cancel-share style="font-size:12px;padding:6px 12px;">Cancel</button>
       </div>
-      <p class="empty-state" style="padding:4px 0;font-size:12px;">Only the officer picked here will be able to see this deal — leave it unset if this lender isn't onboarded yet, and assign one later.</p>
+      <p class="empty-state" style="padding:4px 0;font-size:12px;text-align:left;">Only the officer picked here will be able to see this deal — leave it unset if this lender isn't onboarded yet, and assign one later.</p>
     `;
 
     const officerSelect = slot.querySelector('[data-share-officer]');
-    const officers = await getLoanOfficers(row.lenders.id);
-    officerSelect.innerHTML = '<option value="">No officer yet</option>' +
-      officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('');
+    getLoanOfficers(row.lenders.id).then((officers) => {
+      officerSelect.innerHTML = '<option value="">No officer yet</option>' +
+        officers.map((o) => `<option value="${o.id}">${escapeHtml(o.full_name)}${o.lender_branches ? ' — ' + escapeHtml(o.lender_branches.name) : ''}</option>`).join('');
+    });
 
-    slot.querySelector('[data-cancel-share]').addEventListener('click', () => { slot.innerHTML = ''; });
+    slot.querySelector('[data-cancel-share]').addEventListener('click', () => { slot.innerHTML = ''; slot.dataset.mode = ''; });
     slot.querySelector('[data-confirm-share]').addEventListener('click', async () => {
       const officerId = officerSelect.value || null;
       try {
@@ -107,48 +133,51 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
     });
   }
 
-  function renderRow(row, buildReasonOptions, canEdit) {
+  function renderRow(row) {
     const isShared = row.share_status === 'Shared';
     const isOtherSelected = row.lead_lender_not_shared_reasons?.name === 'Other';
 
-    let statusCell, detail;
     if (isShared) {
-      // The certification-stamp mark — the same passport-stamp motif the
-      // Timeline already uses for a stage change, reused here for "this
-      // lender has genuinely seen this student," not just a DB flag flip.
-      statusCell = `
-        <div class="lender-officer-cell">
-          <span class="lender-stamp-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></span>
-          <span class="lender-status-badge shared"><span class="dot"></span>Shared</span>
-        </div>`;
       const stageName = row.deals?.current_deal_stage?.name || '–';
       const officerName = row.deals?.assigned_loan_officer?.full_name || '–';
-      detail = `${escapeHtml(officerName)} · ${escapeHtml(stageName)}`;
-    } else {
-      statusCell = `<span class="lender-status-badge not-shared"><span class="dot"></span>Not Shared</span>`;
-      const reasonText = isOtherSelected ? (row.not_shared_other_text || '–') : (row.lead_lender_not_shared_reasons?.name || '–');
-      const attribution = row.not_shared_reason_id && row.updated_by_user
-        ? `<span class="lender-matrix-reason-who">Marked by ${escapeHtml(row.updated_by_user.full_name)}, ${formatRelative(row.updated_at)}</span>`
-        : '';
-      detail = canEdit
-        ? `<div class="lender-matrix-reason-row">
-            <select data-reason-for="${row.id}">${buildReasonOptions(row.not_shared_reason_id, isOtherSelected)}</select>
-            <input type="text" data-reason-other-for="${row.id}" placeholder="Reason…" value="${escapeHtml(row.not_shared_other_text || '')}" ${isOtherSelected ? '' : 'hidden'} style="min-width:160px;" />
-            <button class="btn btn-ghost" data-save-reason="${row.id}" style="font-size:12px;padding:5px 10px;">Save</button>
-          </div>${attribution}`
-        : `${escapeHtml(reasonText)}${attribution}`;
+      return `
+        <div class="lender-row">
+          <div class="lender-row-main">
+            <span class="lender-stamp-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12l4 4L19 6"/></svg></span>
+            <span class="lender-row-name">${escapeHtml(row.lenders?.name || 'Unknown')}</span>
+          </div>
+          <div class="lender-row-detail">
+            <span class="lender-status-badge shared"><span class="dot"></span>Shared</span>
+            <span style="margin-left:10px;">${escapeHtml(officerName)} · ${escapeHtml(stageName)}</span>
+          </div>
+          <div class="lender-row-actions"></div>
+        </div>
+      `;
     }
 
+    const reasonText = isOtherSelected ? (row.not_shared_other_text || null) : (row.lead_lender_not_shared_reasons?.name || null);
+    const attribution = row.not_shared_reason_id && row.updated_by_user
+      ? `<span class="lender-matrix-reason-who">Marked by ${escapeHtml(row.updated_by_user.full_name)}, ${formatRelative(row.updated_at)}</span>`
+      : '';
+
     return `
-      <tr>
-        <td><strong>${escapeHtml(row.lenders?.name || 'Unknown')}</strong></td>
-        <td>${statusCell}</td>
-        <td>${detail}</td>
-        <td>
-          ${!isShared && canEdit ? `<button class="btn btn-ghost" data-share="${row.id}" style="font-size:12px;padding:5px 10px;">Share</button>` : ''}
-          <div data-share-slot="${row.id}"></div>
-        </td>
-      </tr>
+      <div class="lender-row">
+        <div class="lender-row-main">
+          <span class="lender-row-name">${escapeHtml(row.lenders?.name || 'Unknown')}</span>
+        </div>
+        <div class="lender-row-detail">
+          <span class="lender-status-badge not-shared"><span class="dot"></span>Not Shared</span>
+          ${reasonText ? `<span style="margin-left:10px;">${escapeHtml(reasonText)}</span>` : ''}
+          ${attribution}
+        </div>
+        <div class="lender-row-actions">
+          ${canEdit ? `
+            <button class="btn btn-ghost" data-reason-toggle="${row.id}" style="font-size:12px;padding:5px 10px;">${reasonText ? 'Edit reason' : 'Add reason'}</button>
+            <button class="btn btn-primary" data-share="${row.id}" style="font-size:12px;padding:5px 10px;">Share</button>
+          ` : ''}
+        </div>
+        <div class="lender-row-expand" data-expand-slot="${row.id}"></div>
+      </div>
     `;
   }
 

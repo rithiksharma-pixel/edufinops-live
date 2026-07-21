@@ -457,16 +457,27 @@ button, input, select { font-family: inherit; font-size: inherit; }
 .toast.error { background: var(--danger); }
 
 /* =========================================================
-   LENDER STATUS MATRIX
+   LENDER STATUS LIST — a row per lender, not a bordered table.
+   Generous padding + a hairline divider between rows, a hover lift,
+   and a per-row expand slot for Share/reason-edit so those controls
+   only ever show on the row actually being acted on.
    ========================================================= */
-.lender-matrix-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.lender-matrix-table th {
-  text-align: left; font-weight: 500; color: var(--ink-500);
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
-  padding: 8px 10px; border-bottom: 1px solid var(--border);
+.lender-row-list { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-surface); }
+.lender-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  transition: background 0.12s ease;
 }
-.lender-matrix-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.lender-matrix-table tr:last-child td { border-bottom: none; }
+.lender-row:last-child { border-bottom: none; }
+.lender-row:hover { background: var(--bg-hover); }
+.lender-row-main { display: flex; align-items: center; gap: 10px; min-width: 200px; flex-shrink: 0; }
+.lender-row-name { font-weight: 500; font-size: 14px; color: var(--ink-900); }
+.lender-row-detail { flex: 1; min-width: 0; color: var(--ink-500); }
+.lender-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: auto; }
+.lender-row-expand:not(:empty) { flex-basis: 100%; margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--border); }
+
 .lender-status-badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px 4px 8px;
   border-radius: 999px; font-size: 12px; font-weight: 600;
@@ -474,7 +485,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
 .lender-status-badge.shared { background: var(--success-soft, #E3EEE8); color: var(--success-soft-ink, #1F4A37); }
 .lender-status-badge.not-shared { background: var(--bg-hover); color: var(--ink-500); }
 .lender-status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.lender-matrix-table select, .lender-matrix-table input { font-size: 13px; padding: 5px 8px; }
+.lender-matrix-reason-row select, .lender-matrix-reason-row input { font-size: 13px; padding: 6px 9px; }
 .lender-matrix-reason-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .lender-matrix-reason-who { display: block; font-size: 11px; color: var(--ink-300); margin-top: 3px; }
 
@@ -491,7 +502,6 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border-radius: 50%; opacity: 0.5;
 }
 .lender-stamp-mark svg { width: 11px; height: 11px; }
-.lender-officer-cell { display: flex; align-items: center; gap: 9px; }
 
 /* =========================================================
    RESPONSIVE

@@ -60,6 +60,9 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     } else if (deal.is_on_hold) {
       banner = `<div class="badge badge-warning" style="margin-top:6px;">On hold${deal.hold_reason ? ' · ' + escapeHtml(deal.hold_reason.name) : ''}</div>`;
     }
+    const stepperHtml = deal.is_rejected
+      ? ''
+      : `<div style="margin-top:10px;">${renderStageProgress(stages, deal.current_deal_stage?.id, { compact: true })}</div>`;
 
     wrap.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -71,6 +74,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
         </div>
         <span class="badge badge-accent">${escapeHtml(stageName)}${statusName ? ' · ' + escapeHtml(statusName) : ''}</span>
       </div>
+      ${stepperHtml}
       ${banner}
       ${deal.total_disbursed_amount ? `<div class="detail-row"><span class="k">Disbursed so far</span><span class="v">${formatCurrency(deal.total_disbursed_amount)}</span></div>` : ''}
       <button class="btn btn-ghost" style="margin-top:10px;font-size:12px;padding:6px 12px;" data-manage="${deal.id}">Manage this deal</button>
@@ -176,10 +180,15 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
     if (deal.is_rejected) {
       el.innerHTML = `
-        <div class="detail-row"><span class="k">Rejected at stage</span><span class="v">${escapeHtml(deal.current_deal_stage?.name || '–')}</span></div>
-        <div class="detail-row"><span class="k">Rejection date</span><span class="v">${formatDateTime(deal.rejection_date)}</span></div>
-        <div class="detail-row"><span class="k">Remarks</span><span class="v">${escapeHtml(deal.rejection_remarks || '–')}</span></div>
-        <button class="btn btn-primary" style="margin-top:10px;width:100%;justify-content:center;" data-action="reinstate">Reinstate this deal</button>
+        <div style="padding-bottom:16px;">
+          ${renderStageProgress(stages, deal.current_deal_stage?.id, { rejected: true })}
+        </div>
+        <div class="deal-section deal-section-quiet">
+          <div class="detail-row"><span class="k">Rejected at stage</span><span class="v">${escapeHtml(deal.current_deal_stage?.name || '–')}</span></div>
+          <div class="detail-row"><span class="k">Rejection date</span><span class="v">${formatDateTime(deal.rejection_date)}</span></div>
+          <div class="detail-row"><span class="k">Remarks</span><span class="v">${escapeHtml(deal.rejection_remarks || '–')}</span></div>
+          <button class="btn btn-primary" style="margin-top:10px;width:100%;justify-content:center;" data-action="reinstate">Reinstate this deal</button>
+        </div>
         ${renderQueriesSection(deal, queries, queryCategories)}
       `;
       el.querySelector('[data-action="reinstate"]').addEventListener('click', async () => {
@@ -221,7 +230,8 @@ export async function initDealsTab(panelEl, leadId, ctx) {
     let disbursementHtml = '';
     if (stageName === 'Disbursement' || stageName === 'Closed Won') {
       disbursementHtml = `
-        <h4 style="font-size:13px;font-weight:500;margin:16px 0 8px;">Tranches</h4>
+      <div class="deal-section">
+        <div class="deal-section-label">Tranches</div>
         ${disbursements.length === 0 ? '<p class="empty-state" style="padding:8px 0;">No tranches recorded yet.</p>' : ''}
         ${disbursements
           .map((d) => `<div class="detail-row"><span class="k">Tranche ${d.tranche_number}${d.academic_term ? ' · ' + escapeHtml(d.academic_term) : ''}</span><span class="v">${formatCurrency(d.amount)} · ${formatDate(d.disbursed_date)}</span></div>`)
@@ -235,47 +245,61 @@ export async function initDealsTab(panelEl, leadId, ctx) {
         </div>
         <button class="btn btn-ghost" style="margin-top:8px;" data-action="add-tranche">Add tranche</button>
         ` : ''}
+      </div>
       `;
     }
 
     el.innerHTML = `
-      <div class="form-field" style="max-width:320px;">
-        <label>Region</label>
-        <select data-action-field="region">${branchOptions}</select>
+      <div style="padding-bottom:16px;">
+        ${renderStageProgress(stages, deal.current_deal_stage?.id)}
       </div>
-      <button class="btn btn-ghost" style="margin-bottom:14px;" data-action="save-region">Save region</button>
 
-      ${stageConfig ? `<h4 style="font-size:13px;font-weight:500;margin:0 0 8px;">${escapeHtml(stageName)} details</h4><div class="form-grid">${stageFormHtml}</div>
-      <button class="btn btn-ghost" style="margin-top:8px;" data-action="save-stage-fields">Save details</button>` : ''}
+      <div class="deal-section">
+        <div class="deal-section-label">Region</div>
+        <select data-action-field="region" style="max-width:320px;">${branchOptions}</select>
+        <div><button class="btn btn-ghost" style="margin-top:10px;" data-action="save-region">Save region</button></div>
+      </div>
+
+      ${stageConfig ? `
+      <div class="deal-section">
+        <div class="deal-section-label">${escapeHtml(stageName)} details</div>
+        <div class="form-grid">${stageFormHtml}</div>
+        <button class="btn btn-ghost" style="margin-top:8px;" data-action="save-stage-fields">Save details</button>
+      </div>` : ''}
 
       ${disbursementHtml}
 
-      <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Actions</h4>
-      <div class="form-grid">
-        <div class="form-field">
-          <label>Advance to stage</label>
-          <select data-action-field="next_stage_id"><option value="">Select a stage…</option>${stageOptions}</select>
+      <div class="deal-section">
+        <div class="deal-section-label">Move stage</div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label>Advance to stage</label>
+            <select data-action-field="next_stage_id"><option value="">Select a stage…</option>${stageOptions}</select>
+          </div>
+          <div class="form-field">
+            <label>Disposition</label>
+            <select data-action-field="next_status_id"><option value="">Select a stage first…</option></select>
+          </div>
         </div>
-        <div class="form-field">
-          <label>Disposition</label>
-          <select data-action-field="next_status_id"><option value="">Select a stage first…</option></select>
-        </div>
+        <button class="btn btn-primary" data-action="advance-stage">Move stage</button>
       </div>
-      <button class="btn btn-ghost" data-action="advance-stage">Move stage</button>
 
-      <div style="display:flex;gap:8px;margin-top:10px;">
-        <button class="btn btn-ghost" style="flex:1;" data-action="toggle-hold-form">${deal.is_on_hold ? 'Release hold' : 'Put on hold'}</button>
-        <button class="btn btn-ghost" style="flex:1;color:var(--danger);" data-action="toggle-reject-form">Reject deal</button>
-      </div>
-      <div id="holdForm" hidden style="margin-top:10px;">
-        <div class="form-field"><label>Hold reason</label><select data-field="hold_reason_id">${holdReasonOptions}</select></div>
-        <div class="form-field"><label>Remarks</label><textarea data-field="hold_remarks" rows="2"></textarea></div>
-        <button class="btn btn-primary" data-action="confirm-hold">Confirm hold</button>
-      </div>
-      <div id="rejectForm" hidden style="margin-top:10px;">
-        <div class="form-field"><label>Rejection reason</label><select data-field="rejection_reason_id">${rejectionReasonOptions}</select></div>
-        <div class="form-field"><label>Remarks</label><textarea data-field="rejection_remarks" rows="2"></textarea></div>
-        <button class="btn btn-primary" style="background:var(--danger);" data-action="confirm-reject">Confirm rejection</button>
+      <div class="deal-section deal-section-quiet">
+        <div class="deal-section-label">Hold &amp; reject</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" style="flex:1;" data-action="toggle-hold-form">${deal.is_on_hold ? 'Release hold' : 'Put on hold'}</button>
+          <button class="btn btn-ghost" style="flex:1;color:var(--danger);border-color:var(--danger-soft);" data-action="toggle-reject-form">Reject deal</button>
+        </div>
+        <div id="holdForm" hidden style="margin-top:10px;">
+          <div class="form-field"><label>Hold reason</label><select data-field="hold_reason_id">${holdReasonOptions}</select></div>
+          <div class="form-field"><label>Remarks</label><textarea data-field="hold_remarks" rows="2"></textarea></div>
+          <button class="btn btn-primary" data-action="confirm-hold">Confirm hold</button>
+        </div>
+        <div id="rejectForm" hidden style="margin-top:10px;">
+          <div class="form-field"><label>Rejection reason</label><select data-field="rejection_reason_id">${rejectionReasonOptions}</select></div>
+          <div class="form-field"><label>Remarks</label><textarea data-field="rejection_remarks" rows="2"></textarea></div>
+          <button class="btn btn-primary" style="background:var(--danger);" data-action="confirm-reject">Confirm rejection</button>
+        </div>
       </div>
 
       ${renderQueriesSection(deal, queries, queryCategories)}
@@ -413,4 +437,22 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
+}
+
+/**
+ * Horizontal stage stepper — see .stage-progress in shared/css/components.css.
+ * `stages` must already be sequence_order-sorted (getDealStages() is).
+ */
+function renderStageProgress(stages, currentStageId, { compact = false, rejected = false } = {}) {
+  const currentIndex = stages.findIndex((s) => s.id === currentStageId);
+  const parts = stages.map((s, i) => {
+    let stateClass;
+    if (rejected && i === currentIndex) stateClass = 'rejected';
+    else stateClass = i < currentIndex ? 'done' : i === currentIndex ? 'current' : 'upcoming';
+    const dotContent = stateClass === 'done' ? '✓' : stateClass === 'rejected' ? '✕' : String(i + 1);
+    const step = `<div class="stage-progress-step ${stateClass}"><span class="stage-progress-dot">${dotContent}</span><span class="stage-progress-label">${escapeHtml(s.name)}</span></div>`;
+    const line = i < stages.length - 1 ? `<span class="stage-progress-line ${i < currentIndex ? 'done' : ''}"></span>` : '';
+    return step + line;
+  });
+  return `<div class="stage-progress${compact ? ' stage-progress-compact' : ''}">${parts.join('')}</div>`;
 }
