@@ -13,25 +13,50 @@ import { renderLeadTable } from './components/leadTable.js';
 import { renderFunnelCards } from './components/funnelCards.js';
 import { initLeadFormModal } from './components/leadFormModal.js';
 import { initLeadDrawer } from './components/leadDrawer.js';
+import { initSmartViewTabs } from './components/smartViewTabs.js';
+
+const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', overdueOnly: false, search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
 
 const state = {
   currentUser: null,
   stages: [],
   sources: [],
   rms: [],
-  filters: { stageId: '', sourceId: '', rmId: '', search: '', dateField: 'created_at', dateFrom: '', dateTo: '' },
+  filters: { ...DEFAULT_FILTERS },
 };
+
+let smartViewTabs;
 
 async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
   try {
     const [leads, counts] = await Promise.all([listLeads(state.filters), getStageCounts()]);
     renderLeadTable(tbody, leads, (leadId) => drawer.open(leadId));
-    renderFunnelCards(document.getElementById('funnelRow'), state.stages, counts);
+    renderFunnelCards(document.getElementById('funnelRow'), state.stages, counts, state.filters.stageId, (stageId) => {
+      state.filters.stageId = stageId || '';
+      document.getElementById('filterStage').value = state.filters.stageId;
+      smartViewTabs?.clearActive();
+      refreshLeadsAndFunnel();
+    });
   } catch (err) {
     console.error(err);
     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Could not load leads. Please refresh.</td></tr>';
   }
+}
+
+/** Applies a filter set (from a Smart View tab or a URL deep-link) and syncs every filter-bar control to match. */
+function applyFilters(filters) {
+  state.filters = { ...DEFAULT_FILTERS, ...filters };
+  document.getElementById('filterStage').value = state.filters.stageId;
+  document.getElementById('filterSource').value = state.filters.sourceId;
+  document.getElementById('filterRm').value = state.filters.rmId;
+  document.getElementById('filterPriority').value = state.filters.priority;
+  document.getElementById('filterOverdueOnly').checked = state.filters.overdueOnly;
+  document.getElementById('filterDateField').value = state.filters.dateField;
+  document.getElementById('filterDateFrom').value = state.filters.dateFrom;
+  document.getElementById('filterDateTo').value = state.filters.dateTo;
+  document.getElementById('filterSearch').value = state.filters.search;
+  refreshLeadsAndFunnel();
 }
 
 function populateFilterDropdowns() {
@@ -52,16 +77,35 @@ function populateFilterDropdowns() {
     state.rms.map((u) => `<option value="${u.id}">${escapeHtml(u.full_name)}</option>`).join('')
   );
 
+  // Every direct filter-bar edit also clears the active Smart View tab
+  // highlight — the filters no longer exactly match what was saved.
   stageSelect.addEventListener('change', (e) => {
     state.filters.stageId = e.target.value;
+    smartViewTabs?.clearActive();
     refreshLeadsAndFunnel();
   });
   sourceSelect.addEventListener('change', (e) => {
     state.filters.sourceId = e.target.value;
+    smartViewTabs?.clearActive();
     refreshLeadsAndFunnel();
   });
   rmSelect.addEventListener('change', (e) => {
     state.filters.rmId = e.target.value;
+    smartViewTabs?.clearActive();
+    refreshLeadsAndFunnel();
+  });
+
+  const prioritySelect = document.getElementById('filterPriority');
+  prioritySelect.addEventListener('change', (e) => {
+    state.filters.priority = e.target.value;
+    smartViewTabs?.clearActive();
+    refreshLeadsAndFunnel();
+  });
+
+  const overdueOnlyInput = document.getElementById('filterOverdueOnly');
+  overdueOnlyInput.addEventListener('change', (e) => {
+    state.filters.overdueOnly = e.target.checked;
+    smartViewTabs?.clearActive();
     refreshLeadsAndFunnel();
   });
 
@@ -70,6 +114,7 @@ function populateFilterDropdowns() {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
       state.filters.search = e.target.value.trim();
+      smartViewTabs?.clearActive();
       refreshLeadsAndFunnel();
     }, 300);
   });
@@ -80,29 +125,25 @@ function populateFilterDropdowns() {
 
   dateFieldSelect.addEventListener('change', (e) => {
     state.filters.dateField = e.target.value;
+    smartViewTabs?.clearActive();
     // Only re-query if a range is actually set — switching the basis with no
     // dates chosen changes nothing.
     if (state.filters.dateFrom || state.filters.dateTo) refreshLeadsAndFunnel();
   });
   dateFromInput.addEventListener('change', (e) => {
     state.filters.dateFrom = e.target.value;
+    smartViewTabs?.clearActive();
     refreshLeadsAndFunnel();
   });
   dateToInput.addEventListener('change', (e) => {
     state.filters.dateTo = e.target.value;
+    smartViewTabs?.clearActive();
     refreshLeadsAndFunnel();
   });
 
   document.getElementById('btnClearFilters').addEventListener('click', () => {
-    state.filters = { stageId: '', sourceId: '', rmId: '', search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
-    stageSelect.value = '';
-    sourceSelect.value = '';
-    rmSelect.value = '';
-    dateFieldSelect.value = 'created_at';
-    dateFromInput.value = '';
-    dateToInput.value = '';
-    document.getElementById('filterSearch').value = '';
-    refreshLeadsAndFunnel();
+    smartViewTabs?.clearActive();
+    applyFilters({});
   });
 }
 
@@ -146,6 +187,13 @@ async function bootstrap() {
 
   populateFilterDropdowns();
 
+  smartViewTabs = await initSmartViewTabs(document.getElementById('smartViewTabs'), {
+    currentUser: state.currentUser,
+    showToast,
+    getCurrentFilters: () => ({ ...state.filters }),
+    applyFilters,
+  });
+
   drawer = initLeadDrawer({
     showToast,
     onLeadUpdated: refreshLeadsAndFunnel,
@@ -166,18 +214,29 @@ async function bootstrap() {
     document.getElementById('btnNewLead').style.display = 'none';
   }
 
-  await refreshLeadsAndFunnel();
-
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (window.__closeLeadModal) window.__closeLeadModal();
     if (window.__closeLeadDrawer) window.__closeLeadDrawer();
   });
 
-  // Deep-link support: /lead-management/public/index.html?openLead=<uuid>
-  // lets other apps (RM Workspace) link straight into a lead's detail
-  // drawer instead of duplicating the Deals/Documents/Timeline UI.
+  // Deep-link support from other apps' dashboards: a stat card (e.g.
+  // "Active leads: 340") links here with the matching filters as query
+  // params instead of duplicating a second filterable list elsewhere.
+  // ?openLead=<uuid> opens one lead's drawer directly (pre-existing).
   const params = new URLSearchParams(window.location.search);
+  const paramFilters = {};
+  ['stageId', 'sourceId', 'rmId', 'priority', 'dateField', 'dateFrom', 'dateTo', 'search'].forEach((key) => {
+    if (params.has(key)) paramFilters[key] = params.get(key);
+  });
+  if (params.get('overdueOnly') === 'true') paramFilters.overdueOnly = true;
+
+  if (Object.keys(paramFilters).length > 0) {
+    applyFilters(paramFilters);
+  } else {
+    await refreshLeadsAndFunnel();
+  }
+
   const openLeadId = params.get('openLead');
   if (openLeadId) {
     drawer.open(openLeadId);

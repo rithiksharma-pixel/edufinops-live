@@ -15,20 +15,16 @@ const LEAD_LIST_SELECT = `
 `;
 
 /**
- * Fetch leads with optional filters. RLS already restricts rows to what
- * the current user's role is allowed to see — this function does not
- * need to (and must not) apply its own role-based scoping.
+ * Applies the shared filter set (used by both listLeads and countLeads,
+ * so a Smart View's tab count always matches what the list actually
+ * shows once you click it) to a `leads` query builder in place.
  */
-export async function listLeads({ stageId, sourceId, rmId, search, dateField, dateFrom, dateTo } = {}) {
-  let query = supabase
-    .from('leads')
-    .select(LEAD_LIST_SELECT)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
-
+function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, dateFrom, dateTo, priority, overdueOnly } = {}) {
   if (stageId) query = query.eq('current_stage_id', stageId);
   if (sourceId) query = query.eq('lead_source_id', sourceId);
   if (rmId) query = query.eq('assigned_rm_id', rmId);
+  if (priority) query = query.eq('priority', priority);
+  if (overdueOnly) query = query.lt('next_follow_up_at', new Date().toISOString());
   if (search) {
     query = query.or(`student_name.ilike.%${search}%,student_phone.ilike.%${search}%`);
   }
@@ -40,9 +36,40 @@ export async function listLeads({ stageId, sourceId, rmId, search, dateField, da
   if (dateFrom) query = query.gte(field, `${dateFrom}T00:00:00`);
   if (dateTo) query = query.lte(field, `${dateTo}T23:59:59.999`);
 
+  return query;
+}
+
+/**
+ * Fetch leads with optional filters. RLS already restricts rows to what
+ * the current user's role is allowed to see — this function does not
+ * need to (and must not) apply its own role-based scoping.
+ */
+export async function listLeads(filters = {}) {
+  let query = supabase
+    .from('leads')
+    .select(LEAD_LIST_SELECT)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+
+  query = applyLeadFilters(query, filters);
+
   const { data, error } = await query;
   if (error) throw error;
   return data;
+}
+
+/** Same filter set as listLeads, head-only count — powers Smart View tab badges. */
+export async function countLeads(filters = {}) {
+  let query = supabase
+    .from('leads')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_deleted', false);
+
+  query = applyLeadFilters(query, filters);
+
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /**

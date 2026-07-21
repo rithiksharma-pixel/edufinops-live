@@ -226,10 +226,13 @@ async function renderRmDashboard() {
   ]);
 
   document.getElementById('rmDashStats').innerHTML = [
-    [leads.length, 'Assigned leads', 'fa-inbox', 'var(--accent)'],
-    [overdue.length, 'Overdue follow-ups', 'fa-clock', 'var(--danger)'],
-    [leads.length - overdue.length, 'On track', 'fa-circle-check', 'var(--success)'],
-  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+    [leads.length, 'Assigned leads', 'fa-inbox', 'var(--accent)', 'assigned'],
+    [overdue.length, 'Overdue follow-ups', 'fa-clock', 'var(--danger)', 'followups'],
+    [leads.length - overdue.length, 'On track', 'fa-circle-check', 'var(--success)', null],
+  ].map(([value, label, icon, accent, view]) => `<div class="stat-card"${view ? ` data-goto-view="${view}"` : ''} style="--stat-accent:${accent};${view ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  document.querySelectorAll('#rmDashStats [data-goto-view]').forEach((card) => {
+    card.addEventListener('click', () => loadView(card.dataset.gotoView));
+  });
 
   const stageCounts = {};
   leads.forEach((l) => {
@@ -244,13 +247,18 @@ async function renderRmDashboard() {
     </div>
   `).join('') || emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, their stage breakdown will show here.');
 
-  const overdueFollowUpHtml = overdue.slice(0, 8).map((l) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('');
-  const overdueTaskHtml = overdueTasks.slice(0, 8).map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)}${t.leads ? ' · ' + escapeHtml(t.leads.student_name) : ''}</span><span class="badge badge-danger">Overdue task</span></div>`).join('');
-  const tatBreachHtml = tatBreaches.slice(0, 8).map((d) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.student || '–')}</span><span class="badge badge-warning">Overstayed ${escapeHtml(d.stage)} (${d.thresholdDays}d TAT)</span></div>`).join('');
+  const attentionRowAttr = (leadId) => (leadId ? ` data-lead-id="${escapeHtml(leadId)}" style="cursor:pointer;"` : '');
+  const overdueFollowUpHtml = overdue.slice(0, 8).map((l) => `<div${attentionRowAttr(l.id)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('');
+  const overdueTaskHtml = overdueTasks.slice(0, 8).map((t) => `<div${attentionRowAttr(t.leads?.id)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)}${t.leads ? ' · ' + escapeHtml(t.leads.student_name) : ''}</span><span class="badge badge-danger">Overdue task</span></div>`).join('');
+  const tatBreachHtml = tatBreaches.slice(0, 8).map((d) => `<div${attentionRowAttr(d.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.student || '–')}</span><span class="badge badge-warning">Overstayed ${escapeHtml(d.stage)} (${d.thresholdDays}d TAT)</span></div>`).join('');
 
-  document.getElementById('rmDashAttention').innerHTML = (overdue.length + overdueTasks.length + tatBreaches.length) === 0
+  const attentionEl = document.getElementById('rmDashAttention');
+  attentionEl.innerHTML = (overdue.length + overdueTasks.length + tatBreaches.length) === 0
     ? emptyState('fa-circle-check', 'Nothing overdue', 'No overdue follow-ups, tasks, or TAT breaches right now — nice work.')
     : overdueFollowUpHtml + overdueTaskHtml + tatBreachHtml;
+  attentionEl.querySelectorAll('[data-lead-id]').forEach((row) => {
+    row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
+  });
 }
 
 const OTHER_CONSULTANCY_VALUE = '__other__';

@@ -8,6 +8,9 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../lead-management/public/js/services/leadService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
+import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
+
+let leadDrawer;
 
 const $ = (id) => document.getElementById(id);
 const esc = (value) => { const node = document.createElement('span'); node.textContent = value ?? ''; return node.innerHTML; };
@@ -15,7 +18,7 @@ const inr = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', curre
 let activeView = 'overview';
 
 async function records(table, select) { const { data, error } = await supabase.from(table).select(select).eq('is_deleted', false); if (error) throw error; return data; }
-async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); mountTopbar({ app: 'admin-dashboard', user: { fullName: data.full_name, role: 'Admin' } }); }
+async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
 const STAGE_TAT_THRESHOLD_DAYS = { 'Bank Prospect': 7, Login: 5, Sanction: 10, PF: 5, Disbursement: 7 };
 
@@ -25,7 +28,7 @@ async function loadOverview() {
     records('deals', 'id, total_disbursed_amount, is_on_hold, is_rejected, created_at, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)'),
     records('documents', 'id, verification_status'),
     records('users', 'id, is_active'),
-    supabase.from('lead_events').select('event_type, created_at, leads(student_name), users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }).limit(8),
+    supabase.from('lead_events').select('event_type, created_at, leads(id, student_name), users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }).limit(8),
     supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10)),
     supabase.from('deal_events').select('deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }),
   ]);
@@ -33,12 +36,17 @@ async function loadOverview() {
   if (overdueTasks.error) throw overdueTasks.error;
   if (stageEvents.error) throw stageEvents.error;
   const totalDisbursed = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
+  // Only "Active leads" has an honest drill-down target — the rest are
+  // deal-level/user-level counts, and Lead Management's list is leads-only.
   $('statGrid').innerHTML = [
-    [leads.length, 'Active leads', 'fa-diagram-project', 'var(--accent)'],
-    [deals.length, 'Lender deals', 'fa-building-columns', 'var(--accent)'],
-    [inr(totalDisbursed), 'Disbursed amount', 'fa-sack-dollar', 'var(--success)'],
-    [users.filter((user) => user.is_active).length, 'Active team members', 'fa-users', 'var(--accent)'],
-  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+    [leads.length, 'Active leads', 'fa-diagram-project', 'var(--accent)', true],
+    [deals.length, 'Lender deals', 'fa-building-columns', 'var(--accent)', false],
+    [inr(totalDisbursed), 'Disbursed amount', 'fa-sack-dollar', 'var(--success)', false],
+    [users.filter((user) => user.is_active).length, 'Active team members', 'fa-users', 'var(--accent)', false],
+  ].map(([value, label, icon, accent, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads' : ''} style="--stat-accent:${accent};${clickable ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  document.querySelectorAll('#statGrid [data-goto-leads]').forEach((card) => {
+    card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
+  });
 
   const stages = leads.reduce((all, lead) => { const name = lead.lead_stages?.name || 'Unassigned'; all[name] = (all[name] || 0) + 1; return all; }, {}); const largest = Math.max(1, ...Object.values(stages));
   $('stageChart').innerHTML = Object.entries(stages).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / largest * 100}%"></div></div><strong>${count}</strong></div>`).join('') || emptyState('fa-diagram-project', 'No leads yet', 'Leads will appear here once the team starts adding them.');
@@ -57,7 +65,10 @@ async function loadOverview() {
   $('attentionList').innerHTML = attention.length
     ? attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('')
     : emptyState('fa-circle-check', 'Everything is on track', 'No overdue items right now — nice work.');
-  $('activityList').innerHTML = (eventResponse.data || []).map((event) => `<div class="activity-row"><strong>${esc(event.event_type)}</strong> · ${esc(event.leads?.student_name || 'Lead')}<div class="muted">${esc(event.users?.full_name || 'System')} · ${new Date(event.created_at).toLocaleString('en-IN')}</div></div>`).join('') || emptyState('fa-clock-rotate-left', 'No activity yet', 'Stage changes and calls will show up here as the team works leads.');
+  $('activityList').innerHTML = (eventResponse.data || []).map((event) => `<div class="activity-row"${event.leads?.id ? ` data-lead-id="${event.leads.id}" style="cursor:pointer;"` : ''}><strong>${esc(event.event_type)}</strong> · ${esc(event.leads?.student_name || 'Lead')}<div class="muted">${esc(event.users?.full_name || 'System')} · ${new Date(event.created_at).toLocaleString('en-IN')}</div></div>`).join('') || emptyState('fa-clock-rotate-left', 'No activity yet', 'Stage changes and calls will show up here as the team works leads.');
+  document.querySelectorAll('#activityList [data-lead-id]').forEach((row) => {
+    row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
+  });
 }
 
 async function loadDocuments() { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if ($('documentStatus').value) request = request.eq('verification_status', $('documentStatus').value); const { data, error } = await request; if (error) throw error; $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
@@ -125,7 +136,10 @@ async function loadReports() {
 
   const [leads, deals] = await Promise.all([records('leads', 'id'), records('deals', 'id,is_on_hold,total_disbursed_amount')]);
   const total = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
-  $('reportSnapshot').innerHTML = [[leads.length, 'Total leads'], [deals.length, 'Total deals'], [deals.filter((deal) => deal.is_on_hold).length, 'Deals on hold'], [inr(total), 'Disbursed']].map(([value, label]) => `<div class="stat-card"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  $('reportSnapshot').innerHTML = [[leads.length, 'Total leads', true], [deals.length, 'Total deals', false], [deals.filter((deal) => deal.is_on_hold).length, 'Deals on hold', false], [inr(total), 'Disbursed', false]].map(([value, label, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads' : ''} style="${clickable ? 'cursor:pointer;' : ''}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  document.querySelectorAll('#reportSnapshot [data-goto-leads]').forEach((card) => {
+    card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
+  });
 
   const { data: events, error: eventsError } = await supabase.from('deal_events').select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))').not('to_stage_id', 'is', null).order('deal_id', { ascending: true }).order('created_at', { ascending: true });
   if (eventsError) throw eventsError;
@@ -452,4 +466,8 @@ $('lenderBranchForm').addEventListener('submit', async (event) => { event.preven
 $('consultancyForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('consultancies').insert({ name: form.get('name').trim(), bd_manager: (form.get('bd_manager') || '').trim() || null, created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Consultancy added.'); loadSettings(); });
 $('teamForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('teams').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Team added.'); loadSettings(); });
 initBulkAdd();
-requireAdmin().then(loadActive).catch((error) => { document.body.innerHTML = `<main style="padding:48px;font-family:Inter,sans-serif"><h1>Access unavailable</h1><p>${esc(error.message)}</p><a href="../../authentication/public/login.html">Go to sign in</a></main>`; });
+requireAdmin().then((user) => {
+  leadDrawer = initLeadDrawer({ showToast, onLeadUpdated: () => activeView === 'overview' && loadOverview(), currentUser: user });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && window.__closeLeadDrawer) window.__closeLeadDrawer(); });
+  return loadActive();
+}).catch((error) => { document.body.innerHTML = `<main style="padding:48px;font-family:Inter,sans-serif"><h1>Access unavailable</h1><p>${esc(error.message)}</p><a href="../../authentication/public/login.html">Go to sign in</a></main>`; });

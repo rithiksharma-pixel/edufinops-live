@@ -16,6 +16,9 @@ import { supabase } from './config/supabaseClient.js';
 // the users table's own RLS. Nothing new is reimplemented here.
 import { assignLeadToRm } from '../../../lead-management/public/js/services/leadService.js';
 import { getAssignableRms } from '../../../lead-management/public/js/services/lookupService.js';
+import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
+
+let leadDrawer;
 
 const UNASSIGNED_WARNING_MS = 48 * 60 * 60 * 1000; // 48h — flagged with a warning badge
 
@@ -25,11 +28,19 @@ function formatCurrency(amount) {
 }
 async function renderDailyStats() {
   const stats = await getDailyBusiness();
+  // Only "New leads today" has an honest drill-down target — the other
+  // two are deal-level counts, and Lead Management's list is leads-only.
   document.getElementById('dailyStats').innerHTML = [
-    [stats.newLeadsToday, 'New leads today', 'fa-diagram-project', 'var(--accent)'],
-    [stats.disbursementsToday, 'Disbursements today', 'fa-building-columns', 'var(--accent)'],
-    [formatCurrency(stats.disbursedAmountToday), 'Disbursed today', 'fa-sack-dollar', 'var(--success)'],
-  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="value">${value}</div><div class="label">${label}</div></div>`).join('');
+    [stats.newLeadsToday, 'New leads today', 'fa-diagram-project', 'var(--accent)', true],
+    [stats.disbursementsToday, 'Disbursements today', 'fa-building-columns', 'var(--accent)', false],
+    [formatCurrency(stats.disbursedAmountToday), 'Disbursed today', 'fa-sack-dollar', 'var(--success)', false],
+  ].map(([value, label, icon, accent, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads-today' : ''} style="--stat-accent:${accent};${clickable ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="value">${value}</div><div class="label">${label}</div></div>`).join('');
+  document.querySelectorAll('#dailyStats [data-goto-leads-today]').forEach((card) => {
+    card.addEventListener('click', () => {
+      const today = new Date().toISOString().slice(0, 10);
+      window.open(`../../lead-management/public/index.html?dateField=created_at&dateFrom=${today}&dateTo=${today}`, '_blank');
+    });
+  });
 }
 
 async function renderFunnelChart() {
@@ -59,7 +70,7 @@ async function renderRmPerformance() {
     const calls = callStats[rm.id] || { callCount: 0, connectedCount: 0 };
     const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
     return `
-    <tr>
+    <tr data-rm-id="${rm.id}" style="cursor:pointer;" title="Open ${escapeHtml(rm.name)}'s leads in Lead Management">
       <td><strong>${escapeHtml(rm.name)}</strong></td>
       <td>${rm.leadCount}</td>
       <td>${rm.overdueCount > 0 ? `<span class="badge badge-danger">${rm.overdueCount}</span>` : '0'}</td>
@@ -70,6 +81,15 @@ async function renderRmPerformance() {
     </tr>
   `;
   }).join('');
+
+  // An RM row is an aggregate (many leads), not one lead — opens the full
+  // filtered list in Lead Management (new tab, so the dashboard stays put)
+  // rather than the single-lead drawer.
+  tbody.querySelectorAll('[data-rm-id]').forEach((row) => {
+    row.addEventListener('click', () => {
+      window.open(`../../lead-management/public/index.html?rmId=${row.dataset.rmId}`, '_blank');
+    });
+  });
 }
 
 
@@ -165,19 +185,23 @@ async function renderUnassignedLeads() {
 async function renderAttentionList() {
   const summary = await getAttentionSummary();
   const container = document.getElementById('attentionList');
+  const rowAttr = (leadId) => (leadId ? ` data-lead-id="${leadId}" style="cursor:pointer;"` : ' style=""');
   const overdueHtml = summary.overdueLeads.slice(0, 8).map((l) =>
-    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.name)} <span style="color:var(--ink-500);">· ${escapeHtml(l.rm || '–')}</span></span><span class="badge badge-danger">Overdue follow-up</span></div>`
+    `<div${rowAttr(l.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.name)} <span style="color:var(--ink-500);">· ${escapeHtml(l.rm || '–')}</span></span><span class="badge badge-danger">Overdue follow-up</span></div>`
   ).join('');
   const flaggedHtml = summary.flaggedDeals.slice(0, 8).map((d) =>
-    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.name || '–')}</span><span class="badge badge-warning">${escapeHtml(d.reason)}</span></div>`
+    `<div${rowAttr(d.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.name || '–')}</span><span class="badge badge-warning">${escapeHtml(d.reason)}</span></div>`
   ).join('');
   const overdueTasksHtml = summary.overdueTasks.slice(0, 8).map((t) =>
-    `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)} <span style="color:var(--ink-500);">· ${escapeHtml(t.owner || '–')}${t.student ? ' · ' + escapeHtml(t.student) : ''}</span></span><span class="badge badge-danger">Overdue task</span></div>`
+    `<div${rowAttr(t.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)} <span style="color:var(--ink-500);">· ${escapeHtml(t.owner || '–')}${t.student ? ' · ' + escapeHtml(t.student) : ''}</span></span><span class="badge badge-danger">Overdue task</span></div>`
   ).join('');
   const total = summary.overdueLeads.length + summary.flaggedDeals.length + summary.overdueTasks.length;
   container.innerHTML = total === 0
     ? emptyState('fa-circle-check', 'Everything is on track', `${summary.onTrackCount} of ${summary.totalLeads} leads on track — no overdue items right now.`)
     : `<div style="margin-bottom:10px;font-size:12px;color:var(--ink-500);">${summary.onTrackCount} of ${summary.totalLeads} leads on track</div>` + overdueHtml + flaggedHtml + overdueTasksHtml;
+  container.querySelectorAll('[data-lead-id]').forEach((row) => {
+    row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
+  });
 }
 
 async function renderLenderBreakdown() {
@@ -289,8 +313,18 @@ async function bootstrap() {
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   mountTopbar({ app: 'manager-dashboard', user });
 
+  leadDrawer = initLeadDrawer({
+    showToast,
+    onLeadUpdated: () => Promise.all([renderAttentionList(), renderRmPerformance()]),
+    currentUser: user,
+  });
+
   initTrendControls();
   await populateTrendLenders();
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window.__closeLeadDrawer) window.__closeLeadDrawer();
+  });
 
   await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }

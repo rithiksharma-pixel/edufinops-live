@@ -3600,3 +3600,32 @@ alter policy leads_update_manager on leads
       or (assigned_rm_id is null and assigned_manager_id is null)
     ))
   );
+
+-- =========================================================
+-- SOURCE: deployment/015_saved_views_migration.sql
+-- =========================================================
+
+create table saved_views (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references users(id),
+  name            text not null,
+  filters         jsonb not null default '{}'::jsonb,
+  sequence_order  int not null default 0,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  created_by      uuid references users(id),
+  updated_by      uuid references users(id),
+  is_deleted      boolean not null default false,
+  status          text not null default 'active',
+  unique (user_id, name)
+);
+create index idx_saved_views_user_id on saved_views(user_id);
+create trigger trg_saved_views_updated_at
+  before update on saved_views
+  for each row execute function set_updated_at();
+
+alter table saved_views enable row level security;
+alter table saved_views force row level security;
+create policy saved_views_select on saved_views for select using (user_id = auth.uid());
+create policy saved_views_insert on saved_views for insert with check (user_id = auth.uid());
+create policy saved_views_update on saved_views for update using (user_id = auth.uid()) with check (user_id = auth.uid());

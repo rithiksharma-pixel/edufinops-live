@@ -80,7 +80,7 @@ const STAGE_TAT_THRESHOLD_DAYS = {
 export async function getMyTatBreachedDeals() {
   const { data: dealsData, error: dealsError } = await supabase
     .from('deals')
-    .select('id, is_on_hold, is_rejected, created_at, leads(student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
+    .select('id, is_on_hold, is_rejected, created_at, leads(id, student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
     .eq('is_deleted', false);
   if (dealsError) throw dealsError;
 
@@ -107,7 +107,7 @@ export async function getMyTatBreachedDeals() {
       const daysInStage = (now - new Date(enteredAt).getTime()) / (24 * 60 * 60 * 1000);
       return daysInStage > STAGE_TAT_THRESHOLD_DAYS[stageName];
     })
-    .map((d) => ({ student: d.leads?.student_name, stage: d.current_deal_stage?.name, thresholdDays: STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name] }));
+    .map((d) => ({ leadId: d.leads?.id, student: d.leads?.student_name, stage: d.current_deal_stage?.name, thresholdDays: STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name] }));
 }
 
 export async function getLenderUpdates() {

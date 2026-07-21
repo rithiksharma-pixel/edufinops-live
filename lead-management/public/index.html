@@ -54,6 +54,9 @@
         </button>
       </header>
 
+      <!-- Smart Views: "All Leads" + saved filter tabs -->
+      <div id="smartViewTabs"></div>
+
       <!-- Funnel summary cards -->
       <section class="funnel-row" id="funnelRow" aria-label="Pipeline summary">
         <!-- populated by JS: one card per stage with a live count -->
@@ -74,6 +77,16 @@
           <select id="filterRm"><option value="">All RMs</option></select>
         </div>
         <div class="filter-field">
+          <label for="filterPriority">Priority</label>
+          <select id="filterPriority">
+            <option value="">All priorities</option>
+            <option value="Urgent">Urgent</option>
+            <option value="High">High</option>
+            <option value="Normal">Normal</option>
+            <option value="Low">Low</option>
+          </select>
+        </div>
+        <div class="filter-field">
           <label for="filterDateField">Date basis</label>
           <select id="filterDateField">
             <option value="created_at">Created date</option>
@@ -92,6 +105,10 @@
           <label for="filterSearch">Search</label>
           <input id="filterSearch" type="text" placeholder="Student name or phone" />
         </div>
+        <label class="filter-field" style="flex-direction:row;align-items:center;gap:6px;">
+          <input id="filterOverdueOnly" type="checkbox" style="width:auto;" />
+          <span>Overdue follow-ups only</span>
+        </label>
         <button type="button" id="btnClearFilters" class="btn btn-ghost filter-clear">Clear</button>
       </section>
 

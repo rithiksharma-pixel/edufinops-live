@@ -169,7 +169,7 @@ export async function getAttentionSummary() {
 
   const { data: overdueTasksData, error: tasksError } = await supabase
     .from('tasks')
-    .select('id, title, due_date, leads(student_name), assigned_to:users!tasks_assigned_to_user_id_fkey(full_name)')
+    .select('id, title, due_date, leads(id, student_name), assigned_to:users!tasks_assigned_to_user_id_fkey(full_name)')
     .eq('is_deleted', false)
     .eq('is_completed', false)
     .lt('due_date', new Date().toISOString().slice(0, 10));
@@ -201,12 +201,13 @@ export async function getAttentionSummary() {
   const onTrackCount = leadsData.length - overdueLeads.length;
 
   return {
-    overdueLeads: overdueLeads.map((l) => ({ name: l.student_name, rm: l.assigned_rm?.full_name, dueAt: l.next_follow_up_at })),
+    overdueLeads: overdueLeads.map((l) => ({ leadId: l.id, name: l.student_name, rm: l.assigned_rm?.full_name, dueAt: l.next_follow_up_at })),
     flaggedDeals: flaggedDeals.map((d) => ({
+      leadId: d.lead_id,
       name: d.leads?.student_name,
       reason: d.is_rejected ? 'Rejected' : d.is_on_hold ? 'On hold' : `Overstayed ${d.current_deal_stage?.name} (${STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name]}d TAT)`,
     })),
-    overdueTasks: overdueTasksData.map((t) => ({ title: t.title, dueDate: t.due_date, student: t.leads?.student_name, owner: t.assigned_to?.full_name })),
+    overdueTasks: overdueTasksData.map((t) => ({ leadId: t.leads?.id, title: t.title, dueDate: t.due_date, student: t.leads?.student_name, owner: t.assigned_to?.full_name })),
     onTrackCount,
     totalLeads: leadsData.length,
   };

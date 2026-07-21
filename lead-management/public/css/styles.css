@@ -125,13 +125,16 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px 16px 14px 18px;
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+  /* Button reset — these are now clickable (filter by stage) */
+  font-family: inherit; text-align: left; cursor: pointer;
 }
 .funnel-card::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
   background: var(--stat-accent, var(--accent));
 }
 .funnel-card:hover { box-shadow: 0 6px 20px rgba(21, 24, 29, 0.06); transform: translateY(-1px); }
+.funnel-card.active { border-color: var(--stat-accent, var(--accent)); box-shadow: 0 0 0 1px var(--stat-accent, var(--accent)); }
 .funnel-card .stat-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 7px; margin-bottom: 8px;
