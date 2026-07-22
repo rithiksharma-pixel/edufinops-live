@@ -739,6 +739,40 @@ create policy users_select_referenced_on_own_leads on users
 create policy users_admin_write on users for insert with check (is_admin());
 create policy users_admin_update on users for update using (is_admin() or id = auth.uid()) with check (is_admin() or id = auth.uid());
 
+-- SECURITY: users_admin_update above is row-scoped only — a signed-in
+-- non-admin could otherwise UPDATE their own role_id/is_active/etc.
+-- directly, bypassing change_user_role()/deactivate_user()/etc. This
+-- trigger closes that column-level gap; see migration 020 for the
+-- full writeup.
+create or replace function guard_users_self_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  protected_cols text[] := array['role_id', 'is_active', 'reporting_manager_id', 'lender_organization_id', 'lender_branch_id', 'team_id', 'is_deleted', 'created_by', 'created_at'];
+  col text;
+begin
+  if is_admin() then
+    return new;
+  end if;
+
+  foreach col in array protected_cols loop
+    if (to_jsonb(old) ->> col) is distinct from (to_jsonb(new) ->> col) then
+      raise exception 'You are not allowed to change % directly — this requires an Admin action', col;
+    end if;
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_users_self_update on users;
+create trigger trg_guard_users_self_update
+  before update on users
+  for each row execute function guard_users_self_update();
+
 -- =========================================================
 -- LEADS — extended to include Counselor visibility via their deals
 -- =========================================================
@@ -926,7 +960,7 @@ insert into lead_sources (name, category) values
   ('University Tie-up',      'Business Development'),
   ('Digital Campaign',       'Campaign'),
   ('Existing Customer Referral', 'Referral'),
-  ('Unknown',                'Migrated')
+  ('Unknown',                'Direct')
 on conflict do nothing;
 
 -- =========================================================
