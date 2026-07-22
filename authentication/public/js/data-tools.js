@@ -60,9 +60,9 @@ async function bootstrap() {
     if (!file) { showToast('Choose a CSV file first.', true); return; }
 
     try {
-      const { validRows, errors } = await parseLeadsCsv(file, currentUser.id);
+      const { validRows, errors, notices } = await parseLeadsCsv(file, currentUser.id);
       pendingValidRows = validRows;
-      renderPreview(validRows, errors);
+      renderPreview(validRows, errors, notices);
     } catch (err) {
       showToast('Could not parse this file. Is it a valid CSV?', true);
     }
@@ -141,17 +141,57 @@ async function bootstrap() {
   });
 }
 
-function renderPreview(validRows, errors) {
+// Shared "error report" block for every importer's preview: the error
+// list itself, plus Copy/Download so a long failure list (hundreds of
+// rows, common on a first historical-migration attempt) doesn't have
+// to be read and retyped by hand — it can go straight into a message
+// to whoever owns the source spreadsheet.
+function errorReportHtml(errors, idPrefix) {
+  if (errors.length === 0) return '';
+  return `
+    <div style="display:flex;gap:8px;align-items:center;margin:10px 0 6px;">
+      <button class="btn btn-ghost" id="${idPrefix}CopyErrors" style="font-size:12px;padding:5px 10px;"><i class="fa-solid fa-copy"></i> Copy errors</button>
+      <button class="btn btn-ghost" id="${idPrefix}DownloadErrors" style="font-size:12px;padding:5px 10px;"><i class="fa-solid fa-download"></i> Download errors</button>
+    </div>
+    <ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
+  `;
+}
+
+function wireErrorReportButtons(idPrefix, errors, filenamePrefix) {
+  document.getElementById(`${idPrefix}CopyErrors`)?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(errors.join('\n'));
+      showToast('Errors copied to clipboard.');
+    } catch (err) {
+      showToast('Could not copy to clipboard — your browser may be blocking it.', true);
+    }
+  });
+  document.getElementById(`${idPrefix}DownloadErrors`)?.addEventListener('click', () => {
+    downloadCsv(errors.join('\n'), `${filenamePrefix}-errors-${new Date().toISOString().slice(0, 10)}.txt`);
+  });
+}
+
+function notesHtml(notices) {
+  if (!notices || notices.length === 0) return '';
+  return `
+    <p style="margin:10px 0 4px;font-size:13px;color:var(--ink-500);"><strong>${notices.length}</strong> row(s) were fuzzy-matched — review before importing:</p>
+    <ul style="color:var(--ink-500);font-size:13px;max-height:120px;overflow-y:auto;">${notices.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>
+  `;
+}
+
+function renderPreview(validRows, errors, notices) {
   const container = document.getElementById('importPreview');
   const inserts = validRows.filter((r) => r.mode === 'insert').length;
   const updates = validRows.filter((r) => r.mode === 'update').length;
   container.innerHTML = `
     <div class="table-card" style="padding:16px;">
       <p><strong>${inserts}</strong> new, <strong>${updates}</strong> update(s) (matched by phone), <strong>${errors.length}</strong> error(s).</p>
-      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${notesHtml(notices)}
+      ${errorReportHtml(errors, 'leads')}
       ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitImport" style="margin-top:12px;">Import ${inserts} new, update ${updates}</button>` : ''}
     </div>
   `;
+  wireErrorReportButtons('leads', errors, 'leads-import');
   const commitBtn = document.getElementById('btnCommitImport');
   if (commitBtn) {
     commitBtn.addEventListener('click', async () => {
@@ -177,10 +217,11 @@ function renderConsultanciesPreview(validRows, errors) {
   container.innerHTML = `
     <div class="table-card" style="padding:16px;">
       <p><strong>${inserts}</strong> new, <strong>${updates}</strong> update(s), <strong>${errors.length}</strong> error(s).</p>
-      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${errorReportHtml(errors, 'consultancies')}
       ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitConsultanciesImport" style="margin-top:12px;">Import ${validRows.length} consultanc${validRows.length === 1 ? 'y' : 'ies'}</button>` : ''}
     </div>
   `;
+  wireErrorReportButtons('consultancies', errors, 'consultancies-import');
   const commitBtn = document.getElementById('btnCommitConsultanciesImport');
   if (commitBtn) {
     commitBtn.addEventListener('click', async () => {
@@ -206,10 +247,11 @@ function renderLendersPreview(validRows, errors) {
   container.innerHTML = `
     <div class="table-card" style="padding:16px;">
       <p><strong>${lenderCount}</strong> lender(s), <strong>${branchCount}</strong> branch(es), <strong>${errors.length}</strong> error(s).</p>
-      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${errorReportHtml(errors, 'lenders')}
       ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitLendersImport" style="margin-top:12px;">Import ${lenderCount} lender(s) &amp; ${branchCount} branch(es)</button>` : ''}
     </div>
   `;
+  wireErrorReportButtons('lenders', errors, 'lenders-import');
   const commitBtn = document.getElementById('btnCommitLendersImport');
   if (commitBtn) {
     commitBtn.addEventListener('click', async () => {
@@ -235,10 +277,11 @@ function renderDealHistoryPreview(validRows, errors) {
   container.innerHTML = `
     <div class="table-card" style="padding:16px;">
       <p><strong>${inserts}</strong> new deal(s), <strong>${updates}</strong> update(s) (matched by student + lender), <strong>${errors.length}</strong> error(s).</p>
-      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${errorReportHtml(errors, 'dealHistory')}
       ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitDealHistoryImport" style="margin-top:12px;">Import ${inserts} new, update ${updates}</button>` : ''}
     </div>
   `;
+  wireErrorReportButtons('dealHistory', errors, 'deal-history-import');
   const commitBtn = document.getElementById('btnCommitDealHistoryImport');
   if (commitBtn) {
     commitBtn.addEventListener('click', async () => {
@@ -262,10 +305,11 @@ function renderUsersPreview(validRows, errors) {
   container.innerHTML = `
     <div class="table-card" style="padding:16px;">
       <p><strong>${validRows.length}</strong> valid row(s), <strong>${errors.length}</strong> error(s).</p>
-      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${errorReportHtml(errors, 'users')}
       ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitUsersImport" style="margin-top:12px;">Update ${validRows.length} user(s)</button>` : ''}
     </div>
   `;
+  wireErrorReportButtons('users', errors, 'users-bulk-update');
   const commitBtn = document.getElementById('btnCommitUsersImport');
   if (commitBtn) {
     commitBtn.addEventListener('click', async () => {

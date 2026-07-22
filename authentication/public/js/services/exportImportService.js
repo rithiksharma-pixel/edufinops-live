@@ -94,8 +94,12 @@ const VALID_LOAN_TYPES = ['Collateral', 'Non Collateral'];
  *   - loan_type: "Collateral" or "Non Collateral". Blank = unset.
  *   - consultancy_name / consultancy_other_name: only meaningful (and
  *     required — one or the other) when source_name is "BD Partnership".
- *     consultancy_name must match an existing consultancies.name exactly;
- *     use consultancy_other_name for a consultancy not yet in the system.
+ *     consultancy_name is matched against existing consultancies leniently
+ *     (case/whitespace/punctuation-insensitive, ignoring suffix words like
+ *     "Consultancy"/"Pvt Ltd") — "ABC" will match "ABC Consultancy" if
+ *     that's the only close candidate; the validation preview will note
+ *     which rows were fuzzy-matched. Use consultancy_other_name for a
+ *     consultancy not yet in the system at all.
  */
 export function importTemplateCsv() {
   return Papa.unparse([
@@ -111,9 +115,51 @@ export function importTemplateCsv() {
 
 const normalizePhone = (phone) => (phone || '').replace(/[^\d]/g, '');
 
+// Strips whitespace/punctuation noise and common legal-entity suffix words
+// so "ABC", "ABC Consultancy", and "ABC Consultants Pvt. Ltd." all reduce to
+// the same core "abc" for matching purposes — real-world CSV exports rarely
+// agree on the full legal name.
+const CONSULTANCY_SUFFIX_WORDS = new Set(['consultancy', 'consultancies', 'consultant', 'consultants', 'consulting', 'services', 'service', 'pvt', 'private', 'ltd', 'limited', 'llp', 'inc', 'incorporated', 'co', 'company', 'group']);
+const normalizeConsultancyCore = (name) => {
+  const tokens = (name || '').toLowerCase().replace(/[.,&()]/g, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  while (tokens.length > 1 && CONSULTANCY_SUFFIX_WORDS.has(tokens[tokens.length - 1])) tokens.pop();
+  return tokens.join(' ');
+};
+
 /**
- * Parses and validates a leads CSV, returning { validRows, errors }
+ * Resolves a free-text consultancy name against the existing list:
+ * exact (case-insensitive) match first, then a core-normalized match
+ * (ignoring whitespace/punctuation and common suffix words like
+ * "Consultancy"/"Pvt Ltd") if exactly one candidate qualifies. Returns
+ * { consultancy, notice, error } — at most one of notice/error is set.
+ * A fuzzy match is real but SILENT unless the caller surfaces `notice`,
+ * so the person committing the import can see what was auto-linked.
+ */
+const resolveConsultancyName = (nameRaw, consultancies) => {
+  const exact = consultancies.find((c) => c.name.toLowerCase() === nameRaw.toLowerCase());
+  if (exact) return { consultancy: exact };
+
+  const inputCore = normalizeConsultancyCore(nameRaw);
+  const candidates = consultancies.filter((c) => normalizeConsultancyCore(c.name) === inputCore);
+  if (candidates.length === 1) {
+    return { consultancy: candidates[0], notice: `consultancy_name "${nameRaw}" matched existing consultancy "${candidates[0].name}"` };
+  }
+  if (candidates.length > 1) {
+    return { error: `consultancy_name "${nameRaw}" matches more than one existing consultancy (${candidates.map((c) => c.name).join(', ')}) — use the exact name` };
+  }
+
+  const suggestion = consultancies.find((c) => {
+    const core = normalizeConsultancyCore(c.name);
+    return core.length > 0 && (core.includes(inputCore) || inputCore.includes(core));
+  });
+  return { error: `unknown consultancy_name "${nameRaw}"${suggestion ? ` — did you mean "${suggestion.name}"?` : ''}` };
+};
+
+/**
+ * Parses and validates a leads CSV, returning { validRows, errors, notices }
  * without writing anything — the caller reviews this before committing.
+ * `notices` are non-blocking (e.g. a fuzzy consultancy-name match) —
+ * unlike `errors`, they don't stop that row from being imported.
  *
  * Upsert semantics: student_phone (digits-only, so formatting doesn't
  * matter) is the match key against existing leads. A match becomes an
@@ -144,6 +190,7 @@ export async function parseLeadsCsv(file, currentUserId) {
       skipEmptyLines: true,
       complete: (results) => {
         const errors = [];
+        const notices = [];
         const validRows = [];
         results.data.forEach((row, i) => {
           const rowNum = i + 2; // account for header row + 1-indexing
@@ -225,9 +272,12 @@ export async function parseLeadsCsv(file, currentUserId) {
           const consultancyNameRaw = row.consultancy_name?.trim();
           const consultancyOtherNameRaw = row.consultancy_other_name?.trim() || undefined;
           if (consultancyNameRaw) {
-            const consultancy = consultancies.find((c) => c.name.toLowerCase() === consultancyNameRaw.toLowerCase());
-            if (!consultancy) { errors.push(`Row ${rowNum}: unknown consultancy_name "${consultancyNameRaw}"`); rowHasError = true; }
-            else consultancyId = consultancy.id;
+            const { consultancy, notice, error } = resolveConsultancyName(consultancyNameRaw, consultancies);
+            if (error) { errors.push(`Row ${rowNum}: ${error}`); rowHasError = true; }
+            else {
+              consultancyId = consultancy.id;
+              if (notice) notices.push(`Row ${rowNum}: ${notice}`);
+            }
           }
           if (source?.name === 'BD Partnership' && !consultancyId && !consultancyOtherNameRaw) {
             errors.push(`Row ${rowNum}: source_name is "BD Partnership" — consultancy_name or consultancy_other_name is required`);
@@ -277,7 +327,7 @@ export async function parseLeadsCsv(file, currentUserId) {
             validRows.push({ mode, row: leadRow });
           }
         });
-        resolve({ validRows, errors });
+        resolve({ validRows, errors, notices });
       },
       error: (err) => reject(err),
     });
