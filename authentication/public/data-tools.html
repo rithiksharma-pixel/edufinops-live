@@ -75,6 +75,29 @@
     </section>
 
     <section class="table-card" style="padding:20px;margin-top:20px;">
+      <h2 class="section-title" style="padding:0 0 12px;">Import deal history</h2>
+      <p class="subtitle" style="margin-bottom:6px;">One row per <strong>lead + lender</strong>. <strong>Required:</strong> <code>student_phone</code> (must match an existing lead — import leads first), <code>lender_name</code> (must match an existing lender), <code>current_stage_name</code> (Bank Prospect / Login / Sanction / PF / Disbursement / Closed Won).</p>
+      <p class="subtitle" style="margin-bottom:6px;"><strong>Upsert by student + lender:</strong> a match against an existing deal updates it in place; no match creates a new deal (same as clicking Share in the Lenders tab) and advances it straight to <code>current_stage_name</code>.</p>
+      <ul class="subtitle" style="margin:0 0 14px;padding-left:20px;">
+        <li><code>branch_name</code> — the lender's region/branch this deal is under (optional, must match an existing branch for that lender).</li>
+        <li><code>current_disposition_name</code> — the disposition within <code>current_stage_name</code> (optional, must match an existing disposition for that stage).</li>
+        <li><strong>Bank Prospect:</strong> <code>region_shared_date, sm_shared_date, rm_shared_date, eligibility_status</code>.</li>
+        <li><strong>Login:</strong> <code>loan_required_amount, login_amount, login_date, probable_sanction_date</code>.</li>
+        <li><strong>Sanction:</strong> <code>sanction_amount, sanction_date, probable_pf_date, interest_rate, tenure_months, moratorium_months</code>.</li>
+        <li><strong>PF:</strong> <code>pf_amount, pf_date, probable_disbursement_date</code>.</li>
+        <li>All stage-detail columns are independent of <code>current_stage_name</code> — a deal now at PF can still carry its earlier <code>login_date</code>/<code>sanction_date</code> for a complete history. Blank cells are left unset, never cleared on an update.</li>
+        <li><strong>Disbursement</strong> (optional, one tranche per row): <code>disbursement_amount, disbursement_date</code> together, plus optional <code>disbursement_tranche_number</code> (default 1) and <code>academic_term</code>. A deal with multiple historical tranches needs a second import pass — this only records one per row.</li>
+        <li><strong>Hold / Reject</strong> (optional overlays): <code>is_on_hold</code> + <code>hold_reason_name</code> (required together), <code>is_rejected</code> + <code>rejection_reason_name</code> (required together).</li>
+        <li>This import does <strong>not</strong> backdate a full stage-by-stage timeline — only the current stage/status and the detail dates you give are recorded, not synthetic history for stages the deal already passed through.</li>
+      </ul>
+      <button class="btn btn-ghost" id="btnDownloadDealHistoryTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>
+      <div class="form-field"><input type="file" id="dealHistoryImportFileInput" accept=".csv" /></div>
+      <button class="btn btn-primary" id="btnValidateDealHistoryImport">Validate file</button>
+
+      <div id="dealHistoryImportPreview" style="margin-top:18px;"></div>
+    </section>
+
+    <section class="table-card" style="padding:20px;margin-top:20px;">
       <h2 class="section-title" style="padding:0 0 12px;">Bulk update users</h2>
       <p class="subtitle" style="margin-bottom:14px;">CSV columns: <code>email, role_name, reporting_manager_email, team_name, is_active</code>. <code>email</code> identifies the existing user to update — everything else is optional; leave a cell blank to leave that field unchanged. Put <code>NONE</code> in <code>reporting_manager_email</code> or <code>team_name</code> to clear it. <code>is_active</code> must be <code>TRUE</code> or <code>FALSE</code> if set. This only updates existing users — invite new people from Manage Users.</p>
       <button class="btn btn-ghost" id="btnDownloadUsersTemplate" style="margin-bottom:14px;"><i class="fa-solid fa-download"></i> Download CSV template</button>

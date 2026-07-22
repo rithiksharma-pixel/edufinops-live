@@ -7,6 +7,7 @@ import {
   usersBulkUpdateTemplateCsv, parseUsersBulkUpdateCsv, commitUsersBulkUpdate,
   consultanciesBulkImportTemplateCsv, parseConsultanciesCsv, commitConsultancyImport,
   lendersBulkImportTemplateCsv, parseLendersCsv, commitLenderImport,
+  dealHistoryBulkImportTemplateCsv, parseDealHistoryCsv, commitDealHistoryImport,
 } from './services/exportImportService.js';
 
 
@@ -15,6 +16,7 @@ let pendingValidRows = [];
 let pendingUsersValidRows = [];
 let pendingConsultanciesValidRows = [];
 let pendingLendersValidRows = [];
+let pendingDealHistoryValidRows = [];
 
 async function bootstrap() {
   try {
@@ -97,6 +99,24 @@ async function bootstrap() {
       const { validRows, errors } = await parseLendersCsv(file, currentUser.id);
       pendingLendersValidRows = validRows;
       renderLendersPreview(validRows, errors);
+    } catch (err) {
+      showToast('Could not parse this file. Is it a valid CSV?', true);
+    }
+  });
+
+  document.getElementById('btnDownloadDealHistoryTemplate').addEventListener('click', () => {
+    downloadCsv(dealHistoryBulkImportTemplateCsv(), 'deal-history-import-template.csv');
+  });
+
+  document.getElementById('btnValidateDealHistoryImport').addEventListener('click', async () => {
+    const fileInput = document.getElementById('dealHistoryImportFileInput');
+    const file = fileInput.files[0];
+    if (!file) { showToast('Choose a CSV file first.', true); return; }
+
+    try {
+      const { validRows, errors } = await parseDealHistoryCsv(file, currentUser.id);
+      pendingDealHistoryValidRows = validRows;
+      renderDealHistoryPreview(validRows, errors);
     } catch (err) {
       showToast('Could not parse this file. Is it a valid CSV?', true);
     }
@@ -198,6 +218,35 @@ function renderLendersPreview(validRows, errors) {
       try {
         const { succeeded, failures } = await commitLenderImport(pendingLendersValidRows);
         showToast(`Imported ${succeeded} row(s)${failures.length ? `, ${failures.length} failed` : ''}.`, failures.length > 0);
+        container.innerHTML = failures.length > 0
+          ? `<p style="color:var(--danger);">${failures.length} row(s) failed: ${failures.map((f) => escapeHtml(`${f.label} — ${f.error}`)).join('; ')}</p>`
+          : '<p>Import complete.</p>';
+      } catch (err) {
+        showToast('Import failed unexpectedly.', true);
+      }
+    });
+  }
+}
+
+function renderDealHistoryPreview(validRows, errors) {
+  const container = document.getElementById('dealHistoryImportPreview');
+  const inserts = validRows.filter((r) => r.mode === 'insert').length;
+  const updates = validRows.filter((r) => r.mode === 'update').length;
+  container.innerHTML = `
+    <div class="table-card" style="padding:16px;">
+      <p><strong>${inserts}</strong> new deal(s), <strong>${updates}</strong> update(s) (matched by student + lender), <strong>${errors.length}</strong> error(s).</p>
+      ${errors.length > 0 ? `<ul style="color:var(--danger);font-size:13px;max-height:160px;overflow-y:auto;">${errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('')}</ul>` : ''}
+      ${validRows.length > 0 ? `<button class="btn btn-primary" id="btnCommitDealHistoryImport" style="margin-top:12px;">Import ${inserts} new, update ${updates}</button>` : ''}
+    </div>
+  `;
+  const commitBtn = document.getElementById('btnCommitDealHistoryImport');
+  if (commitBtn) {
+    commitBtn.addEventListener('click', async () => {
+      commitBtn.disabled = true;
+      commitBtn.textContent = 'Importing…';
+      try {
+        const { succeeded, failures } = await commitDealHistoryImport(pendingDealHistoryValidRows);
+        showToast(`Imported ${succeeded} deal(s)${failures.length ? `, ${failures.length} failed` : ''}.`, failures.length > 0);
         container.innerHTML = failures.length > 0
           ? `<p style="color:var(--danger);">${failures.length} row(s) failed: ${failures.map((f) => escapeHtml(`${f.label} — ${f.error}`)).join('; ')}</p>`
           : '<p>Import complete.</p>';

@@ -546,6 +546,343 @@ export async function commitLenderImport(validRows) {
   return { succeeded, failures };
 }
 
+export function dealHistoryBulkImportTemplateCsv() {
+  return Papa.unparse([
+    {
+      student_phone: '+91 98765 43210', lender_name: 'Example Bank', branch_name: 'Bangalore',
+      current_stage_name: 'PF', current_disposition_name: '',
+      region_shared_date: '2025-01-10', sm_shared_date: '2025-01-11', rm_shared_date: '2025-01-12', eligibility_status: 'Eligible',
+      loan_required_amount: 2500000, login_amount: 2500000, login_date: '2025-01-20', probable_sanction_date: '2025-02-05',
+      sanction_amount: 2400000, sanction_date: '2025-02-03', probable_pf_date: '2025-02-20', interest_rate: 10.5, tenure_months: 84, moratorium_months: 12,
+      pf_amount: 2400000, pf_date: '2025-02-18', probable_disbursement_date: '2025-03-01',
+      disbursement_tranche_number: '', disbursement_amount: '', disbursement_date: '', academic_term: '',
+      is_on_hold: 'FALSE', hold_reason_name: '',
+      is_rejected: 'FALSE', rejection_reason_name: '',
+    },
+  ]);
+}
+
+const parseDateOnly = (raw, rowNum, fieldName, errors) => {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) { errors.push(`Row ${rowNum}: invalid ${fieldName} "${trimmed}" (use YYYY-MM-DD)`); return null; }
+  return trimmed;
+};
+
+const parseNumber = (raw, rowNum, fieldName, errors) => {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const num = Number(trimmed);
+  if (Number.isNaN(num)) { errors.push(`Row ${rowNum}: invalid ${fieldName} "${trimmed}"`); return null; }
+  return num;
+};
+
+/**
+ * One row per lead-per-lender deal. Unlike parseLeadsCsv, this never
+ * creates leads — student_phone must already match an existing lead
+ * (import leads first). Upsert semantics: an existing deal for that
+ * (lead, lender) pair is updated in place; otherwise a new deal is
+ * created via the same share_lead_with_lender path the Lenders tab's
+ * Share button uses, then advanced to current_stage_name.
+ *
+ * Stage-detail fields (region_shared_date..probable_disbursement_date)
+ * are all optional and independent of current_stage_name — e.g. a deal
+ * currently at PF can still carry its earlier login_date/sanction_date
+ * for a complete history. Blank cells are left unset, never overwritten
+ * with null on an update.
+ *
+ * Only ONE disbursement tranche can be recorded per row (tranche_number
+ * default 1). A deal with multiple historical tranches needs a second
+ * pass — not supported in a single import row.
+ *
+ * Known limitation: no synthetic deal_events timeline rows are
+ * backdated for the stages a deal passed through before its current
+ * one — only the current stage/status and detail-table dates are
+ * recorded, not a full historical audit trail.
+ */
+export async function parseDealHistoryCsv(file, currentUserId) {
+  const [
+    { data: leads, error: leadsError },
+    { data: lenders, error: lendersError },
+    { data: branches, error: branchesError },
+    { data: stages, error: stagesError },
+    { data: statuses, error: statusesError },
+    { data: holdReasons, error: holdReasonsError },
+    { data: rejectionReasons, error: rejectionReasonsError },
+    { data: existingDeals, error: existingDealsError },
+    { data: lenderStatusRows, error: lenderStatusError },
+  ] = await Promise.all([
+    supabase.from('leads').select('id, student_phone').eq('is_deleted', false),
+    supabase.from('lenders').select('id, name').eq('is_deleted', false),
+    supabase.from('lender_branches').select('id, lender_id, name').eq('is_deleted', false),
+    supabase.from('deal_stages').select('id, name, sequence_order').eq('is_deleted', false),
+    supabase.from('deal_stage_statuses').select('id, deal_stage_id, name').eq('is_deleted', false),
+    supabase.from('deal_hold_reasons').select('id, name').eq('is_deleted', false),
+    supabase.from('deal_rejection_reasons').select('id, name').eq('is_deleted', false),
+    supabase.from('deals').select('id, lead_id, lender_id, current_deal_stage_id').eq('is_deleted', false),
+    supabase.from('lead_lender_status').select('id, lead_id, lender_id'),
+  ]);
+  if (leadsError) throw leadsError;
+  if (lendersError) throw lendersError;
+  if (branchesError) throw branchesError;
+  if (stagesError) throw stagesError;
+  if (statusesError) throw statusesError;
+  if (holdReasonsError) throw holdReasonsError;
+  if (rejectionReasonsError) throw rejectionReasonsError;
+  if (existingDealsError) throw existingDealsError;
+  if (lenderStatusError) throw lenderStatusError;
+
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const errors = [];
+        const validRows = [];
+        const seenPairs = new Map(); // "leadId|lenderId" -> row number, for intra-file duplicate detection
+
+        results.data.forEach((row, i) => {
+          const rowNum = i + 2;
+          let rowHasError = false;
+          const fail = (msg) => { errors.push(`Row ${rowNum}: ${msg}`); rowHasError = true; };
+
+          const phone = row.student_phone?.trim();
+          if (!phone) { fail('missing student_phone'); return; }
+          const lead = leads.find((l) => normalizePhone(l.student_phone) === normalizePhone(phone));
+          if (!lead) { fail(`no lead found with student_phone "${phone}" — import leads first`); return; }
+
+          const lenderNameRaw = row.lender_name?.trim();
+          if (!lenderNameRaw) { fail('missing lender_name'); return; }
+          const lender = lenders.find((l) => l.name.toLowerCase() === lenderNameRaw.toLowerCase());
+          if (!lender) { fail(`unknown lender_name "${lenderNameRaw}"`); return; }
+
+          const pairKey = `${lead.id}|${lender.id}`;
+          if (seenPairs.has(pairKey)) { fail(`duplicate row for this student + lender (already on row ${seenPairs.get(pairKey)})`); return; }
+          seenPairs.set(pairKey, rowNum);
+
+          let branchId;
+          const branchNameRaw = row.branch_name?.trim();
+          if (branchNameRaw) {
+            const branch = branches.find((b) => b.lender_id === lender.id && b.name.toLowerCase() === branchNameRaw.toLowerCase());
+            if (!branch) fail(`unknown branch_name "${branchNameRaw}" for lender "${lenderNameRaw}"`);
+            else branchId = branch.id;
+          }
+
+          const stageNameRaw = row.current_stage_name?.trim();
+          if (!stageNameRaw) { fail('missing current_stage_name'); return; }
+          const stage = stages.find((s) => s.name.toLowerCase() === stageNameRaw.toLowerCase());
+          if (!stage) { fail(`unknown current_stage_name "${stageNameRaw}"`); return; }
+
+          let statusId = null;
+          const statusNameRaw = row.current_disposition_name?.trim();
+          if (statusNameRaw) {
+            const status = statuses.find((s) => s.deal_stage_id === stage.id && s.name.toLowerCase() === statusNameRaw.toLowerCase());
+            if (!status) fail(`unknown current_disposition_name "${statusNameRaw}" for stage "${stageNameRaw}"`);
+            else statusId = status.id;
+          }
+
+          const bankProspectFields = {};
+          ['region_shared_date', 'sm_shared_date', 'rm_shared_date'].forEach((f) => {
+            const v = parseDateOnly(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) bankProspectFields[f] = v;
+          });
+          if (row.eligibility_status?.trim()) bankProspectFields.eligibility_status = row.eligibility_status.trim();
+
+          const loginFields = {};
+          ['loan_required_amount', 'login_amount'].forEach((f) => {
+            const v = parseNumber(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) loginFields[f] = v;
+          });
+          ['login_date', 'probable_sanction_date'].forEach((f) => {
+            const v = parseDateOnly(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) loginFields[f] = v;
+          });
+
+          const sanctionFields = {};
+          ['sanction_amount', 'interest_rate', 'tenure_months', 'moratorium_months'].forEach((f) => {
+            const v = parseNumber(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) sanctionFields[f] = v;
+          });
+          ['sanction_date', 'probable_pf_date'].forEach((f) => {
+            const v = parseDateOnly(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) sanctionFields[f] = v;
+          });
+
+          const pfFields = {};
+          const pfAmount = parseNumber(row.pf_amount, rowNum, 'pf_amount', errors);
+          if (pfAmount === null) rowHasError = true; else if (pfAmount !== undefined) pfFields.pf_amount = pfAmount;
+          ['pf_date', 'probable_disbursement_date'].forEach((f) => {
+            const v = parseDateOnly(row[f], rowNum, f, errors);
+            if (v === null) rowHasError = true; else if (v !== undefined) pfFields[f] = v;
+          });
+
+          let disbursement;
+          const disbAmount = parseNumber(row.disbursement_amount, rowNum, 'disbursement_amount', errors);
+          if (disbAmount === null) rowHasError = true;
+          const disbDate = parseDateOnly(row.disbursement_date, rowNum, 'disbursement_date', errors);
+          if (disbDate === null) rowHasError = true;
+          if (disbAmount !== undefined || disbDate !== undefined) {
+            if (disbAmount === undefined || disbDate === undefined) {
+              fail('disbursement_amount and disbursement_date must both be given together');
+            } else {
+              let trancheNumber = 1;
+              const trancheRaw = row.disbursement_tranche_number?.trim();
+              if (trancheRaw) {
+                trancheNumber = Number(trancheRaw);
+                if (!Number.isInteger(trancheNumber) || trancheNumber < 1) fail(`invalid disbursement_tranche_number "${trancheRaw}"`);
+              }
+              disbursement = { trancheNumber, amount: disbAmount, date: disbDate, academicTerm: row.academic_term?.trim() || null };
+            }
+          }
+
+          let isOnHold = false;
+          let holdReasonId;
+          const isOnHoldRaw = row.is_on_hold?.trim();
+          if (isOnHoldRaw) {
+            if (isOnHoldRaw.toUpperCase() === 'TRUE') isOnHold = true;
+            else if (isOnHoldRaw.toUpperCase() !== 'FALSE') fail(`is_on_hold must be TRUE or FALSE, got "${isOnHoldRaw}"`);
+          }
+          if (isOnHold) {
+            const holdReasonNameRaw = row.hold_reason_name?.trim();
+            if (!holdReasonNameRaw) fail('is_on_hold is TRUE but hold_reason_name is missing');
+            else {
+              const holdReason = holdReasons.find((r) => r.name.toLowerCase() === holdReasonNameRaw.toLowerCase());
+              if (!holdReason) fail(`unknown hold_reason_name "${holdReasonNameRaw}"`);
+              else holdReasonId = holdReason.id;
+            }
+          }
+
+          let isRejected = false;
+          let rejectionReasonId;
+          const isRejectedRaw = row.is_rejected?.trim();
+          if (isRejectedRaw) {
+            if (isRejectedRaw.toUpperCase() === 'TRUE') isRejected = true;
+            else if (isRejectedRaw.toUpperCase() !== 'FALSE') fail(`is_rejected must be TRUE or FALSE, got "${isRejectedRaw}"`);
+          }
+          if (isRejected) {
+            const rejectionReasonNameRaw = row.rejection_reason_name?.trim();
+            if (!rejectionReasonNameRaw) fail('is_rejected is TRUE but rejection_reason_name is missing');
+            else {
+              const rejectionReason = rejectionReasons.find((r) => r.name.toLowerCase() === rejectionReasonNameRaw.toLowerCase());
+              if (!rejectionReason) fail(`unknown rejection_reason_name "${rejectionReasonNameRaw}"`);
+              else rejectionReasonId = rejectionReason.id;
+            }
+          }
+
+          if (rowHasError) return;
+
+          const existingDeal = existingDeals.find((d) => d.lead_id === lead.id && d.lender_id === lender.id);
+          const mode = existingDeal ? 'update' : 'insert';
+
+          let lenderStatusId;
+          if (mode === 'insert') {
+            const statusRow = lenderStatusRows.find((r) => r.lead_id === lead.id && r.lender_id === lender.id);
+            if (!statusRow) { fail(`no lead_lender_status row found for this student + lender — this shouldn't happen for an existing lender, please report it`); return; }
+            lenderStatusId = statusRow.id;
+          }
+
+          validRows.push({
+            rowNum, mode, studentPhone: phone, lenderName: lenderNameRaw,
+            dealId: existingDeal?.id, lenderStatusId, branchId,
+            stageId: stage.id, statusId,
+            bankProspectFields, loginFields, sanctionFields, pfFields,
+            disbursement, isOnHold, holdReasonId, isRejected, rejectionReasonId,
+            currentUserId,
+          });
+        });
+        resolve({ validRows, errors });
+      },
+      error: (err) => reject(err),
+    });
+  });
+}
+
+/**
+ * Commits pre-validated deal-history rows one at a time, reusing the
+ * same RPCs the live UI uses (share_lead_with_lender, change_deal_stage,
+ * record_disbursement, put_deal_on_hold, reject_deal) so this import
+ * can never leave a deal in a state the normal app couldn't also reach
+ * — total_disbursed_amount stays in sync and every RPC's own deal_events
+ * row is written automatically. Stage-detail tables are upserted
+ * directly (on deal_id) since a deal jumping straight to e.g. PF only
+ * has change_deal_stage seed its PF row, not the earlier Login/Sanction
+ * ones this row might also be carrying dates for.
+ */
+export async function commitDealHistoryImport(validRows) {
+  let succeeded = 0;
+  const failures = [];
+
+  for (const row of validRows) {
+    const label = `${row.studentPhone} — ${row.lenderName}`;
+    let dealId = row.dealId;
+
+    if (row.mode === 'insert') {
+      const { data, error } = await supabase.rpc('share_lead_with_lender', {
+        p_lead_lender_status_id: row.lenderStatusId,
+        p_loan_officer_id: null,
+        p_remarks: 'Migrated from historical data',
+      });
+      if (error) { failures.push({ label, error: error.message }); continue; }
+      dealId = data;
+    }
+
+    if (row.branchId) {
+      const { error } = await supabase.from('deals').update({ lender_branch_id: row.branchId }).eq('id', dealId);
+      if (error) { failures.push({ label, error: `region: ${error.message}` }); continue; }
+    }
+
+    const { error: stageError } = await supabase.rpc('change_deal_stage', {
+      p_deal_id: dealId,
+      p_new_stage_id: row.stageId,
+      p_new_status_id: row.statusId,
+      p_remarks: 'Migrated from historical data',
+    });
+    if (stageError) { failures.push({ label, error: `stage: ${stageError.message}` }); continue; }
+
+    let detailError;
+    if (Object.keys(row.bankProspectFields).length > 0) {
+      ({ error: detailError } = await supabase.from('deal_bank_prospect_details').upsert({ deal_id: dealId, ...row.bankProspectFields }, { onConflict: 'deal_id' }));
+    }
+    if (!detailError && Object.keys(row.loginFields).length > 0) {
+      ({ error: detailError } = await supabase.from('deal_login_details').upsert({ deal_id: dealId, ...row.loginFields }, { onConflict: 'deal_id' }));
+    }
+    if (!detailError && Object.keys(row.sanctionFields).length > 0) {
+      ({ error: detailError } = await supabase.from('deal_sanction_details').upsert({ deal_id: dealId, ...row.sanctionFields }, { onConflict: 'deal_id' }));
+    }
+    if (!detailError && Object.keys(row.pfFields).length > 0) {
+      ({ error: detailError } = await supabase.from('deal_pf_details').upsert({ deal_id: dealId, ...row.pfFields }, { onConflict: 'deal_id' }));
+    }
+    if (detailError) { failures.push({ label, error: `stage details: ${detailError.message}` }); continue; }
+
+    if (row.disbursement) {
+      const { error } = await supabase.rpc('record_disbursement', {
+        p_deal_id: dealId,
+        p_tranche_number: row.disbursement.trancheNumber,
+        p_amount: row.disbursement.amount,
+        p_disbursed_date: row.disbursement.date,
+        p_academic_term: row.disbursement.academicTerm,
+        p_remarks: 'Migrated from historical data',
+      });
+      if (error) { failures.push({ label, error: `disbursement: ${error.message}` }); continue; }
+    }
+
+    if (row.isOnHold) {
+      const { error } = await supabase.rpc('put_deal_on_hold', { p_deal_id: dealId, p_hold_reason_id: row.holdReasonId, p_remarks: 'Migrated from historical data' });
+      if (error) { failures.push({ label, error: `hold: ${error.message}` }); continue; }
+    }
+
+    if (row.isRejected) {
+      const { error } = await supabase.rpc('reject_deal', { p_deal_id: dealId, p_rejection_reason_id: row.rejectionReasonId, p_remarks: 'Migrated from historical data' });
+      if (error) { failures.push({ label, error: `rejection: ${error.message}` }); continue; }
+    }
+
+    succeeded += 1;
+  }
+
+  return { succeeded, failures };
+}
+
 export function usersBulkUpdateTemplateCsv() {
   return Papa.unparse([
     { email: 'existing.user@example.com', role_name: '', reporting_manager_email: '', team_name: '', is_active: '' },
