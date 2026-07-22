@@ -75,14 +75,18 @@ export function downloadCsv(csvText, filename) {
 const VALID_LOAN_TYPES = ['Collateral', 'Non Collateral'];
 
 /**
- * Every column beyond the original 8 is optional and exists specifically
- * for HISTORICAL migration of leads from another system, so real history
- * is preserved instead of every migrated lead looking like it was just
- * created:
+ * Only student_phone is truly required — every other column is optional,
+ * for HISTORICAL migration of leads from another system where not every
+ * field is known:
+ *   - student_name: blank on a new lead defaults to the phone number as
+ *     a placeholder (the database itself requires some name).
+ *   - source_name: current pipeline lead source (must match an existing
+ *     lead_sources.name exactly). Blank on a new lead defaults to "Unknown".
+ *   - loan_amount_requested: blank = unset.
  *   - stage_name: current pipeline stage (must match an existing
  *     lead_stages.name exactly). Blank = the opening stage, same as before.
- *   - assigned_rm_email: the RM this lead is currently assigned to
- *     (resolved to users.id by email — must be an active user with the
+ *   - assigned_rm_name: the RM this lead is currently assigned to
+ *     (resolved to users.id by full name — must be an active user with the
  *     Relationship Manager role). Blank = unassigned.
  *   - created_date: backdates the lead's created_at AND the opening
  *     lead_events row's created_at to this date (YYYY-MM-DD), instead of
@@ -99,7 +103,7 @@ export function importTemplateCsv() {
       student_name: 'Jane Doe', student_phone: '+91 98765 43210', student_email: 'jane@example.com',
       course_name: 'MS Computer Science', university_name: 'Example University', destination_country: 'USA',
       loan_amount_requested: 2500000, source_name: 'Direct Website Inquiry',
-      stage_name: 'Documents Received', assigned_rm_email: 'rm@example.com', created_date: '2025-03-14',
+      stage_name: 'Documents Received', assigned_rm_name: 'Priya Sharma', created_date: '2025-03-14',
       loan_type: 'Non Collateral', consultancy_name: '', consultancy_other_name: '',
     },
   ]);
@@ -115,9 +119,9 @@ const normalizePhone = (phone) => (phone || '').replace(/[^\d]/g, '');
  * matter) is the match key against existing leads. A match becomes an
  * UPDATE row — every other column is optional there, and a BLANK cell
  * leaves that field untouched on the existing lead (never nulls it out
- * from a sparse re-export). No match becomes an INSERT row, where
- * student_name / loan_amount_requested / source_name stay required,
- * same as before upsert support existed.
+ * from a sparse re-export). No match becomes an INSERT row — every column
+ * there is optional too now, with sensible defaults for the two the
+ * database itself requires (student_name, source_name — see above).
  */
 export async function parseLeadsCsv(file, currentUserId) {
   const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, { data: consultancies, error: consultanciesError }, { data: existingLeads, error: existingLeadsError }] = await Promise.all([
@@ -148,15 +152,11 @@ export async function parseLeadsCsv(file, currentUserId) {
           const existingLead = existingLeads.find((l) => normalizePhone(l.student_phone) === normalizePhone(row.student_phone));
           const mode = existingLead ? 'update' : 'insert';
 
-          if (mode === 'insert' && !row.student_name?.trim()) { errors.push(`Row ${rowNum}: missing student_name`); return; }
-
           let amount;
           const amountRaw = row.loan_amount_requested?.trim();
           if (amountRaw) {
             amount = Number(amountRaw);
             if (Number.isNaN(amount) || amount <= 0) { errors.push(`Row ${rowNum}: invalid loan_amount_requested`); return; }
-          } else if (mode === 'insert') {
-            errors.push(`Row ${rowNum}: missing loan_amount_requested`); return;
           }
 
           const sourceNameRaw = row.source_name?.trim();
@@ -165,7 +165,7 @@ export async function parseLeadsCsv(file, currentUserId) {
             source = sources.find((s) => s.name.toLowerCase() === sourceNameRaw.toLowerCase());
             if (!source) { errors.push(`Row ${rowNum}: unknown source_name "${row.source_name}"`); return; }
           } else if (mode === 'insert') {
-            errors.push(`Row ${rowNum}: missing source_name`); return;
+            source = sources.find((s) => s.name === 'Unknown');
           }
 
           let rowHasError = false;
@@ -180,14 +180,23 @@ export async function parseLeadsCsv(file, currentUserId) {
             else stageId = stage.id;
           }
 
-          // assigned_rm_email — optional, must be an active Relationship Manager.
+          // assigned_rm_name — optional, must be an active Relationship Manager.
           let assignedRmId = mode === 'insert' ? null : undefined;
-          const rmEmail = row.assigned_rm_email?.trim();
-          if (rmEmail) {
-            const rm = rms.find((u) => u.email.toLowerCase() === rmEmail.toLowerCase());
-            if (!rm) { errors.push(`Row ${rowNum}: no active user found with assigned_rm_email "${rmEmail}"`); rowHasError = true; }
-            else if (rm.roles?.name !== 'Relationship Manager') { errors.push(`Row ${rowNum}: "${rmEmail}" is not a Relationship Manager (role: ${rm.roles?.name || 'unknown'})`); rowHasError = true; }
-            else assignedRmId = rm.id;
+          const rmName = row.assigned_rm_name?.trim();
+          if (rmName) {
+            const matches = rms.filter((u) => u.full_name.toLowerCase() === rmName.toLowerCase());
+            if (matches.length === 0) { errors.push(`Row ${rowNum}: no active user found with assigned_rm_name "${rmName}"`); rowHasError = true; }
+            else if (matches.length > 1) { errors.push(`Row ${rowNum}: more than one active user is named "${rmName}" — use assigned_rm_email instead to disambiguate`); rowHasError = true; }
+            else if (matches[0].roles?.name !== 'Relationship Manager') { errors.push(`Row ${rowNum}: "${rmName}" is not a Relationship Manager (role: ${matches[0].roles?.name || 'unknown'})`); rowHasError = true; }
+            else assignedRmId = matches[0].id;
+          } else {
+            const rmEmail = row.assigned_rm_email?.trim();
+            if (rmEmail) {
+              const rm = rms.find((u) => u.email.toLowerCase() === rmEmail.toLowerCase());
+              if (!rm) { errors.push(`Row ${rowNum}: no active user found with assigned_rm_email "${rmEmail}"`); rowHasError = true; }
+              else if (rm.roles?.name !== 'Relationship Manager') { errors.push(`Row ${rowNum}: "${rmEmail}" is not a Relationship Manager (role: ${rm.roles?.name || 'unknown'})`); rowHasError = true; }
+              else assignedRmId = rm.id;
+            }
           }
 
           // created_date — optional, backdates created_at / the opening event
@@ -224,6 +233,10 @@ export async function parseLeadsCsv(file, currentUserId) {
             errors.push(`Row ${rowNum}: source_name is "BD Partnership" — consultancy_name or consultancy_other_name is required`);
             rowHasError = true;
           }
+          if (mode === 'insert' && !source) {
+            errors.push(`Row ${rowNum}: source_name is blank and the fallback "Unknown" lead source doesn't exist yet — run migration 017 first`);
+            rowHasError = true;
+          }
 
           if (rowHasError) return;
 
@@ -244,7 +257,7 @@ export async function parseLeadsCsv(file, currentUserId) {
             validRows.push({ mode, id: existingLead.id, patch, stageChanged: stageId !== undefined });
           } else {
             const leadRow = {
-              student_name: row.student_name.trim(),
+              student_name: row.student_name?.trim() || row.student_phone.trim(),
               student_phone: row.student_phone.trim(),
               student_email: row.student_email?.trim() || null,
               course_name: row.course_name?.trim() || null,

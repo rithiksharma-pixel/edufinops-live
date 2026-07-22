@@ -925,7 +925,8 @@ insert into lead_sources (name, category) values
   ('BD Partnership',         'Business Development'),
   ('University Tie-up',      'Business Development'),
   ('Digital Campaign',       'Campaign'),
-  ('Existing Customer Referral', 'Referral')
+  ('Existing Customer Referral', 'Referral'),
+  ('Unknown',                'Migrated')
 on conflict do nothing;
 
 -- =========================================================
