@@ -102,14 +102,24 @@ async function loadView(key) {
   if (key === 'dashboard') {
     document.getElementById('viewTitle').textContent = 'Dashboard';
     document.getElementById('viewSubtitle').textContent = 'Your leads at a glance.';
-    await renderRmDashboard();
+    try {
+      await renderRmDashboard();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('rmDashAttention').innerHTML = emptyState('fa-triangle-exclamation', 'Could not load your dashboard', 'Try refreshing the page.');
+    }
     return;
   }
 
   if (key === 'tasks') {
     document.getElementById('viewTitle').textContent = 'Tasks';
     document.getElementById('viewSubtitle').textContent = 'Your personal to-do list.';
-    await refreshTasks();
+    try {
+      await refreshTasks();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('tasksList').innerHTML = emptyState('fa-triangle-exclamation', 'Could not load your tasks', 'Try refreshing the page.');
+    }
     return;
   }
 

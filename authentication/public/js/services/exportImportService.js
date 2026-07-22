@@ -7,17 +7,35 @@
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
 
+// PostgREST caps a single select at 1000 rows. For an export/backup that
+// silently loses everything past the 1000th row, which is the last thing
+// a "backup" should do — so page through in stable id order until a short
+// page comes back. Ordering by the unique id (not created_at) keeps rows
+// from shifting across page boundaries and being skipped or duplicated.
+const EXPORT_PAGE = 1000;
+async function fetchAllRows(table, selectStr) {
+  const all = [];
+  for (let from = 0; ; from += EXPORT_PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(selectStr)
+      .eq('is_deleted', false)
+      .order('id', { ascending: true })
+      .range(from, from + EXPORT_PAGE - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < EXPORT_PAGE) break;
+  }
+  return all;
+}
+
 export async function exportLeadsCsv() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select(`
-      student_name, student_phone, student_email, course_name, university_name,
-      destination_country, loan_amount_requested, currency, created_at,
-      lead_stages ( name ), lead_sources ( name ),
-      assigned_rm:users!leads_assigned_rm_id_fkey ( full_name )
-    `)
-    .eq('is_deleted', false);
-  if (error) throw error;
+  const data = await fetchAllRows('leads', `
+    student_name, student_phone, student_email, course_name, university_name,
+    destination_country, loan_amount_requested, currency, created_at,
+    lead_stages ( name ), lead_sources ( name ),
+    assigned_rm:users!leads_assigned_rm_id_fkey ( full_name )
+  `);
 
   const rows = data.map((l) => ({
     student_name: l.student_name,
@@ -37,15 +55,11 @@ export async function exportLeadsCsv() {
 }
 
 export async function exportDealsCsv() {
-  const { data, error } = await supabase
-    .from('deals')
-    .select(`
-      leads ( student_name ), lenders ( name ),
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name ),
-      is_on_hold, is_rejected, total_disbursed_amount, final_disbursement_date, created_at
-    `)
-    .eq('is_deleted', false);
-  if (error) throw error;
+  const data = await fetchAllRows('deals', `
+    leads ( student_name ), lenders ( name ),
+    current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name ),
+    is_on_hold, is_rejected, total_disbursed_amount, final_disbursement_date, created_at
+  `);
 
   const rows = data.map((d) => ({
     student_name: d.leads?.student_name,
@@ -170,18 +184,20 @@ const resolveConsultancyName = (nameRaw, consultancies) => {
  * database itself requires (student_name, source_name — see above).
  */
 export async function parseLeadsCsv(file, currentUserId) {
-  const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, { data: consultancies, error: consultanciesError }, { data: existingLeads, error: existingLeadsError }] = await Promise.all([
+  // existingLeads and consultancies both need paging — the phone-dedup and
+  // fuzzy-consultancy-match must see EVERY existing row, or a re-import
+  // silently duplicates leads past the 1000th and fuzzy-matches against a
+  // truncated list. Small lookups (sources/stages/rms) stay single-shot.
+  const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, consultancies, existingLeads] = await Promise.all([
     supabase.from('lead_sources').select('id, name').eq('is_deleted', false),
     supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false),
     supabase.from('users').select('id, email, full_name, roles(name)').eq('is_deleted', false).eq('is_active', true),
-    supabase.from('consultancies').select('id, name').eq('is_deleted', false),
-    supabase.from('leads').select('id, student_phone').eq('is_deleted', false),
+    fetchAllRows('consultancies', 'id, name'),
+    fetchAllRows('leads', 'id, student_phone'),
   ]);
   if (sourcesError) throw sourcesError;
   if (stagesError) throw stagesError;
   if (rmsError) throw rmsError;
-  if (consultanciesError) throw consultanciesError;
-  if (existingLeadsError) throw existingLeadsError;
   const openingStage = stages.reduce((min, s) => (s.sequence_order < min.sequence_order ? s : min), stages[0]);
 
   return new Promise((resolve, reject) => {
@@ -387,9 +403,9 @@ export function consultanciesBulkImportTemplateCsv() {
  * active, matching the single-create form in Admin Settings.
  */
 export async function parseConsultanciesCsv(file, currentUserId) {
-  const { data: existing, error: existingError } = await supabase
-    .from('consultancies').select('id, name').eq('is_deleted', false);
-  if (existingError) throw existingError;
+  // Paged: the consultancy list is already ~750 and climbing; a truncated
+  // dedup would start re-inserting existing names.
+  const existing = await fetchAllRows('consultancies', 'id, name');
 
   return new Promise((resolve, reject) => {
     Papa.parse(file, {

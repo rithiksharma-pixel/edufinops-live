@@ -26,7 +26,13 @@ function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, d
   if (priority) query = query.eq('priority', priority);
   if (overdueOnly) query = query.lt('next_follow_up_at', new Date().toISOString());
   if (search) {
-    query = query.or(`student_name.ilike.%${search}%,student_phone.ilike.%${search}%`);
+    // Strip characters that are grammar in a PostgREST or() filter (comma,
+    // parens, quotes, backslash) and the ilike wildcards — otherwise a phone
+    // typed as "(555) 123-4567" 400s the request and surfaces as a generic
+    // "Could not load leads". None of these are meaningful in a name/phone
+    // search anyway.
+    const s = search.replace(/[,()"\\%_]/g, ' ').trim();
+    if (s) query = query.or(`student_name.ilike.%${s}%,student_phone.ilike.%${s}%`);
   }
 
   // Date-range filter. Whitelist the column so only the two intended

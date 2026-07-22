@@ -310,6 +310,7 @@ async function bootstrap() {
     return;
   }
   document.getElementById('userName').textContent = user.fullName;
+  document.getElementById('userRole').textContent = user.role;
   document.getElementById('avatar').textContent = user.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   mountTopbar({ app: 'manager-dashboard', user });
 

@@ -17,7 +17,12 @@ export async function listMyLeads(search) {
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
 
-  if (search) query = query.or(`student_name.ilike.%${search}%,student_phone.ilike.%${search}%`);
+  if (search) {
+    // See lead-management/leadService.js: strip PostgREST or()-grammar chars
+    // so a phone like "(555) 123-4567" doesn't 400 the request.
+    const s = search.replace(/[,()"\\%_]/g, ' ').trim();
+    if (s) query = query.or(`student_name.ilike.%${s}%,student_phone.ilike.%${s}%`);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
