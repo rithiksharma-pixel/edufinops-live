@@ -900,6 +900,10 @@ export async function commitDealHistoryImport(validRows) {
       p_new_stage_id: row.stageId,
       p_new_status_id: row.statusId,
       p_remarks: 'Migrated from historical data',
+      // Historical rows carry a final stage that can legitimately jump past
+      // intermediate ones — allow the skip rather than depending on the
+      // importer being run by an Admin.
+      p_allow_skip: true,
     });
     if (stageError) { failures.push({ label, error: `stage: ${stageError.message}` }); continue; }
 
