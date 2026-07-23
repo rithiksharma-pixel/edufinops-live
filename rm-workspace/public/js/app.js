@@ -416,8 +416,12 @@ async function bootstrap() {
   initCallsPeriodToggle();
   initRowNavigation();
 
-  const leadOptions = await getMyOpenLeadsForTaskLink();
-  document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));
+  try {
+    const leadOptions = await getMyOpenLeadsForTaskLink();
+    document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));
+  } catch (err) {
+    console.error(err);
+  }
 
   document.getElementById('btnAddTask').addEventListener('click', async () => {
     const title = document.getElementById('taskTitle').value.trim();
