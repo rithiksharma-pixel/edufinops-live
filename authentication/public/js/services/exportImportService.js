@@ -13,13 +13,15 @@ import { supabase } from '../config/supabaseClient.js';
 // page comes back. Ordering by the unique id (not created_at) keeps rows
 // from shifting across page boundaries and being skipped or duplicated.
 const EXPORT_PAGE = 1000;
-async function fetchAllRows(table, selectStr) {
+// applyFilters lets a caller opt out of the default is_deleted scoping (e.g.
+// lead_lender_status, which has never been filtered by it) without every
+// other call site having to know or care.
+async function fetchAllRows(table, selectStr, applyFilters) {
   const all = [];
   for (let from = 0; ; from += EXPORT_PAGE) {
-    const { data, error } = await supabase
-      .from(table)
-      .select(selectStr)
-      .eq('is_deleted', false)
+    let query = supabase.from(table).select(selectStr);
+    query = applyFilters ? applyFilters(query) : query.eq('is_deleted', false);
+    const { data, error } = await query
       .order('id', { ascending: true })
       .range(from, from + EXPORT_PAGE - 1);
     if (error) throw error;
@@ -682,35 +684,34 @@ const parseNumber = (raw, rowNum, fieldName, errors) => {
  */
 export async function parseDealHistoryCsv(file, currentUserId) {
   const [
-    { data: leads, error: leadsError },
     { data: lenders, error: lendersError },
     { data: branches, error: branchesError },
     { data: stages, error: stagesError },
     { data: statuses, error: statusesError },
     { data: holdReasons, error: holdReasonsError },
     { data: rejectionReasons, error: rejectionReasonsError },
-    { data: existingDeals, error: existingDealsError },
-    { data: lenderStatusRows, error: lenderStatusError },
+    leads,
+    existingDeals,
+    lenderStatusRows,
   ] = await Promise.all([
-    supabase.from('leads').select('id, student_phone').eq('is_deleted', false),
     supabase.from('lenders').select('id, name').eq('is_deleted', false),
     supabase.from('lender_branches').select('id, lender_id, name').eq('is_deleted', false),
     supabase.from('deal_stages').select('id, name, sequence_order').eq('is_deleted', false),
     supabase.from('deal_stage_statuses').select('id, deal_stage_id, name').eq('is_deleted', false),
     supabase.from('deal_hold_reasons').select('id, name').eq('is_deleted', false),
     supabase.from('deal_rejection_reasons').select('id, name').eq('is_deleted', false),
-    supabase.from('deals').select('id, lead_id, lender_id, current_deal_stage_id').eq('is_deleted', false),
-    supabase.from('lead_lender_status').select('id, lead_id, lender_id'),
+    // leads, deals, and lead_lender_status can all pass PostgREST's 1000-row
+    // cap on a live pipeline — paged the same way export/other imports are.
+    fetchAllRows('leads', 'id, student_phone'),
+    fetchAllRows('deals', 'id, lead_id, lender_id, current_deal_stage_id'),
+    fetchAllRows('lead_lender_status', 'id, lead_id, lender_id', (q) => q),
   ]);
-  if (leadsError) throw leadsError;
   if (lendersError) throw lendersError;
   if (branchesError) throw branchesError;
   if (stagesError) throw stagesError;
   if (statusesError) throw statusesError;
   if (holdReasonsError) throw holdReasonsError;
   if (rejectionReasonsError) throw rejectionReasonsError;
-  if (existingDealsError) throw existingDealsError;
-  if (lenderStatusError) throw lenderStatusError;
 
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
