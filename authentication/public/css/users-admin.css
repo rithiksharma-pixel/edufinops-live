@@ -6,7 +6,7 @@
 .table-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow-x: auto; padding: 4px 0 0; }
 .section-title { font-size: 14px; font-weight: 500; margin: 0; padding: 16px 20px 10px; }
 .data-table { width: 100%; border-collapse: collapse; }
-.data-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-500); padding: 10px 20px; border-bottom: 1px solid var(--border); background: #FBFBFA; }
+.data-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-500); padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--paper-sunken); }
 .data-table td { padding: 12px 20px; font-size: 14px; border-bottom: 1px solid var(--border); color: var(--ink-700); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr { transition: background 0.1s ease; }

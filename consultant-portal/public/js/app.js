@@ -6,6 +6,7 @@ import { listMyLeads, getLeadDetail, getLeadTimeline, createMyLead } from './ser
 import { getLeadStages, getLeadSources } from './services/lookupService.js';
 import { getMessages, sendMessage } from './services/messageService.js';
 import { validateLeadForm, formatCurrency, formatDateTime } from './utils/validation.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 let currentUser;
 
@@ -162,4 +163,4 @@ async function bootstrap() {
   await refreshLeads();
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Consultant Portal');

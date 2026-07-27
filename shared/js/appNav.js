@@ -80,6 +80,20 @@ async function doSignOut() {
   window.location.href = LOGIN_PATH;
 }
 
+/**
+ * Flip light/dark and remember the choice. The no-flash boot reader lives
+ * in shared/env.js. When nothing is stored yet, derive the current theme
+ * from the OS preference so the first click always visibly toggles.
+ */
+function toggleTheme() {
+  const root = document.documentElement;
+  const current = root.getAttribute('data-theme')
+    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const next = current === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  try { localStorage.setItem('zt-theme', next); } catch { /* storage disabled */ }
+}
+
 function render() {
   const host = document.getElementById('ztTopbar');
   if (!host) return;
@@ -124,6 +138,9 @@ function render() {
       <nav class="zt-crumbs" aria-label="Breadcrumb">${crumbHtml}</nav>
     </div>
     <div class="zt-topbar-right">
+      <button type="button" class="zt-theme-toggle" title="Toggle light / dark" aria-label="Toggle light or dark theme">
+        <i class="fa-solid fa-sun zt-ic-light"></i><i class="fa-solid fa-moon zt-ic-dark"></i>
+      </button>
       ${state.user ? `
         <div class="zt-user">
           <div class="zt-user-avatar">${escapeHtml(initials(state.user.fullName))}</div>
@@ -152,6 +169,9 @@ function wireEvents(host) {
     document.addEventListener('click', (e) => { if (!host.contains(e.target)) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   }
+
+  const themeBtn = host.querySelector('.zt-theme-toggle');
+  if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
   const signout = host.querySelector('.zt-signout');
   if (signout) signout.addEventListener('click', doSignOut);

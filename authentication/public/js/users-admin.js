@@ -10,6 +10,7 @@ import {
   getTeams, changeUserTeam,
 } from './services/userAdminService.js';
 import { whatsappPortalUrl } from './whatsappLink.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 /**
  * "Send portal link" button for a roster/invite row. Renders a disabled
@@ -66,7 +67,9 @@ async function loadUsers() {
   users.forEach((u) => {
     const tr = document.createElement('tr');
     const roleOptions = roles.map((r) => `<option value="${r.id}" ${r.name === u.roles?.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
-    const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.full_name === u.reporting_manager?.full_name ? 'selected' : ''}>${escapeHtml(managerLabel(m))}</option>`).join('');
+    // Match on id, not full_name — two teammates with the same name used to
+    // select the wrong row (and the right one looked unset).
+    const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.id === u.reporting_manager_id ? 'selected' : ''}>${escapeHtml(managerLabel(m))}</option>`).join('');
     const isManager = u.roles?.name === 'Manager';
     const teamCell = isManager
       ? `<select class="inline-select" data-team-for="${u.id}"><option value="">None</option>${teams.map((t) => `<option value="${t.id}" ${t.id === u.team_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>`
@@ -88,7 +91,11 @@ async function loadUsers() {
         await changeUserTeam(e.target.dataset.teamFor, e.target.value || null);
         showToast('Team updated.');
       } catch (err) {
-        showToast('Could not change team.', true);
+        // Show the real reason (RLS denial, trigger guard, network) instead
+        // of a blanket failure the user can't act on.
+        console.error('changeUserTeam failed', err);
+        showToast(`Could not change team: ${err.message || err}`, true);
+        await loadUsers(); // snap the dropdown back to the stored value
       }
     });
   });
@@ -100,7 +107,9 @@ async function loadUsers() {
         showToast('Role updated.');
         await loadUsers();
       } catch (err) {
-        showToast('Could not change role.', true);
+        console.error('changeUserRole failed', err);
+        showToast(`Could not change role: ${err.message || err}`, true);
+        await loadUsers();
       }
     });
   });
@@ -110,8 +119,11 @@ async function loadUsers() {
       try {
         await changeReportingManager(e.target.dataset.managerFor, e.target.value || null, 'Changed via Manage Users');
         showToast('Reporting manager updated.');
+        await loadUsers(); // re-render so the saved manager is reflected everywhere
       } catch (err) {
-        showToast('Could not change reporting manager.', true);
+        console.error('changeReportingManager failed', err);
+        showToast(`Could not change reporting manager: ${err.message || err}`, true);
+        await loadUsers();
       }
     });
   });
@@ -417,15 +429,23 @@ async function bootstrap() {
     document.querySelectorAll('.table-card').forEach((section) => { section.hidden = true; });
   }
 
-  roles = await getRoles();
-  managers = await getPossibleManagers(currentUserProfile);
-  lenders = isAdmin ? await getLenders() : [];
-  teams = await getTeams();
-  initInviteModal();
-  initBulkInviteModal();
-  if (isAdmin) {
-    await Promise.all([loadUsers(), loadInvitations()]);
+  // Any failure below used to reject unhandled, leaving the page half-built
+  // — an empty roster and empty Team / Reporting manager dropdowns with no
+  // hint as to why. Surface it instead so the cause is visible.
+  try {
+    roles = await getRoles();
+    managers = await getPossibleManagers(currentUserProfile);
+    lenders = isAdmin ? await getLenders() : [];
+    teams = await getTeams();
+    initInviteModal();
+    initBulkInviteModal();
+    if (isAdmin) {
+      await Promise.all([loadUsers(), loadInvitations()]);
+    }
+  } catch (err) {
+    console.error('User management failed to load', err);
+    showToast(`Could not load user management: ${err.message || err}`, true);
   }
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'User Management');

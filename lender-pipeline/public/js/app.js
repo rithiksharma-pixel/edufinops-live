@@ -11,6 +11,7 @@ import {
   getLeadProfileForLender, getDocumentDownloadUrl,
 } from './services/lenderDealService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 let currentUser;
 function formatCurrency(amount) {
@@ -518,4 +519,4 @@ async function loadProfileForm() {
   form.processing_notes.value = profile.processing_notes || '';
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Lender Pipeline');

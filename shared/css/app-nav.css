@@ -91,6 +91,25 @@
 }
 .zt-signout:hover { background: var(--danger-soft); color: var(--danger-soft-ink); border-color: transparent; }
 
+/* ---------- Theme toggle (light / dark) ---------- */
+.zt-theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--ink-500); cursor: pointer; font-size: 14px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.zt-theme-toggle:hover { background: var(--bg-hover); color: var(--ink-900); }
+/* Show the icon for the theme you'd switch TO: moon in light, sun in dark. */
+.zt-theme-toggle .zt-ic-dark { display: inline-block; }
+.zt-theme-toggle .zt-ic-light { display: none; }
+:root[data-theme="dark"] .zt-theme-toggle .zt-ic-dark { display: none; }
+:root[data-theme="dark"] .zt-theme-toggle .zt-ic-light { display: inline-block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .zt-theme-toggle .zt-ic-dark { display: none; }
+  :root:not([data-theme="light"]) .zt-theme-toggle .zt-ic-light { display: inline-block; }
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   .zt-topbar { flex-wrap: wrap; gap: 10px; }

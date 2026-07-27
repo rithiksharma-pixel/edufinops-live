@@ -11,17 +11,21 @@
 // aggregates rather than fetching raw rows and summing in the browser.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
 import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
 export async function getTeamFunnel() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select('current_stage_id, lead_stages ( name, sequence_order )')
-    .eq('is_deleted', false);
-  if (error) throw error;
+  // Paged: PostgREST's 1000-row cap made every stage count in this funnel
+  // under-report once the team passed 1000 leads.
+  const data = await fetchAll(
+    () => supabase
+      .from('leads')
+      .select('id, current_stage_id, lead_stages ( name, sequence_order )')
+      .eq('is_deleted', false)
+  );
 
   const counts = {};
   data.forEach((l) => {
@@ -37,18 +41,22 @@ export async function getTeamFunnel() {
 }
 
 export async function getRmPerformance() {
-  const { data: leads, error } = await supabase
-    .from('leads')
-    .select('id, assigned_rm_id, loan_amount_requested, next_follow_up_at, assigned_rm:users!leads_assigned_rm_id_fkey(full_name)')
-    .eq('is_deleted', false)
-    .not('assigned_rm_id', 'is', null);
-  if (error) throw error;
+  // Both paged — per-RM lead counts and disbursed totals were computed from
+  // at most the first 1000 rows, so every RM's numbers were understated.
+  const leads = await fetchAll(
+    () => supabase
+      .from('leads')
+      .select('id, assigned_rm_id, loan_amount_requested, next_follow_up_at, assigned_rm:users!leads_assigned_rm_id_fkey(full_name)')
+      .eq('is_deleted', false)
+      .not('assigned_rm_id', 'is', null)
+  );
 
-  const { data: deals, error: dealsError } = await supabase
-    .from('deals')
-    .select('id, total_disbursed_amount, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name), leads!inner(assigned_rm_id)')
-    .eq('is_deleted', false);
-  if (dealsError) throw dealsError;
+  const deals = await fetchAll(
+    () => supabase
+      .from('deals')
+      .select('id, total_disbursed_amount, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name), leads!inner(assigned_rm_id)')
+      .eq('is_deleted', false)
+  );
 
   const byRm = {};
   leads.forEach((l) => {
@@ -89,13 +97,14 @@ function startOfWeek() {
  */
 export async function getRmCallStats() {
   const since = startOfWeek();
-  const { data, error } = await supabase
-    .from('lead_events')
-    .select('event_type, created_by')
-    .in('event_type', CALL_STATUS_OPTIONS)
-    .eq('is_deleted', false)
-    .gte('created_at', since.toISOString());
-  if (error) throw error;
+  const data = await fetchAll(
+    () => supabase
+      .from('lead_events')
+      .select('id, event_type, created_by')
+      .in('event_type', CALL_STATUS_OPTIONS)
+      .eq('is_deleted', false)
+      .gte('created_at', since.toISOString())
+  );
 
   const byRm = {};
   data.forEach((ev) => {
@@ -148,32 +157,39 @@ const STAGE_TAT_THRESHOLD_DAYS = {
  * whole team instead of one bank.
  */
 export async function getAttentionSummary() {
-  const { data: leadsData, error: leadsError } = await supabase
-    .from('leads')
-    .select('id, student_name, next_follow_up_at, assigned_rm:users!leads_assigned_rm_id_fkey(full_name)')
-    .eq('is_deleted', false);
-  if (leadsError) throw leadsError;
+  // All paged — `totalLeads` and `onTrackCount` are rendered as headline
+  // numbers, so a 1000-row truncation here showed a wrong pipeline size.
+  const leadsData = await fetchAll(
+    () => supabase
+      .from('leads')
+      .select('id, student_name, next_follow_up_at, assigned_rm:users!leads_assigned_rm_id_fkey(full_name)')
+      .eq('is_deleted', false)
+  );
 
-  const { data: dealsData, error: dealsError } = await supabase
-    .from('deals')
-    .select('id, is_on_hold, is_rejected, created_at, lead_id, leads(student_name), current_deal_stage_id, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
-    .eq('is_deleted', false);
-  if (dealsError) throw dealsError;
+  const dealsData = await fetchAll(
+    () => supabase
+      .from('deals')
+      .select('id, is_on_hold, is_rejected, created_at, lead_id, leads(student_name), current_deal_stage_id, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
+      .eq('is_deleted', false)
+  );
 
-  const { data: stageEvents, error: eventsError } = await supabase
-    .from('deal_events')
-    .select('deal_id, to_stage_id, created_at')
-    .not('to_stage_id', 'is', null)
-    .order('created_at', { ascending: false });
-  if (eventsError) throw eventsError;
+  const stageEvents = await fetchAll(
+    () => supabase
+      .from('deal_events')
+      .select('id, deal_id, to_stage_id, created_at')
+      .not('to_stage_id', 'is', null)
+      .order('created_at', { ascending: false }),
+    { tiebreak: 'id', ascending: false }
+  );
 
-  const { data: overdueTasksData, error: tasksError } = await supabase
-    .from('tasks')
-    .select('id, title, due_date, leads(id, student_name), assigned_to:users!tasks_assigned_to_user_id_fkey(full_name)')
-    .eq('is_deleted', false)
-    .eq('is_completed', false)
-    .lt('due_date', new Date().toISOString().slice(0, 10));
-  if (tasksError) throw tasksError;
+  const overdueTasksData = await fetchAll(
+    () => supabase
+      .from('tasks')
+      .select('id, title, due_date, leads(id, student_name), assigned_to:users!tasks_assigned_to_user_id_fkey(full_name)')
+      .eq('is_deleted', false)
+      .eq('is_completed', false)
+      .lt('due_date', new Date().toISOString().slice(0, 10))
+  );
 
   const now = Date.now();
 
@@ -261,19 +277,21 @@ export async function getDailyBusiness() {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const { data: leadsToday, error: leadsError } = await supabase
-    .from('leads')
-    .select('id')
-    .eq('is_deleted', false)
-    .gte('created_at', startOfToday.toISOString());
-  if (leadsError) throw leadsError;
+  const leadsToday = await fetchAll(
+    () => supabase
+      .from('leads')
+      .select('id')
+      .eq('is_deleted', false)
+      .gte('created_at', startOfToday.toISOString())
+  );
 
-  const { data: disbursementsToday, error: disbError } = await supabase
-    .from('disbursements')
-    .select('amount')
-    .eq('is_deleted', false)
-    .gte('created_at', startOfToday.toISOString());
-  if (disbError) throw disbError;
+  const disbursementsToday = await fetchAll(
+    () => supabase
+      .from('disbursements')
+      .select('id, amount')
+      .eq('is_deleted', false)
+      .gte('created_at', startOfToday.toISOString())
+  );
 
   return {
     newLeadsToday: leadsToday.length,

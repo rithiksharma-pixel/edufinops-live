@@ -4,6 +4,7 @@
 // Nothing outside this file constructs a Supabase query for `leads`.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 const LEAD_LIST_SELECT = `
   id, student_name, student_phone, student_email,
@@ -51,17 +52,21 @@ function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, d
  * need to (and must not) apply its own role-based scoping.
  */
 export async function listLeads(filters = {}) {
-  let query = supabase
-    .from('leads')
-    .select(LEAD_LIST_SELECT)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
-
-  query = applyLeadFilters(query, filters);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+  // Paged — PostgREST returns at most 1000 rows per request, which used to
+  // silently truncate the list (and every count derived from it) once the
+  // pipeline passed 1000 leads. created_at is not unique, so fetchAll adds
+  // `id` as the tiebreaker to keep paging stable.
+  return fetchAll(
+    () => applyLeadFilters(
+      supabase
+        .from('leads')
+        .select(LEAD_LIST_SELECT)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false }),
+      filters
+    ),
+    { tiebreak: 'id', ascending: false }
+  );
 }
 
 /** Same filter set as listLeads, head-only count — powers Smart View tab badges. */
@@ -85,11 +90,12 @@ export async function countLeads(filters = {}) {
  * RPC just for counting).
  */
 export async function getStageCounts() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select('current_stage_id')
-    .eq('is_deleted', false);
-  if (error) throw error;
+  // Paged for the same reason as listLeads — this previously counted only
+  // the first 1000 leads, so the funnel row under-reported every stage
+  // once the pipeline grew past that.
+  const data = await fetchAll(
+    () => supabase.from('leads').select('id, current_stage_id').eq('is_deleted', false)
+  );
 
   const counts = {};
   for (const row of data) {

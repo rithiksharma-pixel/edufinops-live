@@ -1,56 +1,72 @@
 /* =========================================================
-   SHARED DESIGN TOKENS — v2, "Ledger" identity
-   Grounded in what this product actually is: a ledger of loans
-   moving through certified checkpoints, not a generic SaaS console.
+   SHARED DESIGN TOKENS — v3, "Premium SaaS"
+   Blue-slate system in the spirit of Stripe / Linear / Notion.
+   Every token NAME from v2 is preserved (apps reference them by
+   name); only the VALUES changed, plus a full dark palette.
+   Light is primary; dark is opt-in via data-theme or the OS
+   preference. Aliases resolve through the base tokens, so
+   redefining the base tokens per-theme themes the whole product.
    ========================================================= */
 :root {
-  --paper:          #FAFAF7;
+  /* neutrals — cool slate */
+  --paper:          #F6F8FB;
   --paper-raised:   #FFFFFF;
-  --paper-sunken:   #F1EFE7;
+  --paper-sunken:   #EEF2F7;
 
-  --ink-900:        #15181D;
-  --ink-700:        #454B54;
-  --ink-500:        #767C85;
-  --ink-300:        #C7C4B8;
+  --ink-900:        #0B1220;
+  --ink-700:        #334155;
+  --ink-500:        #64748B;
+  --ink-300:        #CBD5E1;
 
-  --navy:           #1B3A6B;
+  /* brand: deep navy sidebar ground, blue accent */
+  --navy:           #101B30;   /* sidebar / deep surfaces */
   --navy-ink:       #FFFFFF;
-  --navy-soft:      #E8EDF5;
-  --navy-soft-ink:  #1B3A6B;
+  --navy-soft:      #DBE7FE;    /* light-blue "accent" tint */
+  --navy-soft-ink:  #1D4ED8;
 
-  --stamp-green:        #2F6B4F;
-  --stamp-green-soft:   #E3EEE8;
-  --stamp-green-soft-ink: #1F4A37;
+  /* accent (blue) — decoupled from the sidebar colour */
+  --blue:           #2563EB;
+  --blue-700:       #1D4ED8;
 
-  --amber:          #B8752B;
-  --amber-soft:     #F5EBDC;
-  --amber-soft-ink: #7A4D1B;
+  --stamp-green:          #16A34A;
+  --stamp-green-soft:     #E7F6EE;
+  --stamp-green-soft-ink: #15803D;
 
-  --rose:           #A83A3A;
-  --rose-soft:      #F5E4E3;
-  --rose-soft-ink:  #7A2A2A;
+  --amber:          #D97706;
+  --amber-soft:     #FBF0DF;
+  --amber-soft-ink: #B45309;
 
-  --line:           #E2DFD3;
-  --radius-sm:      6px;
-  --radius-md:      10px;
-  --radius-lg:      14px;
+  --rose:           #DC2626;
+  --rose-soft:      #FBEAEA;
+  --rose-soft-ink:  #B91C1C;
 
-  --font-display: 'Fraunces', Georgia, serif;
-  --font-ui:      'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono:    'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --indigo:         #4F46E5;
+  --indigo-soft:    #EDECFC;
+  --indigo-soft-ink:#4338CA;
 
-  --shadow-drawer: -8px 0 24px rgba(21,24,29,0.08);
-  --shadow-modal:  0 12px 32px rgba(21,24,29,0.16);
+  --line:           #E6EBF2;
 
-  /* Legacy variable names kept as aliases so every existing app
-     (which references --bg-page, --accent, --danger, etc.) picks up
-     the new palette automatically with zero per-app code changes. */
+  --radius-sm:      8px;
+  --radius-md:      12px;
+  --radius-lg:      16px;
+
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-ui:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:    'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  --shadow-sm:     0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  --shadow-md:     0 2px 4px rgba(16,24,40,.04), 0 10px 24px -10px rgba(16,24,40,.14);
+  --shadow-drawer: -16px 0 48px -24px rgba(16,24,40,.28);
+  --shadow-modal:  0 20px 48px -16px rgba(16,24,40,.28);
+
+  /* legacy alias names — apps reference these; they resolve through
+     the base tokens above, so per-theme values propagate for free. */
   --bg-page: var(--paper);
   --bg-surface: var(--paper-raised);
   --bg-sidebar: var(--navy);
   --bg-hover: var(--paper-sunken);
-  --accent: var(--navy);
-  --accent-ink: var(--navy-ink);
+  --accent: var(--blue);
+  --accent-ink: #FFFFFF;
   --accent-soft: var(--navy-soft);
   --accent-soft-ink: var(--navy-soft-ink);
   --success: var(--stamp-green);
@@ -65,6 +81,69 @@
   --border: var(--line);
 }
 
+/* ---------- DARK — explicit override (theme toggle) ---------- */
+:root[data-theme="dark"] {
+  --paper:          #0A0E17;
+  --paper-raised:   #121826;
+  --paper-sunken:   #1A2233;
+
+  --ink-900:        #F1F5F9;
+  --ink-700:        #C7D0DC;
+  --ink-500:        #8A94A6;
+  --ink-300:        #465066;
+
+  --navy:           #0C1424;
+  --navy-ink:       #FFFFFF;
+  --navy-soft:      #182742;
+  --navy-soft-ink:  #93B4F5;
+
+  --blue:           #5B8DEF;
+  --blue-700:       #6E9BF2;
+
+  --stamp-green:          #4ADE80;
+  --stamp-green-soft:     #16281E;
+  --stamp-green-soft-ink: #86EFAC;
+
+  --amber:          #F0B24B;
+  --amber-soft:     #2A2214;
+  --amber-soft-ink: #FBD38D;
+
+  --rose:           #F87171;
+  --rose-soft:      #2C1719;
+  --rose-soft-ink:  #FCA5A5;
+
+  --indigo:         #8B84F0;
+  --indigo-soft:    #1E1C3A;
+  --indigo-soft-ink:#C4BFFA;
+
+  --line:           #202A3C;
+
+  --accent-ink: #0A0E17;
+  --shadow-sm:     0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:     0 10px 28px -12px rgba(0,0,0,.6);
+  --shadow-drawer: -16px 0 60px -24px rgba(0,0,0,.7);
+  --shadow-modal:  0 24px 60px -18px rgba(0,0,0,.7);
+}
+
+/* ---------- DARK — follow the OS unless forced light ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0A0E17; --paper-raised: #121826; --paper-sunken: #1A2233;
+    --ink-900: #F1F5F9; --ink-700: #C7D0DC; --ink-500: #8A94A6; --ink-300: #465066;
+    --navy: #0C1424; --navy-ink: #FFFFFF; --navy-soft: #182742; --navy-soft-ink: #93B4F5;
+    --blue: #5B8DEF; --blue-700: #6E9BF2;
+    --stamp-green: #4ADE80; --stamp-green-soft: #16281E; --stamp-green-soft-ink: #86EFAC;
+    --amber: #F0B24B; --amber-soft: #2A2214; --amber-soft-ink: #FBD38D;
+    --rose: #F87171; --rose-soft: #2C1719; --rose-soft-ink: #FCA5A5;
+    --indigo: #8B84F0; --indigo-soft: #1E1C3A; --indigo-soft-ink: #C4BFFA;
+    --line: #202A3C; --accent-ink: #0A0E17;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-md: 0 10px 28px -12px rgba(0,0,0,.6);
+    --shadow-drawer: -16px 0 60px -24px rgba(0,0,0,.7);
+    --shadow-modal: 0 24px 60px -18px rgba(0,0,0,.7);
+  }
+}
+
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
@@ -75,12 +154,14 @@ html, body {
   color: var(--ink-900);
   background: var(--paper);
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.006em;
 }
+html { color-scheme: light dark; }
 
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
-  font-weight: 560;
-  letter-spacing: -0.01em;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .mono, .amount, td.amount, .stat-card .value {
@@ -92,23 +173,33 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 9px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  font-size: 14px; font-weight: 500;
+  padding: 9px 15px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-surface);
+  color: var(--ink-900);
+  font-size: 14px; font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  box-shadow: var(--shadow-sm);
+  transition: background .13s ease, border-color .13s ease, box-shadow .13s ease, transform .08s ease;
 }
-.btn-primary { background: var(--navy); color: white; }
-.btn-primary:hover { background: #14305A; }
-.btn-ghost { background: transparent; color: var(--ink-700); border-color: var(--line); }
-.btn-ghost:hover { background: var(--paper-sunken); }
+.btn:hover { box-shadow: var(--shadow-md); }
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--blue) 0%, var(--blue-700) 100%);
+  color: #fff; border-color: transparent;
+  box-shadow: 0 2px 8px -1px color-mix(in srgb, var(--blue) 55%, transparent);
+}
+.btn-primary:hover { box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--blue) 55%, transparent); }
+.btn-ghost { background: transparent; color: var(--ink-700); border-color: transparent; box-shadow: none; }
+.btn-ghost:hover { background: var(--paper-sunken); box-shadow: none; }
+.btn-secondary { background: var(--bg-surface); color: var(--ink-900); border-color: var(--line); }
 
 .badge {
-  display: inline-flex; align-items: center;
-  padding: 3px 10px; border-radius: 4px;
-  font-size: 12px; font-weight: 500;
-  font-family: var(--font-mono);
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0;
   position: relative;
 }
 .badge-neutral   { background: var(--paper-sunken); color: var(--ink-700); }
@@ -119,42 +210,37 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: var(--ink-900); color: white;
+  background: var(--ink-900); color: var(--paper-raised);
   padding: 11px 20px; border-radius: var(--radius-md);
-  font-size: 13px; z-index: 200;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  font-size: 13px; font-weight: 500; z-index: 200;
+  box-shadow: var(--shadow-modal);
 }
-.toast.error { background: var(--rose); }
+.toast.error { background: var(--rose); color: #fff; }
 
 /* ---------------------------------------------------------
-   SIGNATURE ELEMENT — the stage stamp.
-   Used in exactly one place: the deal timeline, when a stage
-   changes. An oval seal with serif text and a rotated tilt,
-   echoing a passport/certification stamp — a loan's journey
-   through checkpoints, made literal. Not reused as decoration
-   anywhere else in the product.
+   Stage stamp — the one signature element (deal timeline).
    --------------------------------------------------------- */
 .stage-stamp {
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   width: 64px; height: 64px;
-  border: 2.5px solid var(--stamp-color, var(--navy));
+  border: 2.5px solid var(--stamp-color, var(--blue));
   border-radius: 50%;
-  color: var(--stamp-color, var(--navy));
+  color: var(--stamp-color, var(--blue));
   transform: rotate(-8deg);
   position: relative;
 }
 .stage-stamp::before {
   content: '';
   position: absolute; inset: 4px;
-  border: 1px solid var(--stamp-color, var(--navy));
+  border: 1px solid var(--stamp-color, var(--blue));
   border-radius: 50%;
   opacity: 0.5;
 }
 .stage-stamp .stamp-text {
   font-family: var(--font-display);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-align: center;
   line-height: 1.15;
   text-transform: uppercase;
