@@ -83,6 +83,7 @@
 
 /* ---------- DARK — explicit override (theme toggle) ---------- */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --paper:          #0A0E17;
   --paper-raised:   #121826;
   --paper-sunken:   #1A2233;
@@ -128,6 +129,7 @@
 /* ---------- DARK — follow the OS unless forced light ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --paper: #0A0E17; --paper-raised: #121826; --paper-sunken: #1A2233;
     --ink-900: #F1F5F9; --ink-700: #C7D0DC; --ink-500: #8A94A6; --ink-300: #465066;
     --navy: #0C1424; --navy-ink: #FFFFFF; --navy-soft: #182742; --navy-soft-ink: #93B4F5;
@@ -156,7 +158,14 @@ html, body {
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.006em;
 }
-html { color-scheme: light dark; }
+/* color-scheme must name the theme actually in use, NOT "light dark".
+   "light dark" only advertises that both are supported, so the browser
+   renders any control we haven't explicitly painted — textarea, input,
+   select, scrollbars, date pickers — using the OS preference. On a
+   dark-OS machine that produced dark form fields on a light page
+   (e.g. the Remarks box rendering white-on-black). Each theme block
+   below re-declares this so the two can never disagree. */
+:root { color-scheme: light; }
 
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
@@ -170,6 +179,28 @@ h1, h2, h3, .font-display {
 }
 
 button, input, select, textarea { font-family: inherit; font-size: inherit; }
+
+/* Paint every text-entry control from tokens. Plenty of app rules set only
+   border/padding/font and leave background and color to the browser, which
+   is exactly how a field ends up unreadable when page theme and OS theme
+   disagree. Declared here (design-tokens.css loads before every app
+   stylesheet) at single-element specificity, so any app rule that DOES set
+   its own background still wins. */
+input, select, textarea {
+  background-color: var(--bg-surface);
+  color: var(--ink-900);
+}
+input::placeholder, textarea::placeholder { color: var(--ink-500); opacity: 1; }
+input:disabled, select:disabled, textarea:disabled {
+  background-color: var(--paper-sunken);
+  color: var(--ink-500);
+}
+/* Checkboxes/radios keep their native look — accent-color themes them
+   without breaking the control the way background-color would. */
+input[type="checkbox"], input[type="radio"] {
+  background-color: initial;
+  accent-color: var(--accent);
+}
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
