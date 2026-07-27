@@ -5,7 +5,7 @@
 // client-side for security (only for display grouping).
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
-import { fetchAll } from '../../../../shared/js/fetchAll.js';
+import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 const LEAD_SELECT = `
   id, student_name, student_phone, course_name, university_name,
@@ -54,7 +54,7 @@ export async function getNewLeads() {
 }
 
 export async function getDocumentsPending() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('documents')
     .select(`
       id, file_name, uploaded_at,
@@ -63,7 +63,7 @@ export async function getDocumentsPending() {
     `)
     .eq('verification_status', 'Pending Review')
     .eq('is_deleted', false)
-    .order('uploaded_at', { ascending: true });
+    .order('uploaded_at', { ascending: true }));
   if (error) throw error;
   return data;
 }
@@ -81,17 +81,17 @@ const STAGE_TAT_THRESHOLD_DAYS = {
 };
 
 export async function getMyTatBreachedDeals() {
-  const { data: dealsData, error: dealsError } = await supabase
+  const { data: dealsData, error: dealsError } = await fetchAllResult(() => supabase
     .from('deals')
     .select('id, is_on_hold, is_rejected, created_at, leads(id, student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
-    .eq('is_deleted', false);
+    .eq('is_deleted', false));
   if (dealsError) throw dealsError;
 
-  const { data: stageEvents, error: eventsError } = await supabase
+  const { data: stageEvents, error: eventsError } = await fetchAllResult(() => supabase
     .from('deal_events')
     .select('deal_id, to_stage_id, created_at')
     .not('to_stage_id', 'is', null)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }));
   if (eventsError) throw eventsError;
 
   const enteredCurrentStageAt = {};

@@ -28,6 +28,21 @@ const PAGE_SIZE = 1000;
  * @param {number}   [opts.pageSize=1000]
  * @returns {Promise<object[]>} every matching row
  */
+/**
+ * Same as fetchAll, but resolves to Supabase's `{ data, error }` shape
+ * instead of throwing. Lets an existing
+ *   `const { data, error } = await supabase.from(...)...`
+ * call site be made paging-safe by wrapping it, with no change to the
+ * `if (error) throw error` handling that follows.
+ */
+export async function fetchAllResult(buildQuery, opts) {
+  try {
+    return { data: await fetchAll(buildQuery, opts), error: null };
+  } catch (error) {
+    return { data: null, error };
+  }
+}
+
 export async function fetchAll(buildQuery, { tiebreak = 'id', ascending = true, pageSize = PAGE_SIZE } = {}) {
   const rows = [];
   for (let from = 0; ; from += pageSize) {

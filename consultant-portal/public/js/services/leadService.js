@@ -5,28 +5,33 @@
 // enforced at the database, which is the actual security boundary.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 export async function listMyLeads(search) {
-  let query = supabase
-    .from('leads')
-    .select(`
-      id, student_name, student_phone, course_name, university_name,
-      loan_amount_requested, currency, created_at,
-      lead_stages ( name, color )
-    `)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
+  // Paged — a long-standing consultant can source more than 1000 students,
+  // and the cap would silently hide the oldest of them.
+  return fetchAll(
+    () => {
+      let query = supabase
+        .from('leads')
+        .select(`
+          id, student_name, student_phone, course_name, university_name,
+          loan_amount_requested, currency, created_at,
+          lead_stages ( name, color )
+        `)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
 
-  if (search) {
-    // See lead-management/leadService.js: strip PostgREST or()-grammar chars
-    // so a phone like "(555) 123-4567" doesn't 400 the request.
-    const s = search.replace(/[,()"\\%_]/g, ' ').trim();
-    if (s) query = query.or(`student_name.ilike.%${s}%,student_phone.ilike.%${s}%`);
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+      if (search) {
+        // See lead-management/leadService.js: strip PostgREST or()-grammar chars
+        // so a phone like "(555) 123-4567" doesn't 400 the request.
+        const s = search.replace(/[,()"\\%_]/g, ' ').trim();
+        if (s) query = query.or(`student_name.ilike.%${s}%,student_phone.ilike.%${s}%`);
+      }
+      return query;
+    },
+    { tiebreak: 'id', ascending: false }
+  );
 }
 
 export async function getLeadDetail(leadId) {

@@ -11,7 +11,7 @@
 // aggregates rather than fetching raw rows and summing in the browser.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
-import { fetchAll } from '../../../../shared/js/fetchAll.js';
+import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
@@ -117,14 +117,14 @@ export async function getRmCallStats() {
 }
 
 export async function getLenderBreakdown() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('deals')
     .select(`
       id, is_on_hold, is_rejected, total_disbursed_amount,
       lenders ( name ),
       current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name )
     `)
-    .eq('is_deleted', false);
+    .eq('is_deleted', false));
   if (error) throw error;
 
   const byLender = {};
@@ -236,12 +236,12 @@ export async function getAttentionSummary() {
  * slowest individual transitions, each with its remarks if one was left.
  */
 export async function getTatAnalysis() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('deal_events')
     .select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))')
     .not('to_stage_id', 'is', null)
     .order('deal_id', { ascending: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }));
   if (error) throw error;
 
   const byDeal = {};

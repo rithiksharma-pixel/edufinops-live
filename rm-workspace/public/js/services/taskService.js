@@ -1,12 +1,13 @@
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 export async function getMyTasks() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('tasks')
     .select('id, title, description, due_date, is_completed, completed_at, leads ( id, student_name )')
     .eq('is_deleted', false)
     .order('is_completed', { ascending: true })
-    .order('due_date', { ascending: true, nullsFirst: false });
+    .order('due_date', { ascending: true, nullsFirst: false }));
   if (error) throw error;
   return data;
 }
@@ -30,11 +31,14 @@ export async function toggleTaskComplete(taskId, isCompleted) {
 }
 
 export async function getMyOpenLeadsForTaskLink() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select('id, student_name')
-    .eq('is_deleted', false)
-    .order('student_name');
-  if (error) throw error;
-  return data;
+  // Paged — this fills the "link a lead" picker; a truncated list would
+  // make leads past the first 1000 impossible to attach a task to.
+  // student_name is not unique, so fetchAll adds id as the tiebreaker.
+  return fetchAll(
+    () => supabase
+      .from('leads')
+      .select('id, student_name')
+      .eq('is_deleted', false)
+      .order('student_name')
+  );
 }

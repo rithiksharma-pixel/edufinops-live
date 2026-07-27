@@ -6,6 +6,7 @@
 // policies already allow, nothing more).
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 // PostgREST caps a single select at 1000 rows. For an export/backup that
 // silently loses everything past the 1000th row, which is the last thing
@@ -193,7 +194,7 @@ export async function parseLeadsCsv(file, currentUserId) {
   const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, consultancies, existingLeads] = await Promise.all([
     supabase.from('lead_sources').select('id, name').eq('is_deleted', false),
     supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false),
-    supabase.from('users').select('id, email, full_name, roles(name)').eq('is_deleted', false).eq('is_active', true),
+    fetchAllResult(() => supabase.from('users').select('id, email, full_name, roles(name)').eq('is_deleted', false).eq('is_active', true)),
     fetchAllRows('consultancies', 'id, name'),
     fetchAllRows('leads', 'id, student_phone'),
   ]);
@@ -980,7 +981,7 @@ export function usersBulkUpdateTemplateCsv() {
  */
 export async function parseUsersBulkUpdateCsv(file) {
   const [{ data: users, error: usersError }, { data: roles, error: rolesError }, { data: teams, error: teamsError }] = await Promise.all([
-    supabase.from('users').select('id, email, roles(name)').eq('is_deleted', false),
+    fetchAllResult(() => supabase.from('users').select('id, email, roles(name)').eq('is_deleted', false)),
     supabase.from('roles').select('id, name').eq('is_deleted', false),
     supabase.from('teams').select('id, name').eq('is_deleted', false),
   ]);

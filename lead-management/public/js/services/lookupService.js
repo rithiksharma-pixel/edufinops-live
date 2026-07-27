@@ -2,6 +2,7 @@
 // SERVICE LAYER — Lookup / reference data
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 let stageCache = null;
 let sourceCache = null;
@@ -37,13 +38,13 @@ export async function getLeadSources() {
  * filtering is required here.
  */
 export async function getAssignableRms() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('users')
     .select('id, full_name, roles!inner(name)')
     .eq('roles.name', 'Relationship Manager')
     .eq('is_active', true)
     .eq('is_deleted', false)
-    .order('full_name', { ascending: true });
+    .order('full_name', { ascending: true }));
   if (error) throw error;
   return data;
 }
@@ -140,25 +141,28 @@ let consultancyCache = null;
 /** Admin-managed list for the "Consultancy name" field shown when Lead Source = BD Partnership. */
 export async function getConsultancies() {
   if (consultancyCache) return consultancyCache;
-  const { data, error } = await supabase
-    .from('consultancies')
-    .select('id, name')
-    .eq('is_active', true)
-    .eq('is_deleted', false)
-    .order('name', { ascending: true });
-  if (error) throw error;
+  // Paged — 761 consultancies today and climbing; the BD Partnership
+  // picker must not silently lose the tail of the alphabet at 1000.
+  const data = await fetchAll(
+    () => supabase
+      .from('consultancies')
+      .select('id, name')
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .order('name', { ascending: true })
+  );
   consultancyCache = data;
   return data;
 }
 
 export async function getCounselors() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('users')
     .select('id, full_name, roles!inner(name)')
     .eq('roles.name', 'Counselor')
     .eq('is_active', true)
     .eq('is_deleted', false)
-    .order('full_name', { ascending: true });
+    .order('full_name', { ascending: true }));
   if (error) throw error;
   return data;
 }
@@ -171,14 +175,14 @@ export async function getCounselors() {
  */
 export async function getLoanOfficers(lenderId) {
   if (!lenderId) return [];
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('users')
     .select('id, full_name, roles!inner(name), lender_branches!users_lender_branch_id_fkey(name)')
     .eq('roles.name', 'Lender')
     .eq('lender_organization_id', lenderId)
     .eq('is_active', true)
     .eq('is_deleted', false)
-    .order('full_name', { ascending: true });
+    .order('full_name', { ascending: true }));
   if (error) throw error;
   return data;
 }

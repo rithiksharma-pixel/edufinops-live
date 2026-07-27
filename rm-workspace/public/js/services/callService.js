@@ -10,6 +10,7 @@
 // call activity" rather than "activity on my leads by anyone".
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
 export { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS };
@@ -36,14 +37,16 @@ function startOfWeek() {
  */
 export async function getMyCalls(currentUserId, period = 'today') {
   const since = period === 'week' ? startOfWeek() : startOfToday();
-  const { data, error } = await supabase
-    .from('lead_events')
-    .select('id, event_type, remarks, created_at, leads ( id, student_name )')
-    .in('event_type', CALL_STATUS_OPTIONS)
-    .eq('created_by', currentUserId)
-    .eq('is_deleted', false)
-    .gte('created_at', since.toISOString())
-    .order('created_at', { ascending: false });
-  if (error) throw error;
+  const data = await fetchAll(
+    () => supabase
+      .from('lead_events')
+      .select('id, event_type, remarks, created_at, leads ( id, student_name )')
+      .in('event_type', CALL_STATUS_OPTIONS)
+      .eq('created_by', currentUserId)
+      .eq('is_deleted', false)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false }),
+    { tiebreak: 'id', ascending: false }
+  );
   return data;
 }

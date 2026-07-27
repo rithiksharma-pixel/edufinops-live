@@ -5,6 +5,7 @@
 // self-assigning assigned_rm_id so the RETURNING select passes RLS.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 let sourceCache = null;
 let stageCache = null;
@@ -39,13 +40,16 @@ async function getOpeningStageId() {
 
 export async function getConsultancies() {
   if (consultancyCache) return consultancyCache;
-  const { data, error } = await supabase
-    .from('consultancies')
-    .select('id, name')
-    .eq('is_active', true)
-    .eq('is_deleted', false)
-    .order('name', { ascending: true });
-  if (error) throw error;
+  // Paged — 761 consultancies today and climbing; the BD Partnership
+  // picker must not silently lose the tail of the alphabet at 1000.
+  const data = await fetchAll(
+    () => supabase
+      .from('consultancies')
+      .select('id, name')
+      .eq('is_active', true)
+      .eq('is_deleted', false)
+      .order('name', { ascending: true })
+  );
   consultancyCache = data;
   return data;
 }

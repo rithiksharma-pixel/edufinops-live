@@ -9,6 +9,7 @@ import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../lead-manag
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
+import { fetchAll, fetchAllResult } from '../../../shared/js/fetchAll.js';
 
 let leadDrawer;
 
@@ -17,7 +18,10 @@ const esc = (value) => { const node = document.createElement('span'); node.textC
 const inr = (value) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value || 0));
 let activeView = 'overview';
 
-async function records(table, select) { const { data, error } = await supabase.from(table).select(select).eq('is_deleted', false); if (error) throw error; return data; }
+// Paged — every caller uses the result's LENGTH as a headline stat
+// ("Active leads"), so a PostgREST 1000-row truncation showed 1000 for
+// a 1,450-lead pipeline. fetchAll costs exactly one request under 1000 rows.
+async function records(table, select) { return fetchAll(() => supabase.from(table).select(select).eq('is_deleted', false)); }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
 const STAGE_TAT_THRESHOLD_DAYS = { 'Bank Prospect': 7, Login: 5, Sanction: 10, PF: 5, Disbursement: 7 };
@@ -29,12 +33,10 @@ async function loadOverview() {
     records('documents', 'id, verification_status'),
     records('users', 'id, is_active'),
     supabase.from('lead_events').select('event_type, created_at, leads(id, student_name), users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }).limit(8),
-    supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10)),
-    supabase.from('deal_events').select('deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }),
+    fetchAll(() => supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10))),
+    fetchAll(() => supabase.from('deal_events').select('id, deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }), { tiebreak: 'id', ascending: false }),
   ]);
   if (eventResponse.error) throw eventResponse.error;
-  if (overdueTasks.error) throw overdueTasks.error;
-  if (stageEvents.error) throw stageEvents.error;
   const totalDisbursed = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
   // Only "Active leads" has an honest drill-down target — the rest are
   // deal-level/user-level counts, and Lead Management's list is leads-only.
@@ -51,7 +53,7 @@ async function loadOverview() {
   const stages = leads.reduce((all, lead) => { const name = lead.lead_stages?.name || 'Unassigned'; all[name] = (all[name] || 0) + 1; return all; }, {}); const largest = Math.max(1, ...Object.values(stages));
   $('stageChart').innerHTML = Object.entries(stages).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / largest * 100}%"></div></div><strong>${count}</strong></div>`).join('') || emptyState('fa-diagram-project', 'No leads yet', 'Leads will appear here once the team starts adding them.');
 
-  const enteredCurrentStageAt = {}; (stageEvents.data || []).forEach((ev) => { if (!enteredCurrentStageAt[ev.deal_id]) enteredCurrentStageAt[ev.deal_id] = ev.created_at; });
+  const enteredCurrentStageAt = {}; stageEvents.forEach((ev) => { if (!enteredCurrentStageAt[ev.deal_id]) enteredCurrentStageAt[ev.deal_id] = ev.created_at; });
   const now = Date.now();
   const tatBreachedCount = deals.filter((deal) => {
     if (deal.is_on_hold || deal.is_rejected) return false;
@@ -60,7 +62,7 @@ async function loadOverview() {
     const enteredAt = enteredCurrentStageAt[deal.id] || deal.created_at;
     return (now - new Date(enteredAt).getTime()) / 86400000 > STAGE_TAT_THRESHOLD_DAYS[stageName];
   }).length;
-  const attention = [{ text: `${leads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at) < new Date()).length} overdue follow-ups`, icon: 'fa-clock' }, { text: `${deals.filter((deal) => deal.is_on_hold).length} deals on hold`, icon: 'fa-hand' }, { text: `${docs.filter((doc) => doc.verification_status === 'Pending Review').length} documents awaiting review`, icon: 'fa-file-lines' }, { text: `${overdueTasks.data.length} overdue tasks`, icon: 'fa-list-check' }, { text: `${tatBreachedCount} deals overstayed their stage TAT`, icon: 'fa-hourglass-end' }].filter((item) => item.text.slice(0, 1) !== '0');
+  const attention = [{ text: `${leads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at) < new Date()).length} overdue follow-ups`, icon: 'fa-clock' }, { text: `${deals.filter((deal) => deal.is_on_hold).length} deals on hold`, icon: 'fa-hand' }, { text: `${docs.filter((doc) => doc.verification_status === 'Pending Review').length} documents awaiting review`, icon: 'fa-file-lines' }, { text: `${overdueTasks.length} overdue tasks`, icon: 'fa-list-check' }, { text: `${tatBreachedCount} deals overstayed their stage TAT`, icon: 'fa-hourglass-end' }].filter((item) => item.text.slice(0, 1) !== '0');
   $('attentionCount').textContent = attention.length ? attention.length : 'All clear';
   $('attentionList').innerHTML = attention.length
     ? attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('')
@@ -71,7 +73,7 @@ async function loadOverview() {
   });
 }
 
-async function loadDocuments() { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if ($('documentStatus').value) request = request.eq('verification_status', $('documentStatus').value); const { data, error } = await request; if (error) throw error; $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
+async function loadDocuments() { const status = $('documentStatus').value; const data = await fetchAll(() => { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if (status) request = request.eq('verification_status', status); return request; }, { tiebreak: 'id', ascending: false }); $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
 // ---------- Stage movement trends (lead + bank-wise deal) ----------
 const trends = createTrendsService(supabase);
 const trendState = { lead: 'day', deal: 'day', lenderId: '', wired: false, lendersLoaded: false };
@@ -141,7 +143,7 @@ async function loadReports() {
     card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
   });
 
-  const { data: events, error: eventsError } = await supabase.from('deal_events').select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))').not('to_stage_id', 'is', null).order('deal_id', { ascending: true }).order('created_at', { ascending: true });
+  const { data: events, error: eventsError } = await fetchAllResult(() => supabase.from('deal_events').select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))').not('to_stage_id', 'is', null).order('deal_id', { ascending: true }).order('created_at', { ascending: true }));
   if (eventsError) throw eventsError;
   const byDeal = {}; events.forEach((ev) => { (byDeal[ev.deal_id] ??= []).push(ev); });
   const transitions = [];
@@ -171,27 +173,27 @@ async function loadTeamPerformance() {
   if (!teamPerfData) {
     const [teamsRes, managersRes, rmsRes, leadsRes, dealsRes, callEventsRes] = await Promise.all([
       supabase.from('teams').select('id,name').eq('is_deleted', false).order('name'),
-      supabase.from('users').select('id,full_name,team_id,roles!inner(name)').in('roles.name', ['Manager', 'Associate Team Manager']).eq('is_deleted', false),
-      supabase.from('users').select('id,full_name,reporting_manager_id,roles!inner(name)').eq('roles.name', 'Relationship Manager').eq('is_deleted', false),
-      supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false),
-      supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false),
+      fetchAllResult(() => supabase.from('users').select('id,full_name,team_id,roles!inner(name)').in('roles.name', ['Manager', 'Associate Team Manager']).eq('is_deleted', false)),
+      fetchAllResult(() => supabase.from('users').select('id,full_name,reporting_manager_id,roles!inner(name)').eq('roles.name', 'Relationship Manager').eq('is_deleted', false)),
+      fetchAll(() => supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false)),
+      fetchAll(() => supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false)),
       // Admin sees every lead_events row (is_admin() bypasses can_view_lead's
       // team scoping) — filtered to call outcomes only, keyed below by
       // created_by so each RM's own activity is counted, not just calls
       // logged on their leads by someone else.
-      supabase.from('lead_events').select('event_type,created_by').in('event_type', CALL_STATUS_OPTIONS).eq('is_deleted', false).gte('created_at', startOfWeek().toISOString()),
+      fetchAll(() => supabase.from('lead_events').select('id,event_type,created_by').in('event_type', CALL_STATUS_OPTIONS).eq('is_deleted', false).gte('created_at', startOfWeek().toISOString())),
     ]);
-    for (const r of [teamsRes, managersRes, rmsRes, leadsRes, dealsRes, callEventsRes]) if (r.error) throw r.error;
+    for (const r of [teamsRes, managersRes, rmsRes]) if (r.error) throw r.error;
 
     const callStats = {};
-    (callEventsRes.data || []).forEach((ev) => {
+    callEventsRes.forEach((ev) => {
       if (!ev.created_by) return;
       if (!callStats[ev.created_by]) callStats[ev.created_by] = { callCount: 0, connectedCount: 0 };
       callStats[ev.created_by].callCount += 1;
       if (CONNECTED_DISPOSITIONS.includes(ev.event_type)) callStats[ev.created_by].connectedCount += 1;
     });
 
-    teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes.data, deals: dealsRes.data, callStats };
+    teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes, deals: dealsRes, callStats };
 
     $('teamScopeSelect').innerHTML = '<option value="">All teams</option>' + teamPerfData.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   }
@@ -321,9 +323,16 @@ async function bulkUpsertConsultancies() {
   const lines = parseBulkLines($('consultancyBulkText').value);
   if (lines.length === 0) return showBulkResult(resultId, 'Nothing to add — paste some lines first.', true);
 
-  const { data: existing, error: readError } = await supabase.from('consultancies').select('id, name, bd_manager').eq('is_deleted', false);
-  if (readError) return showBulkResult(resultId, readError.message, true);
-  const byName = new Map((existing || []).map((c) => [c.name.toLowerCase(), c]));
+  // Paged — this is the duplicate check for bulk add. Reading only the
+  // first 1000 consultancies would make every existing row past that look
+  // new, inserting duplicates instead of updating the BD manager.
+  let existing;
+  try {
+    existing = await fetchAll(() => supabase.from('consultancies').select('id, name, bd_manager').eq('is_deleted', false));
+  } catch (readError) {
+    return showBulkResult(resultId, readError.message, true);
+  }
+  const byName = new Map(existing.map((c) => [c.name.toLowerCase(), c]));
 
   const { data: auth } = await supabase.auth.getUser();
   const inserts = [];
@@ -457,7 +466,7 @@ async function loadSettings() {
   const [{ data: lenders, error: lendersError }, { data: branches, error: branchesError }, { data: consultancies, error: consultanciesError }, { data: teams, error: teamsError }] = await Promise.all([
     supabase.from('lenders').select('id,name').eq('is_deleted', false).order('name'),
     supabase.from('lender_branches').select('name,lenders(name)').eq('is_deleted', false).order('name'),
-    supabase.from('consultancies').select('name, bd_manager').eq('is_deleted', false).order('name'),
+    supabase.from('consultancies').select('name, bd_manager').eq('is_deleted', false).order('name').range(0, 4999),
     supabase.from('teams').select('name').eq('is_deleted', false).order('name'),
   ]);
   if (lendersError) throw lendersError;

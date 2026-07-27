@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 export async function getRoles() {
   const { data, error } = await supabase.from('roles').select('id, name').eq('is_deleted', false).order('name');
@@ -7,11 +8,11 @@ export async function getRoles() {
 }
 
 export async function getAllUsers() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('users')
     .select('id, full_name, email, phone, is_active, team_id, reporting_manager_id, roles ( name ), reporting_manager:users!reporting_manager_id ( id, full_name )')
     .eq('is_deleted', false)
-    .order('full_name');
+    .order('full_name'));
   if (error) throw error;
   return data;
 }
@@ -36,24 +37,24 @@ export async function getTeams() {
  */
 export async function getPossibleManagers(currentUser) {
   if (!currentUser || currentUser.role === 'Admin') {
-    const { data, error } = await supabase
+    const { data, error } = await fetchAllResult(() => supabase
       .from('users')
       .select('id, full_name, team_id, roles!inner(name)')
       .in('roles.name', ['Manager', 'Associate Team Manager', 'Admin'])
       .eq('is_active', true)
-      .order('full_name');
+      .order('full_name'));
     if (error) throw error;
     return data;
   }
 
   if (currentUser.role === 'Manager') {
-    const { data, error } = await supabase
+    const { data, error } = await fetchAllResult(() => supabase
       .from('users')
       .select('id, full_name, team_id, roles!inner(name)')
       .eq('roles.name', 'Associate Team Manager')
       .eq('reporting_manager_id', currentUser.id)
       .eq('is_active', true)
-      .order('full_name');
+      .order('full_name'));
     if (error) throw error;
     return [{ id: currentUser.id, full_name: `${currentUser.fullName} (you)`, roles: { name: 'Manager' } }, ...data];
   }
@@ -84,11 +85,11 @@ export async function getLenderBranches(lenderId) {
 }
 
 export async function getPendingInvitations() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('invitations')
     .select('id, email, full_name, phone, invited_at, expires_at, roles ( name )')
     .eq('status', 'pending')
-    .order('invited_at', { ascending: false });
+    .order('invited_at', { ascending: false }));
   if (error) throw error;
   return data;
 }

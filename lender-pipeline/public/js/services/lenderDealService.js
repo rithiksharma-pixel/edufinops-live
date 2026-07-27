@@ -6,6 +6,7 @@
 // different bank's officer sees zero rows on all of these).
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 export const STAGE_TABLE_MAP = {
   'Bank Prospect': {
@@ -49,7 +50,7 @@ export const STAGE_TABLE_MAP = {
 };
 
 export async function getMyBankDeals() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('deals')
     .select(`
       id, is_on_hold, is_rejected, total_disbursed_amount,
@@ -58,7 +59,7 @@ export async function getMyBankDeals() {
       current_stage_status:deal_stage_statuses ( name )
     `)
     .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }));
   if (error) throw error;
   return data;
 }
@@ -169,13 +170,13 @@ export async function updateMyLenderProfile(lenderOrgId, fields) {
  * Everything else is "on track."
  */
 export async function getDashboardSummary() {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('deals')
     .select(`
       id, is_on_hold, is_rejected, updated_at, total_disbursed_amount,
       current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name, sequence_order )
     `)
-    .eq('is_deleted', false);
+    .eq('is_deleted', false));
   if (error) throw error;
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

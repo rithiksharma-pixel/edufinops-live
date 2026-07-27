@@ -19,6 +19,7 @@
 // service on this dashboard.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 const UNASSIGNED_LEADS_SELECT = `
   id, student_name, loan_amount_requested, currency, created_at,
@@ -28,12 +29,15 @@ const UNASSIGNED_LEADS_SELECT = `
 `;
 
 export async function getUnassignedLeads() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select(UNASSIGNED_LEADS_SELECT)
-    .eq('is_deleted', false)
-    .is('assigned_rm_id', null)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return data;
+  // Paged — a bulk import can leave well over 1000 leads without an RM,
+  // and this list is the only place they get assigned from. Truncating it
+  // would silently hide leads nobody ever picks up.
+  return fetchAll(
+    () => supabase
+      .from('leads')
+      .select(UNASSIGNED_LEADS_SELECT)
+      .eq('is_deleted', false)
+      .is('assigned_rm_id', null)
+      .order('created_at', { ascending: true })
+  );
 }
