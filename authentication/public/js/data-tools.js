@@ -9,6 +9,7 @@ import {
   lendersBulkImportTemplateCsv, parseLendersCsv, commitLenderImport,
   dealHistoryBulkImportTemplateCsv, parseDealHistoryCsv, commitDealHistoryImport,
 } from './services/exportImportService.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 
 let currentUser;
@@ -328,4 +329,4 @@ function renderUsersPreview(validRows, errors) {
   }
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Data Tools');

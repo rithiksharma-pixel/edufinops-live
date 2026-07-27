@@ -14,6 +14,7 @@ import { renderFunnelCards } from './components/funnelCards.js';
 import { initLeadFormModal } from './components/leadFormModal.js';
 import { initLeadDrawer } from './components/leadDrawer.js';
 import { initSmartViewTabs } from './components/smartViewTabs.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', overdueOnly: false, search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
 
@@ -243,4 +244,4 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Lead Management');

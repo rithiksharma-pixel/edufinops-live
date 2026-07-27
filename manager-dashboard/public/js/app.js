@@ -17,6 +17,7 @@ import { supabase } from './config/supabaseClient.js';
 import { assignLeadToRm } from '../../../lead-management/public/js/services/leadService.js';
 import { getAssignableRms } from '../../../lead-management/public/js/services/lookupService.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 let leadDrawer;
 
@@ -330,4 +331,4 @@ async function bootstrap() {
   await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Manager Dashboard');

@@ -1,6 +1,7 @@
 import { getCurrentUser, updateMyProfile } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 async function bootstrap() {
   let user;
@@ -30,4 +31,4 @@ async function bootstrap() {
   });
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'Profile');

@@ -13,6 +13,7 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 // boundaries is normal; the shared markup/CSS live in index.html /
 // shared/css/lead-drawer.css.
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
+import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 let currentUser;
 let leadDrawer;
@@ -444,4 +445,4 @@ async function bootstrap() {
   await loadView('dashboard');
 }
 
-bootstrap();
+guardBootstrap(bootstrap, 'RM Workspace');

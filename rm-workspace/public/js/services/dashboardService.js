@@ -5,6 +5,7 @@
 // client-side for security (only for display grouping).
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 const LEAD_SELECT = `
   id, student_name, student_phone, course_name, university_name,
@@ -13,36 +14,38 @@ const LEAD_SELECT = `
 `;
 
 export async function getAssignedLeads() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select(LEAD_SELECT)
-    .eq('is_deleted', false)
-    .order('next_follow_up_at', { ascending: true, nullsFirst: false });
-  if (error) throw error;
-  return data;
+  return fetchAll(
+    () => supabase
+      .from('leads')
+      .select(LEAD_SELECT)
+      .eq('is_deleted', false)
+      .order('next_follow_up_at', { ascending: true, nullsFirst: false })
+  );
 }
 
 export async function getTodaysFollowUps() {
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
-  const { data, error } = await supabase
-    .from('leads')
-    .select(LEAD_SELECT)
-    .eq('is_deleted', false)
-    .lte('next_follow_up_at', endOfToday.toISOString())
-    .not('next_follow_up_at', 'is', null)
-    .order('next_follow_up_at', { ascending: true });
-  if (error) throw error;
-  return data;
+  return fetchAll(
+    () => supabase
+      .from('leads')
+      .select(LEAD_SELECT)
+      .eq('is_deleted', false)
+      .lte('next_follow_up_at', endOfToday.toISOString())
+      .not('next_follow_up_at', 'is', null)
+      .order('next_follow_up_at', { ascending: true })
+  );
 }
 
 export async function getNewLeads() {
-  const { data, error } = await supabase
-    .from('leads')
-    .select(LEAD_SELECT)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
+  const data = await fetchAll(
+    () => supabase
+      .from('leads')
+      .select(LEAD_SELECT)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false }),
+    { tiebreak: 'id', ascending: false }
+  );
   // "New" = still at the very first stage (untouched since creation).
   // Filtered client-side on sequence_order since it's a small, already-
   // RLS-scoped result set, not worth a second round trip for.

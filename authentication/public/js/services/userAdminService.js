@@ -9,7 +9,7 @@ export async function getRoles() {
 export async function getAllUsers() {
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, email, phone, is_active, team_id, roles ( name ), reporting_manager:users!reporting_manager_id ( full_name )')
+    .select('id, full_name, email, phone, is_active, team_id, reporting_manager_id, roles ( name ), reporting_manager:users!reporting_manager_id ( id, full_name )')
     .eq('is_deleted', false)
     .order('full_name');
   if (error) throw error;
