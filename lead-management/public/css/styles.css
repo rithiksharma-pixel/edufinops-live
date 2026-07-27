@@ -184,7 +184,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
   color: var(--ink-500);
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: #FBFBFA;
+  background: var(--paper-sunken);
 }
 .lead-table td {
   padding: 13px 16px;
@@ -290,7 +290,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
    ========================================================= */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: var(--ink-900); color: white;
+  background: var(--ink-900); color: var(--paper-raised);
   padding: 11px 20px;
   border-radius: var(--radius-md);
   font-size: 13px;
