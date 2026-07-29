@@ -270,7 +270,7 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
       ${stageConfig ? `
       <div class="deal-section">
-        <div class="deal-section-label">${escapeHtml(stageName)} details</div>
+        <div class="deal-section-label">${escapeHtml(stageName)} details · current stage</div>
         <div class="form-grid">${stageFormHtml}</div>
         <button class="btn btn-ghost" style="margin-top:8px;" data-action="save-stage-fields">Save details</button>
       </div>` : ''}
@@ -289,7 +289,17 @@ export async function initDealsTab(panelEl, leadId, ctx) {
             <select data-action-field="next_status_id"><option value="">Select a stage first…</option></select>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="advance-stage">Move stage</button>
+        <!-- Fields for the stage being ENTERED, filled at the moment of the
+             move. Previously the only stage form on screen belonged to the
+             stage the deal was already in, so moving Login -> Sanction
+             showed Login fields and the sanction date was never asked for
+             until someone came back later — which is why deals ended up
+             sitting at Sanction and PF with no date recorded. -->
+        <div data-next-stage-wrap hidden style="margin-top:12px;">
+          <div class="deal-section-label" data-next-stage-label style="margin-bottom:6px;"></div>
+          <div class="form-grid" data-next-stage-fields></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:10px;" data-action="advance-stage">Move stage</button>
       </div>
 
       <div class="deal-section deal-section-quiet">
@@ -343,24 +353,79 @@ export async function initDealsTab(panelEl, leadId, ctx) {
 
     const nextStageSelect = el.querySelector('[data-action-field="next_stage_id"]');
     const nextStatusSelect = el.querySelector('[data-action-field="next_status_id"]');
+    const nextStageWrap = el.querySelector('[data-next-stage-wrap]');
+    const nextStageLabel = el.querySelector('[data-next-stage-label]');
+    const nextStageFields = el.querySelector('[data-next-stage-fields]');
+
     nextStageSelect.addEventListener('change', () => {
       const stageId = nextStageSelect.value;
       const options = stageStatuses.filter((s) => s.deal_stage_id === stageId);
       nextStatusSelect.innerHTML = stageId
         ? '<option value="">No disposition</option>' + options.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')
         : '<option value="">Select a stage first…</option>';
+
+      // Show the DESTINATION stage's fields so they're captured as part of
+      // the move. Uses data-next-field, not data-field, so these inputs are
+      // never swept up by the "Save details" handler above, which edits the
+      // stage the deal is currently in.
+      const target = stages.find((s) => s.id === stageId);
+      const targetConfig = target ? STAGE_TABLE_MAP[target.name] : null;
+      if (!targetConfig) {
+        nextStageWrap.hidden = true;
+        nextStageFields.innerHTML = '';
+        return;
+      }
+      nextStageLabel.textContent = `${target.name} details`;
+      nextStageFields.innerHTML = targetConfig.fields
+        .map((f) => (f.type === 'textarea'
+          ? `<div class="form-field"><label>${f.label}</label><textarea data-next-field="${f.key}" rows="2"></textarea></div>`
+          : `<div class="form-field"><label>${f.label}</label><input data-next-field="${f.key}" type="${f.type}" /></div>`))
+        .join('');
+      nextStageWrap.hidden = false;
     });
 
     el.querySelector('[data-action="advance-stage"]').addEventListener('click', async () => {
       if (!nextStageSelect.value) { showToast('Choose a stage to move to.', true); return; }
-      try {
-        await changeDealStage(deal.id, nextStageSelect.value, nextStatusSelect.value || null, null);
-        showToast('Deal moved to new stage.');
-        onDealUpdated();
-        await refresh();
-      } catch (err) {
-        showToast('Could not change stage.', true);
+      const target = stages.find((s) => s.id === nextStageSelect.value);
+      const targetConfig = target ? STAGE_TABLE_MAP[target.name] : null;
+
+      // Only send fields the user actually filled. Sending blanks would
+      // wipe existing values when a deal is moved back into a stage it has
+      // already been through.
+      const detailFields = {};
+      if (targetConfig) {
+        el.querySelectorAll('[data-next-field]').forEach((input) => {
+          const v = input.value.trim();
+          if (v !== '') detailFields[input.dataset.nextField] = v;
+        });
       }
+
+      try {
+        // Order matters: change_deal_stage() inserts the empty detail row
+        // for the destination stage, so it must run before we update it.
+        await changeDealStage(deal.id, nextStageSelect.value, nextStatusSelect.value || null, null);
+      } catch (err) {
+        console.error('change stage failed', err);
+        showToast(`Could not change stage: ${err.message || err}`, true);
+        return;
+      }
+
+      if (Object.keys(detailFields).length) {
+        try {
+          await updateStageDetails(target.name, deal.id, detailFields);
+          showToast(`Moved to ${target.name} and saved its details.`);
+        } catch (err) {
+          // The move succeeded — say so plainly rather than implying it
+          // failed, and name what still needs entering.
+          console.error('stage detail save failed', err);
+          showToast(`Moved to ${target.name}, but its details did not save: ${err.message || err}`, true);
+        }
+      } else {
+        showToast(`Deal moved to ${target?.name || 'new stage'}.`);
+      }
+
+      onDealUpdated();
+      await refresh();
     });
 
     el.querySelector('[data-action="toggle-hold-form"]').addEventListener('click', async () => {
