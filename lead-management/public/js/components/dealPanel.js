@@ -377,9 +377,13 @@ export async function initDealsTab(panelEl, leadId, ctx) {
       }
       nextStageLabel.textContent = `${target.name} details`;
       nextStageFields.innerHTML = targetConfig.fields
-        .map((f) => (f.type === 'textarea'
-          ? `<div class="form-field"><label>${f.label}</label><textarea data-next-field="${f.key}" rows="2"></textarea></div>`
-          : `<div class="form-field"><label>${f.label}</label><input data-next-field="${f.key}" type="${f.type}" /></div>`))
+        .map((f) => {
+          const star = f.required ? ' *' : '';
+          const input = f.type === 'textarea'
+            ? `<textarea data-next-field="${f.key}" rows="2"></textarea>`
+            : `<input data-next-field="${f.key}" type="${f.type}" />`;
+          return `<div class="form-field"><label>${f.label}${star}</label>${input}<span class="field-error" data-next-error="${f.key}"></span></div>`;
+        })
         .join('');
       nextStageWrap.hidden = false;
     });
@@ -398,6 +402,22 @@ export async function initDealsTab(panelEl, leadId, ctx) {
           const v = input.value.trim();
           if (v !== '') detailFields[input.dataset.nextField] = v;
         });
+
+        // Required fields are enforced HERE, at the move, because this is
+        // the only moment the information is reliably to hand. Letting the
+        // move through and chasing the detail later is what produced deals
+        // parked at Sanction and PF with no date recorded.
+        el.querySelectorAll('[data-next-error]').forEach((s) => { s.textContent = ''; });
+        const missing = targetConfig.fields.filter((f) => f.required && !detailFields[f.key]);
+        if (missing.length) {
+          missing.forEach((f) => {
+            const slot = el.querySelector(`[data-next-error="${f.key}"]`);
+            if (slot) slot.textContent = 'Required to move to this stage.';
+          });
+          el.querySelector(`[data-next-field="${missing[0].key}"]`)?.focus();
+          showToast(`Fill ${missing.map((f) => f.label).join(', ')} before moving to ${target.name}.`, true);
+          return;
+        }
       }
 
       try {

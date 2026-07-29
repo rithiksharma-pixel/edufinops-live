@@ -9,10 +9,24 @@ import { supabase } from '../config/supabaseClient.js';
 // Maps a deal_stages.name to its detail table and the columns that
 // table owns. Single source of truth for both fetching and rendering
 // the stage-specific form — see components/dealPanel.js.
+//
+// `required: true` marks a field that must be filled before a deal can
+// be MOVED INTO that stage. Deliberately limited to the figures the
+// business reports on — the milestone date and its headline amount (plus
+// the lender's Login ID) — because those are exactly what turned up
+// missing: deals were sitting at Sanction and PF with no date at all, so
+// throughput and TAT numbers understated reality.
+//
+// Secondary and forward-looking fields (probable dates, interest rate,
+// tenure, moratorium, eligibility, remarks) stay optional: they are often
+// genuinely unknown at the moment of the move, and blocking on them would
+// push people to type filler, which is worse than a blank.
 export const STAGE_TABLE_MAP = {
   'Bank Prospect': {
     table: 'deal_bank_prospect_details',
     fields: [
+      // Nothing required here: a deal enters Bank Prospect the moment a
+      // lead is shared with a lender, before any of this is known.
       { key: 'region_shared_date', label: 'Region shared date', type: 'date' },
       { key: 'sm_shared_date', label: 'SM shared date', type: 'date' },
       { key: 'rm_shared_date', label: 'RM shared date', type: 'date' },
@@ -23,18 +37,18 @@ export const STAGE_TABLE_MAP = {
   Login: {
     table: 'deal_login_details',
     fields: [
-      { key: 'login_id', label: 'Login ID', type: 'text' },
+      { key: 'login_id', label: 'Login ID', type: 'text', required: true },
       { key: 'loan_required_amount', label: 'Loan required amount', type: 'number' },
-      { key: 'login_amount', label: 'Login amount', type: 'number' },
-      { key: 'login_date', label: 'Login date', type: 'date' },
+      { key: 'login_amount', label: 'Login amount', type: 'number', required: true },
+      { key: 'login_date', label: 'Login date', type: 'date', required: true },
       { key: 'probable_sanction_date', label: 'Probable sanction date', type: 'date' },
     ],
   },
   Sanction: {
     table: 'deal_sanction_details',
     fields: [
-      { key: 'sanction_amount', label: 'Sanction amount', type: 'number' },
-      { key: 'sanction_date', label: 'Sanction date', type: 'date' },
+      { key: 'sanction_amount', label: 'Sanction amount', type: 'number', required: true },
+      { key: 'sanction_date', label: 'Sanction date', type: 'date', required: true },
       { key: 'probable_pf_date', label: 'Probable PF date', type: 'date' },
       { key: 'interest_rate', label: 'Interest rate (%)', type: 'number' },
       { key: 'tenure_months', label: 'Tenure (months)', type: 'number' },
@@ -44,8 +58,8 @@ export const STAGE_TABLE_MAP = {
   PF: {
     table: 'deal_pf_details',
     fields: [
-      { key: 'pf_amount', label: 'PF amount', type: 'number' },
-      { key: 'pf_date', label: 'PF date', type: 'date' },
+      { key: 'pf_amount', label: 'PF amount', type: 'number', required: true },
+      { key: 'pf_date', label: 'PF date', type: 'date', required: true },
       { key: 'probable_disbursement_date', label: 'Probable disbursement date', type: 'date' },
     ],
   },
