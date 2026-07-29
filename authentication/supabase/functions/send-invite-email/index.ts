@@ -4,6 +4,7 @@
 // Requires these secrets set on the Supabase project (NOT the anon key):
 //   supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...
 //   supabase secrets set SUPABASE_URL=...
+//   supabase secrets set SITE_URL=https://your-domain
 //
 // This is the ONLY place in the entire platform that touches the
 // service_role key. It must never be sent to, or embedded in, any
@@ -12,11 +13,14 @@
 //
 // Called by authentication/public/js/services/userAdminService.js
 // AFTER invite_user() has already recorded the invitation row in
-// Postgres. This function's only job is: create the real auth.users
-// account and let Supabase send the actual email.
+// Postgres. This function's only job is: make sure the person has an
+// auth account and receives a link that lets them set a password.
 // =========================================================
 import { serve } from 'https://deno.land/std@0.202.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SITE_URL = Deno.env.get('SITE_URL') ?? '';
+const REDIRECT_TO = `${SITE_URL}/authentication/public/accept-invite.html`;
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL'),
@@ -35,20 +39,37 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const json = (body: unknown, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
+/** Does this Supabase error mean "that email already has an auth account"? */
+function isAlreadyRegistered(err: { message?: string; code?: string; status?: number }) {
+  const m = (err?.message ?? '').toLowerCase();
+  return (
+    err?.code === 'email_exists' ||
+    err?.status === 422 ||
+    m.includes('already been registered') ||
+    m.includes('already registered') ||
+    m.includes('already exists')
+  );
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
-
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: corsHeaders });
+    return json({ error: 'Method not allowed' }, 405);
   }
 
   try {
     const { invitationId, email, fullName } = await req.json();
 
     if (!invitationId || !email) {
-      return new Response(JSON.stringify({ error: 'invitationId and email are required' }), { status: 400, headers: corsHeaders });
+      return json({ error: 'invitationId and email are required' }, 400);
     }
 
     // Belt-and-suspenders: confirm the invitation actually exists and is
@@ -63,33 +84,49 @@ serve(async (req) => {
       .single();
 
     if (fetchError || !invitation) {
-      return new Response(JSON.stringify({ error: 'No matching pending invitation found' }), { status: 404, headers: corsHeaders });
+      return json({ error: 'No matching pending invitation found' }, 404);
     }
-    if (invitation.email !== email) {
-      return new Response(JSON.stringify({ error: 'Email does not match the invitation record' }), { status: 400, headers: corsHeaders });
+    if (invitation.email.toLowerCase() !== String(email).toLowerCase()) {
+      return json({ error: 'Email does not match the invitation record' }, 400);
     }
 
-    // This is the actual privileged call: creates the auth.users row and
-    // sends Supabase's invite email with a set-password link. The redirect
-    // lands them on accept-invite.html with type=invite in the URL hash.
+    // The privileged call: creates the auth.users row and sends Supabase's
+    // invite email with a set-password link, landing on accept-invite.html.
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: fullName },
-      redirectTo: `${Deno.env.get('SITE_URL') ?? ''}/authentication/public/accept-invite.html`,
+      redirectTo: REDIRECT_TO,
     });
 
-    if (error) {
-      // Common real-world case: this email already has an auth.users
-      // account (e.g. a previous invite, or they were invited then
-      // deactivated then re-invited). Surface it clearly rather than a
-      // generic 500 — the Admin UI shows this message directly.
-      return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: corsHeaders });
+    if (!error) {
+      return json({ success: true, mode: 'invited', authUserId: data.user?.id }, 200);
     }
 
-    return new Response(JSON.stringify({ success: true, authUserId: data.user?.id }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    // Re-inviting someone who already has an auth account used to dead-end
+    // here with a 400, which the Admin UI reported as "check the Edge
+    // Function is deployed" — misleading, since the function was fine.
+    //
+    // This is a NORMAL case: a first invite creates the auth user, then
+    // anything that stops them completing setup (link expired, profile row
+    // never created, wrong person) leads an admin to invite again. Rather
+    // than failing, send a password-recovery link. It lands on the same
+    // accept-invite page, where accept_my_invitation() creates the missing
+    // public.users profile.
+    if (isAlreadyRegistered(error)) {
+      const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+        redirectTo: REDIRECT_TO,
+      });
+      if (resetError) {
+        return json({ error: `This email already has an account, and the set-password link could not be sent: ${resetError.message}` }, 400);
+      }
+      return json({
+        success: true,
+        mode: 'existing_account_reset_sent',
+        message: 'This email already had an account, so we sent a set-password link instead.',
+      }, 200);
+    }
+
+    return json({ error: error.message }, 400);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message ?? 'Unexpected error' }), { status: 500, headers: corsHeaders });
+    return json({ error: (err as Error)?.message ?? 'Unexpected error' }, 500);
   }
 });

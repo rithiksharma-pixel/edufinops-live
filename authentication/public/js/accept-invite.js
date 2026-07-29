@@ -40,8 +40,22 @@ form.addEventListener('submit', async (e) => {
   try {
     await confirmPasswordReset(password);
 
-    if (flowType === 'invite') {
+    // Always try to accept a pending invitation — do NOT gate this on
+    // `type=invite` in the URL. Supabase's PKCE redirect returns a ?code=
+    // query param with no type fragment, so flowType is null on those
+    // flows and this step was silently skipped: the password got set and
+    // the person could sign in, but no public.users row was ever created.
+    // That left 7 auth accounts with no profile, unable to use the CRM,
+    // and made a re-invite fail with "already registered".
+    // accept_my_invitation() is idempotent (on conflict do nothing) and
+    // raises a recognisable error when there is genuinely no invitation,
+    // which is the normal case for a real password reset.
+    try {
       await acceptMyInvitation();
+    } catch (inviteErr) {
+      const msg = String(inviteErr?.message || '');
+      const isPlainRecovery = /no pending invitation/i.test(msg);
+      if (!isPlainRecovery) throw inviteErr;
     }
 
     document.getElementById('setPasswordCard').hidden = true;

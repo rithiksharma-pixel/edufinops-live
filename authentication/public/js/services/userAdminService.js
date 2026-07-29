@@ -119,7 +119,23 @@ export async function inviteUser({ email, fullName, phone, roleId, reportingMana
     body: { invitationId, email, fullName },
   });
   if (fnError) {
-    throw new Error('Invitation recorded, but the invite email failed to send. Check the send-invite-email Edge Function is deployed.');
+    // supabase-js throws away the response BODY on a non-2xx: `fnError.message`
+    // is only ever a generic "Edge Function returned a non-2xx status code".
+    // The actual reason (most often "A user with this email address has
+    // already been registered") is in fnError.context, which is the raw
+    // Response. Reading it turns a dead-end message that wrongly blamed
+    // deployment into something an admin can act on.
+    let detail = '';
+    try {
+      const body = await fnError.context?.json?.();
+      if (body?.error) detail = body.error;
+    } catch { /* body was not JSON — fall through to the generic message */ }
+
+    throw new Error(
+      detail
+        ? `Invitation recorded, but the email could not be sent: ${detail}`
+        : `Invitation recorded, but the invite email failed to send (${fnError.message || 'unknown error'}).`
+    );
   }
 
   return invitationId;
