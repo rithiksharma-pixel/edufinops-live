@@ -18,6 +18,8 @@ import { assignLeadToRm } from '../../../lead-management/public/js/services/lead
 import { getAssignableRms } from '../../../lead-management/public/js/services/lookupService.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
+import { getMilestoneCounts, getMilestoneRows } from './services/milestoneService.js';
+import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 
 let leadDrawer;
 
@@ -302,6 +304,92 @@ async function populateTrendLenders() {
   }
 }
 
+/* ---------- Milestone counts by date range ---------- */
+
+const MILESTONE_META = {
+  Login:        { icon: 'fa-right-to-bracket', accent: 'var(--accent)' },
+  Sanction:     { icon: 'fa-stamp',            accent: 'var(--success)' },
+  PF:           { icon: 'fa-sack-dollar',      accent: 'var(--warning)' },
+  Disbursement: { icon: 'fa-money-bill-transfer', accent: 'var(--success)' },
+};
+
+const isoDay = (d) => d.toISOString().slice(0, 10);
+
+function currentMilestoneRange() {
+  return { from: document.getElementById('milestoneFrom').value, to: document.getElementById('milestoneTo').value };
+}
+
+function setMilestoneRange(days) {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - days);
+  document.getElementById('milestoneFrom').value = isoDay(from);
+  document.getElementById('milestoneTo').value = isoDay(to);
+}
+
+async function renderMilestoneCounts() {
+  const host = document.getElementById('milestoneCounts');
+  const { from, to } = currentMilestoneRange();
+  if (!from || !to) return;
+  if (from > to) {
+    host.innerHTML = `<p class="empty-state">"From" is after "To" — swap the dates to see results.</p>`;
+    return;
+  }
+  host.innerHTML = '<div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div>';
+  try {
+    const rows = await getMilestoneCounts(from, to);
+    host.innerHTML = `<div class="milestone-grid">${rows.map((r) => {
+      const meta = MILESTONE_META[r.milestone] || { icon: 'fa-circle-dot', accent: 'var(--accent)' };
+      return `<div class="milestone-card" style="--stat-accent:${meta.accent}">
+        <div class="stat-icon"><i class="fa-solid ${meta.icon}"></i></div>
+        <div class="milestone-count">${r.deal_count}</div>
+        <div class="milestone-label">${escapeHtml(r.milestone)}</div>
+        <div class="milestone-value">${r.total_amount > 0 ? formatCurrency(r.total_amount) : '—'}</div>
+      </div>`;
+    }).join('')}</div>`;
+  } catch (err) {
+    console.error('milestone counts failed', err);
+    host.innerHTML = `<p class="empty-state">Could not load milestone counts: ${escapeHtml(err.message || String(err))}</p>`;
+  }
+}
+
+async function exportMilestonesCsv() {
+  const { from, to } = currentMilestoneRange();
+  const btn = document.getElementById('btnMilestoneCsv');
+  btn.disabled = true;
+  try {
+    const rows = await getMilestoneRows(from, to);
+    if (!rows.length) { showToast('No milestones in that date range.', true); return; }
+    const cols = ['event_date', 'milestone', 'student_name', 'student_phone', 'lender', 'lender_branch', 'assigned_rm', 'team', 'lead_source', 'amount', 'reference'];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+    downloadCsv(csv, `milestones_${from}_to_${to}.csv`);
+    showToast(`Exported ${rows.length} milestone${rows.length === 1 ? '' : 's'}.`);
+  } catch (err) {
+    console.error('milestone CSV failed', err);
+    showToast(`Could not export: ${err.message || err}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function initMilestoneControls() {
+  setMilestoneRange(30); // default view: last 30 days
+  document.getElementById('btnMilestoneApply').addEventListener('click', () => {
+    document.querySelectorAll('#milestonePresets button').forEach((b) => b.classList.remove('active'));
+    renderMilestoneCounts();
+  });
+  document.getElementById('btnMilestoneCsv').addEventListener('click', exportMilestonesCsv);
+  document.querySelectorAll('#milestonePresets button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#milestonePresets button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      setMilestoneRange(Number(btn.dataset.days));
+      renderMilestoneCounts();
+    });
+  });
+}
+
 async function bootstrap() {
   let user;
   try {
@@ -322,13 +410,14 @@ async function bootstrap() {
   });
 
   initTrendControls();
+  initMilestoneControls();
   await populateTrendLenders();
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && window.__closeLeadDrawer) window.__closeLeadDrawer();
   });
 
-  await Promise.all([renderDailyStats(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
+  await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 
 guardBootstrap(bootstrap, 'Manager Dashboard');

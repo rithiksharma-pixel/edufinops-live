@@ -57,6 +57,36 @@ export async function exportLeadsCsv() {
   return Papa.unparse(rows);
 }
 
+/**
+ * Full master export — every field the CRM captures, one row per lead
+ * (or per lead-lender deal where deals exist), foreign keys already
+ * resolved to names by the v_master_data view. Includes the Login /
+ * Sanction / PF / Disbursement dates, which live in per-stage detail
+ * tables and so are missing from the narrower leads and deals exports.
+ *
+ * The view is security_invoker, so this returns exactly the rows the
+ * signed-in user is allowed to see — no extra scoping needed here.
+ */
+export async function exportMasterDataCsv() {
+  // Paged here rather than via fetchAllRows(): that helper orders by `id`,
+  // and the view exposes lead_id / deal_id instead. Ordering by both keeps
+  // paging stable — lead_id alone repeats across a multi-lender lead.
+  const all = [];
+  for (let from = 0; ; from += EXPORT_PAGE) {
+    const { data, error } = await supabase
+      .from('v_master_data')
+      .select('*')
+      .order('lead_id', { ascending: true })
+      .order('deal_id', { ascending: true, nullsFirst: true })
+      .range(from, from + EXPORT_PAGE - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < EXPORT_PAGE) break;
+  }
+  if (!all.length) return Papa.unparse([{ note: 'No rows visible to your account.' }]);
+  return Papa.unparse(all);
+}
+
 export async function exportDealsCsv() {
   const data = await fetchAllRows('deals', `
     leads ( student_name ), lenders ( name ),

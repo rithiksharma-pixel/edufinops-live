@@ -3,7 +3,7 @@ import { escapeHtml } from '../../../shared/js/utils.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
 import {
-  exportLeadsCsv, exportDealsCsv, downloadCsv, importTemplateCsv, parseLeadsCsv, commitLeadImport,
+  exportLeadsCsv, exportDealsCsv, exportMasterDataCsv, downloadCsv, importTemplateCsv, parseLeadsCsv, commitLeadImport,
   usersBulkUpdateTemplateCsv, parseUsersBulkUpdateCsv, commitUsersBulkUpdate,
   consultanciesBulkImportTemplateCsv, parseConsultanciesCsv, commitConsultancyImport,
   lendersBulkImportTemplateCsv, parseLendersCsv, commitLenderImport,
@@ -48,6 +48,23 @@ async function bootstrap() {
       downloadCsv(csv, `deals-export-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err) {
       showToast('Could not export deals.', true);
+    }
+  });
+
+
+  document.getElementById('btnExportMaster').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      // ~140 columns over every visible lead — can take a few seconds.
+      const csv = await exportMasterDataCsv();
+      downloadCsv(csv, `master-data-${new Date().toISOString().slice(0, 10)}.csv`);
+      showToast('Master data exported.');
+    } catch (err) {
+      console.error('master export failed', err);
+      showToast(`Could not export master data: ${err.message || err}`, true);
+    } finally {
+      btn.disabled = false;
     }
   });
 
