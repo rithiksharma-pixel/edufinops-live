@@ -15,7 +15,7 @@
 import { supabase } from '../config/supabaseClient.js';
 import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
-export const MILESTONES = ['Login', 'Sanction', 'PF', 'Disbursement'];
+export const MILESTONES = ['Login', 'Sanction', 'PF Paid', 'Disbursement'];
 
 /**
  * Counts + total value per milestone for an inclusive date window.

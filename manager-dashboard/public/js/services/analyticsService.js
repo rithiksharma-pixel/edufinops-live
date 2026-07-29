@@ -146,7 +146,7 @@ const STAGE_TAT_THRESHOLD_DAYS = {
   'Bank Prospect': 7,
   Login: 5,
   Sanction: 10,
-  PF: 5,
+  'PF Paid': 5,
   Disbursement: 7,
 };
 

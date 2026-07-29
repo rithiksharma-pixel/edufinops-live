@@ -662,7 +662,7 @@ export function dealHistoryBulkImportTemplateCsv() {
   return Papa.unparse([
     {
       student_phone: '+91 98765 43210', lender_name: 'Example Bank', branch_name: 'Bangalore',
-      current_stage_name: 'PF', current_disposition_name: '',
+      current_stage_name: 'PF Paid', current_disposition_name: '',
       region_shared_date: '2025-01-10', sm_shared_date: '2025-01-11', rm_shared_date: '2025-01-12', eligibility_status: 'Eligible',
       loan_required_amount: 2500000, login_amount: 2500000, login_date: '2025-01-20', probable_sanction_date: '2025-02-05',
       sanction_amount: 2400000, sanction_date: '2025-02-03', probable_pf_date: '2025-02-20', interest_rate: 10.5, tenure_months: 84, moratorium_months: 12,

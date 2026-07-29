@@ -309,7 +309,7 @@ async function populateTrendLenders() {
 const MILESTONE_META = {
   Login:        { icon: 'fa-right-to-bracket', accent: 'var(--accent)' },
   Sanction:     { icon: 'fa-stamp',            accent: 'var(--success)' },
-  PF:           { icon: 'fa-sack-dollar',      accent: 'var(--warning)' },
+  'PF Paid':    { icon: 'fa-sack-dollar',      accent: 'var(--warning)' },
   Disbursement: { icon: 'fa-money-bill-transfer', accent: 'var(--success)' },
 };
 

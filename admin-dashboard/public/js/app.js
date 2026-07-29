@@ -24,7 +24,7 @@ let activeView = 'overview';
 async function records(table, select) { return fetchAll(() => supabase.from(table).select(select).eq('is_deleted', false)); }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
-const STAGE_TAT_THRESHOLD_DAYS = { 'Bank Prospect': 7, Login: 5, Sanction: 10, PF: 5, Disbursement: 7 };
+const STAGE_TAT_THRESHOLD_DAYS = { 'Bank Prospect': 7, Login: 5, Sanction: 10, 'PF Paid': 5, Disbursement: 7 };
 
 async function loadOverview() {
   const [leads, deals, docs, users, eventResponse, overdueTasks, stageEvents] = await Promise.all([

@@ -39,7 +39,7 @@ export const STAGE_TABLE_MAP = {
       { key: 'moratorium_months', label: 'Moratorium (months)', type: 'number' },
     ],
   },
-  PF: {
+  'PF Paid': {
     table: 'deal_pf_details',
     fields: [
       { key: 'pf_amount', label: 'PF amount', type: 'number' },
