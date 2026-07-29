@@ -24,13 +24,19 @@ export function renderLeadTable(tbody, leads, onRowClick) {
 
     const stageName = lead.lead_stages?.name || '–';
     const rmName = lead.assigned_rm?.full_name || 'Unassigned';
+    // Consultancy comes from the linked record, falling back to the free-text
+    // name used when the consultancy wasn't in the list yet ("Other").
+    const consultancyName = lead.consultancies?.name || lead.consultancy_other_name;
 
     tr.innerHTML = `
       <td>
         <div class="student-name">${escapeHtml(lead.student_name)}</div>
         <div class="student-phone">${escapeHtml(lead.student_phone)}</div>
       </td>
-      <td>${escapeHtml(lead.course_name || '–')}${lead.university_name ? ' · ' + escapeHtml(lead.university_name) : ''}</td>
+      <td>
+        <div>${consultancyName ? escapeHtml(consultancyName) : '<span style="color:var(--ink-300)">–</span>'}</div>
+        ${lead.bd_name ? `<div class="student-phone" style="font-family:inherit;">BD: ${escapeHtml(lead.bd_name)}</div>` : ''}
+      </td>
       <td>${formatCurrency(lead.loan_amount_requested, lead.currency)}</td>
       <td><span class="badge badge-accent">${escapeHtml(stageName)}</span></td>
       <td>${escapeHtml(rmName)}</td>

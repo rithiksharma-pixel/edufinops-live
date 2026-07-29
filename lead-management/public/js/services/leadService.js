@@ -11,7 +11,9 @@ const LEAD_LIST_SELECT = `
   course_name, university_name, loan_amount_requested, currency,
   next_follow_up_at, last_activity_at,
   current_stage_id, assigned_rm_id,
+  consultancy_other_name, bd_name,
   lead_stages ( name, color ),
+  consultancies ( name ),
   assigned_rm:users!leads_assigned_rm_id_fkey ( full_name )
 `;
 

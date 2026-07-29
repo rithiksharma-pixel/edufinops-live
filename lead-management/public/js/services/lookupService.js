@@ -146,7 +146,9 @@ export async function getConsultancies() {
   const data = await fetchAll(
     () => supabase
       .from('consultancies')
-      .select('id, name')
+      // bd_manager comes along so the New Lead form can prefill "BD name"
+      // from the consultancy's recorded owner.
+      .select('id, name, bd_manager')
       .eq('is_active', true)
       .eq('is_deleted', false)
       .order('name', { ascending: true })

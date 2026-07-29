@@ -17,8 +17,12 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   const consultancyField = document.getElementById('consultancyField');
   const consultancySelect = document.getElementById('f_consultancy_id');
   const consultancyOtherInput = document.getElementById('f_consultancy_other_name');
+  const bdNameField = document.getElementById('bdNameField');
+  const bdNameInput = document.getElementById('f_bd_name');
 
   let sources = [];
+  // Kept so picking a consultancy can prefill its BD manager below.
+  let consultancies = [];
 
   function isBdPartnership() {
     const selected = sources.find((s) => s.id === sourceSelect.value);
@@ -28,10 +32,14 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   function toggleConsultancyField() {
     const show = isBdPartnership();
     consultancyField.hidden = !show;
+    // BD name is only meaningful for a BD Partnership lead, so it appears
+    // and disappears with the consultancy picker.
+    bdNameField.hidden = !show;
     if (!show) {
       consultancySelect.value = '';
       consultancyOtherInput.hidden = true;
       consultancyOtherInput.value = '';
+      bdNameInput.value = '';
     }
   }
 
@@ -40,6 +48,15 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
     const isOther = consultancySelect.value === OTHER_CONSULTANCY_VALUE;
     consultancyOtherInput.hidden = !isOther;
     if (!isOther) consultancyOtherInput.value = '';
+
+    // Prefill the BD name from the consultancy's recorded BD manager, so
+    // the usual case is no typing. Only fills a BLANK box — never
+    // overwrites a name already typed, since the person who sourced this
+    // particular lead can differ from the account owner.
+    const picked = consultancies.find((c) => c.id === consultancySelect.value);
+    if (picked?.bd_manager && !bdNameInput.value.trim()) {
+      bdNameInput.value = picked.bd_manager;
+    }
   });
 
   async function open() {
@@ -53,7 +70,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
         .join('');
     }
     if (consultancySelect.options.length <= 0) {
-      const consultancies = await getConsultancies();
+      consultancies = await getConsultancies();
       consultancySelect.innerHTML =
         `<option value="">Select consultancy…</option>` +
         consultancies.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') +
@@ -105,6 +122,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
 
     let consultancyId = null;
     let consultancyOtherName = null;
+    let bdName = null;
     if (isBdPartnership()) {
       if (!consultancySelect.value) {
         showErrors({ consultancy_id: 'Choose the consultancy this lead came from.' });
@@ -118,6 +136,11 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
         }
       } else {
         consultancyId = consultancySelect.value;
+      }
+      bdName = bdNameInput.value.trim();
+      if (!bdName) {
+        showErrors({ bd_name: 'Enter the BD name for this lead.' });
+        return;
       }
     }
 
@@ -141,6 +164,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
           lead_source_id: payload.lead_source_id,
           consultancy_id: consultancyId,
           consultancy_other_name: consultancyOtherName,
+          bd_name: bdName,
           source_user_id: currentUser.id,
           // RM/Manager creators must land somewhere their own SELECT policy
           // covers (assigned_rm_id / assigned_manager_id) — otherwise the
