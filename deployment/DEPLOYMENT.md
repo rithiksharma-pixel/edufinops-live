@@ -92,3 +92,73 @@ This is what makes the invite and password-reset emails land the user on the rig
 - RMs, Managers, and Admins currently all land in Lead Management after login — RM Workspace, Manager Dashboard, and Admin Dashboard don't have dedicated UIs yet. Lead Management's RLS already scopes their access correctly (RM sees only their leads, Manager sees their team), so this is safe, just not purpose-built for those roles yet.
 - Document upload is live (Documents tab in the lead detail drawer, RM/Manager/Admin/Counselor only) — see Step 2b for the required Storage bucket + policies.
 - Lender-side login doesn't exist — the `bank_rm_id`/`assigned_loan_officer_id` fields on deals are ready for it, but there's no Lender Pipeline app to let a lender actually log in and update their own deals yet.
+
+## Email notifications — REQUIRED SETUP (currently missing)
+
+**Status on the live project: broken.** The database sends the shared
+secret correctly, but the Edge Function has no `NOTIFICATION_SECRET` set,
+so every send is rejected with 401 and **no notification email has ever
+been delivered** — daily digests included. The Edge Function's own
+diagnostic confirms it: `expectedSecretPresent: false, providedSecretLength: 72`.
+
+### How the path works
+
+```
+Postgres trigger / cron
+  └─ notify_via_email(to[], subject, html)          -- reads Vault: notification_secret
+       └─ pg_net POST  →  Edge Function send-notification-email
+                             -- compares header x-notification-secret
+                             -- to env NOTIFICATION_SECRET
+                             └─ Gmail SMTP  →  recipient
+```
+
+Both sides must hold the **same** value. The Vault side is already set
+(72 chars); the Edge Function side is not.
+
+### What to do
+
+1. Read the existing Vault secret (Supabase Dashboard → Project Settings
+   → Vault → `notification_secret`), or generate a new one and update
+   Vault to match.
+2. Set it as an Edge Function secret — **do this yourself; it must not be
+   pasted into a chat, a commit, or any file in this repo:**
+
+   ```
+   supabase secrets set NOTIFICATION_SECRET=<the value from Vault>
+   ```
+
+3. Confirm SMTP is configured too — the same function needs
+   `GMAIL_SMTP_USER` and `GMAIL_SMTP_PASSWORD` (a Google **app password**,
+   not the account password).
+4. Verify:
+
+   ```sql
+   select notify_via_email(array['you@yourdomain.com'], 'Test', '<p>hello</p>');
+   -- then, a few seconds later:
+   select status_code, convert_from(content,'UTF8') from net._http_response order by id desc limit 1;
+   ```
+
+   `200` means the whole path works. `401` means the two secrets still
+   differ. `500` means the secret matched but SMTP is misconfigured.
+
+### What sends email once it works
+
+| Trigger | Recipient | Notes |
+|---|---|---|
+| `send_daily_digests()` (cron, 02:30 UTC daily) | each RM, plus their Manager for stale leads | stage changes in last 24h + leads idle 3+ days |
+| `trg_notify_task_assigned` | the assignee | skipped when you assign a task to yourself |
+| `trg_notify_lead_stage_change` | the lead's RM | skipped when the RM made the change |
+| `trg_notify_deal_stage_change` | the lead's RM | skipped when the RM made the change |
+| `trg_notify_on_lead_assignment` | the newly assigned RM | pre-existing |
+| `trg_notify_on_deal_query` | relevant party | pre-existing |
+
+### Silencing them for a bulk import
+
+The deal-history importer replays historical stage changes, which would
+otherwise send one email per row. Turn the flags off first:
+
+```sql
+update notification_settings set notify_on_stage_change = false, notify_on_task_assigned = false;
+-- run the import, then:
+update notification_settings set notify_on_stage_change = true, notify_on_task_assigned = true;
+```
