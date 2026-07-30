@@ -27,19 +27,27 @@ export const STAGE_TABLE_MAP = {
     fields: [
       // Nothing required here: a deal enters Bank Prospect the moment a
       // lead is shared with a lender, before any of this is known.
+      //
+      // eligibility_status was dropped as not needed. The column is left in
+      // place rather than deleted, so the ~70 existing rows keep whatever
+      // was recorded and the field can be restored by adding one line here.
       { key: 'region_shared_date', label: 'Region shared date', type: 'date' },
       { key: 'sm_shared_date', label: 'SM shared date', type: 'date' },
       { key: 'rm_shared_date', label: 'RM shared date', type: 'date' },
-      { key: 'eligibility_status', label: 'Eligibility status', type: 'text' },
       { key: 'remarks', label: 'Remarks', type: 'textarea' },
     ],
   },
   Login: {
     table: 'deal_login_details',
     fields: [
+      // Amounts were dropped from Login: the figure that matters this early
+      // is what the lender logged the file under, and the money only becomes
+      // meaningful at Sanction (sanction_amount) and Disbursement (tranches).
+      // Asking for "loan required" AND "login amount" here produced two
+      // near-duplicate numbers, one of which was frequently a typo — one row
+      // holds 1.006e11 because a Login ID was pasted into the amount box.
+      // Columns retained; only the form no longer asks.
       { key: 'login_id', label: 'Login ID', type: 'text', required: true },
-      { key: 'loan_required_amount', label: 'Loan required amount', type: 'number' },
-      { key: 'login_amount', label: 'Login amount', type: 'number', required: true },
       { key: 'login_date', label: 'Login date', type: 'date', required: true },
       { key: 'probable_sanction_date', label: 'Probable sanction date', type: 'date' },
     ],
