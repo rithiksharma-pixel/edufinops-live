@@ -24,6 +24,7 @@ import { initLenderStatusPanel } from './lenderStatusPanel.js';
 import { getAssignableRms } from '../services/lookupService.js';
 import { formatCurrency, formatDateTime, followUpCell } from '../utils/validation.js';
 import { emptyState } from '../../../../shared/js/emptyState.js';
+import { renderLeadSummary } from './leadSummary.js';
 
 let currentLeadId = null;
 
@@ -88,7 +89,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       if (onOpen) onOpen(lead);
       renderActionBar(lead, { canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole), activateTab, toggleCallForm });
       renderCallForm(lead, currentUser, showToast, onLeadUpdated);
-      renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, () => open(leadId));
+      renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, () => open(leadId), timeline);
       renderTimeline(timeline);
 
       // Collateral & References only makes sense for a Collateral loan —
@@ -325,7 +326,7 @@ function formatIntake(lead) {
 
 // Overview = the lead's basics at a glance. Co-applicant, academic, and
 // deal detail each live in their own tab; this tab stays a clean summary.
-function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, reload) {
+function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, reload, timeline) {
   const panel = document.getElementById('panelOverview');
   // The stage is computed from activity now (see recompute_lead_stage) — it
   // isn't hand-picked. The one manual override is marking a lead Lost.
@@ -363,6 +364,8 @@ function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, sh
   const reasonOptions = lostReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
 
   panel.innerHTML = `
+    <div id="leadSummaryHost"></div>
+
     <h3 style="font-size:14px;font-weight:600;margin:0 0 10px;">Lead basics</h3>
     ${basics.map(([k, v]) => `<div class="detail-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join('')}
 
@@ -445,6 +448,20 @@ function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, sh
         reopenBtn.disabled = false; reopenBtn.textContent = 'Reopen lead';
       }
     });
+  }
+
+  // Summary last, and deliberately not awaited: it makes one extra query for
+  // lender status, and the rest of Overview must not wait on it. Consultants
+  // and BD are skipped — RLS returns them no deals, so the lender section
+  // would always be empty and the query is wasted.
+  const summaryHost = document.getElementById('leadSummaryHost');
+  if (summaryHost && !['Consultant', 'Business Development'].includes(currentUser.role)) {
+    renderLeadSummary(summaryHost, { lead, timeline, effectiveStatus })
+      .catch((err) => {
+        // A summary that fails must not make a working lead look broken.
+        console.error('lead summary failed', err);
+        summaryHost.innerHTML = '';
+      });
   }
 }
 
