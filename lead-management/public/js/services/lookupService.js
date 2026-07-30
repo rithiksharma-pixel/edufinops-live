@@ -37,11 +37,25 @@ export async function getLeadSources() {
  * to "your team" for Managers and "yourself" for RMs, so no client-side
  * filtering is required here.
  */
+// Everyone who can personally hold a lead — not just RMs. A Manager, ATM,
+// Counselor or Admin does sometimes work a lead directly, and the picker
+// used to hide them, so there was no way to record who actually owned it.
+//
+// Excluded on purpose: Lender (outside the org), and Consultant / Business
+// Development (they SOURCE leads via source_user_id; they never work them,
+// and their RLS is built around that distinction).
+//
+// Safe to widen only because migration 030 made assignment itself grant
+// access — before that, assigning to a non-RM made the lead invisible to
+// the assignee.
+const LEAD_OWNER_ROLES = ['Relationship Manager', 'Associate Team Manager', 'Manager', 'Counselor', 'Admin'];
+
 export async function getAssignableRms() {
   const { data, error } = await fetchAllResult(() => supabase
     .from('users')
+    // role name comes back so the picker can label who is not an RM
     .select('id, full_name, roles!inner(name)')
-    .eq('roles.name', 'Relationship Manager')
+    .in('roles.name', LEAD_OWNER_ROLES)
     .eq('is_active', true)
     .eq('is_deleted', false)
     .order('full_name', { ascending: true }));

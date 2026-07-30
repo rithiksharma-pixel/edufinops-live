@@ -334,8 +334,16 @@ function renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, sh
   const canReassign = ['Admin', 'Manager', 'Associate Team Manager'].includes(currentUser.role);
   const isLost = !!lead.lost_reason_id;
 
+  // The picker now offers Managers, ATMs, Counselors and Admins as well as
+  // RMs, since any of them may hold a lead directly. Suffix the role for
+  // everyone who is NOT an RM, so handing a lead to a Manager is a visible
+  // choice rather than a name that looks like any other.
   const rmOptions = rms
-    .map((u) => `<option value="${u.id}" ${u.id === lead.assigned_rm_id ? 'selected' : ''}>${escapeHtml(u.full_name)}</option>`)
+    .map((u) => {
+      const role = u.roles?.name;
+      const suffix = role && role !== 'Relationship Manager' ? ` — ${role}` : '';
+      return `<option value="${u.id}" ${u.id === lead.assigned_rm_id ? 'selected' : ''}>${escapeHtml(u.full_name + suffix)}</option>`;
+    })
     .join('');
 
   const statusText = isLost

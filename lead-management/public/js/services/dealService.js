@@ -31,8 +31,10 @@ export const STAGE_TABLE_MAP = {
       // eligibility_status was dropped as not needed. The column is left in
       // place rather than deleted, so the ~70 existing rows keep whatever
       // was recorded and the field can be restored by adding one line here.
+      // sm_shared_date dropped as a duplicate of rm_shared_date — the file
+      // sits with the bank's RM, so that is the date the team tracks.
+      // Column retained, same reasoning as eligibility_status.
       { key: 'region_shared_date', label: 'Region shared date', type: 'date' },
-      { key: 'sm_shared_date', label: 'SM shared date', type: 'date' },
       { key: 'rm_shared_date', label: 'RM shared date', type: 'date' },
       { key: 'remarks', label: 'Remarks', type: 'textarea' },
     ],
