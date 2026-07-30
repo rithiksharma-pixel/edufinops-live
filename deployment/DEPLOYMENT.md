@@ -145,12 +145,18 @@ Both sides must hold the **same** value. The Vault side is already set
 
 | Trigger | Recipient | Notes |
 |---|---|---|
-| `send_daily_digests()` (cron, 02:30 UTC daily) | each RM, plus their Manager for stale leads | stage changes in last 24h + leads idle 3+ days |
-| `trg_notify_task_assigned` | the assignee | skipped when you assign a task to yourself |
-| `trg_notify_lead_stage_change` | the lead's RM | skipped when the RM made the change |
-| `trg_notify_deal_stage_change` | the lead's RM | skipped when the RM made the change |
+| `trg_notify_task_assigned` | the assignee | **instant.** Skipped when you assign a task to yourself |
+| `send_daily_digests()` (cron, 02:30 UTC) | every active RM | own scorecard: calls + connect rate, tasks done / open / overdue, milestones, overdue follow-ups, funnel |
+| `send_daily_digests()` | Managers & ATMs | per-RM table for their own reports, plus team totals. Skipped if nobody reports to them |
+| `send_daily_digests()` | Admins | every RM grouped by team, org totals, plus unassigned-lead count |
+| `trg_notify_lead_stage_change` | the lead's RM | **off by default** — the digest covers stage movement. Re-enable via `notification_settings` |
+| `trg_notify_deal_stage_change` | the lead's RM | **off by default**, same reason |
 | `trg_notify_on_lead_assignment` | the newly assigned RM | pre-existing |
 | `trg_notify_on_deal_query` | relevant party | pre-existing |
+
+Manager and Admin figures are computed from the same per-RM temp table
+that feeds the RMs' own emails, so a Manager's totals can never disagree
+with the sum of their team's individual scorecards.
 
 ### Silencing them for a bulk import
 
