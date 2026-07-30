@@ -177,6 +177,37 @@
 }
 .lender-app-card .lender-name { font-weight: 500; font-size: 14px; }
 
+/* ---------------------------------------------------------
+   Lender progress tree — Lenders tab, above the deal cards.
+   One column per lender-deal so parallel progress across banks reads
+   side by side, git-graph style, instead of one card at a time.
+   --------------------------------------------------------- */
+.deal-tree {
+  display: flex; gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px; /* room for the scrollbar without clipping content */
+}
+.deal-branch {
+  flex: 0 0 240px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  background: var(--bg-surface);
+}
+.deal-branch-header { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.deal-branch-header .lender-name { font-weight: 500; font-size: 13px; }
+
+/* Smaller-scale variant of the Timeline tab's .timeline-item — same
+   marker-and-line structure, tightened up to fit a 240px column. */
+.deal-branch-timeline .timeline-item { gap: 10px; padding-bottom: 16px; }
+.deal-branch-timeline .timeline-marker-col { width: 18px; }
+.deal-branch-timeline .timeline-item:not(:last-child) .timeline-marker-col::after { height: 16px; }
+.deal-branch-timeline .timeline-dot { width: 8px; height: 8px; }
+.deal-branch-timeline .timeline-content { padding-top: 1px; }
+.deal-branch-timeline .timeline-event { font-size: 12px; }
+.deal-branch-timeline .timeline-meta { font-size: 11px; }
+.deal-branch-timeline .timeline-remarks { font-size: 11.5px; }
+
 /* ---------- Lenders tab row list ---------- */
 .lender-row-list { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-surface); }
 .lender-row {

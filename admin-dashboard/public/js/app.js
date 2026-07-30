@@ -10,6 +10,8 @@ import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { fetchAll, fetchAllResult } from '../../../shared/js/fetchAll.js';
+import { getTatThresholds } from '../../../shared/js/tatThresholds.js';
+import { getMilestoneCounts, MILESTONES } from '../../../manager-dashboard/public/js/services/milestoneService.js';
 
 let leadDrawer;
 
@@ -24,10 +26,8 @@ let activeView = 'overview';
 async function records(table, select) { return fetchAll(() => supabase.from(table).select(select).eq('is_deleted', false)); }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
-const STAGE_TAT_THRESHOLD_DAYS = { 'Bank Prospect': 7, Login: 5, Sanction: 10, 'PF Paid': 5, Disbursement: 7 };
-
 async function loadOverview() {
-  const [leads, deals, docs, users, eventResponse, overdueTasks, stageEvents] = await Promise.all([
+  const [leads, deals, docs, users, eventResponse, overdueTasks, stageEvents, tatThresholds] = await Promise.all([
     records('leads', 'id, lead_stages(name), next_follow_up_at'),
     records('deals', 'id, total_disbursed_amount, is_on_hold, is_rejected, created_at, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)'),
     records('documents', 'id, verification_status'),
@@ -35,6 +35,7 @@ async function loadOverview() {
     supabase.from('lead_events').select('event_type, created_at, leads(id, student_name), users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }).limit(8),
     fetchAll(() => supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10))),
     fetchAll(() => supabase.from('deal_events').select('id, deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }), { tiebreak: 'id', ascending: false }),
+    getTatThresholds(supabase),
   ]);
   if (eventResponse.error) throw eventResponse.error;
   const totalDisbursed = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
@@ -58,9 +59,9 @@ async function loadOverview() {
   const tatBreachedCount = deals.filter((deal) => {
     if (deal.is_on_hold || deal.is_rejected) return false;
     const stageName = deal.current_deal_stage?.name;
-    if (!stageName || !STAGE_TAT_THRESHOLD_DAYS[stageName]) return false;
+    if (!stageName || !tatThresholds[stageName]) return false;
     const enteredAt = enteredCurrentStageAt[deal.id] || deal.created_at;
-    return (now - new Date(enteredAt).getTime()) / 86400000 > STAGE_TAT_THRESHOLD_DAYS[stageName];
+    return (now - new Date(enteredAt).getTime()) / 86400000 > tatThresholds[stageName];
   }).length;
   const attention = [{ text: `${leads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at) < new Date()).length} overdue follow-ups`, icon: 'fa-clock' }, { text: `${deals.filter((deal) => deal.is_on_hold).length} deals on hold`, icon: 'fa-hand' }, { text: `${docs.filter((doc) => doc.verification_status === 'Pending Review').length} documents awaiting review`, icon: 'fa-file-lines' }, { text: `${overdueTasks.length} overdue tasks`, icon: 'fa-list-check' }, { text: `${tatBreachedCount} deals overstayed their stage TAT`, icon: 'fa-hourglass-end' }].filter((item) => item.text.slice(0, 1) !== '0');
   $('attentionCount').textContent = attention.length ? attention.length : 'All clear';
@@ -155,6 +156,100 @@ async function loadReports() {
   $('tatAverages').innerHTML = averages.length ? averages.map((t) => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${esc(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div></div>`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
   $('tatWorstOffenders').innerHTML = worstOffenders.length ? worstOffenders.map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${esc(t.student || '–')} <span style="color:var(--ink-500);">· ${esc(t.label)}</span></span><span class="badge">${t.days.toFixed(1)}d</span></div>${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${esc(t.remarks)}</div>` : ''}`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
 }
+// ---------- Insights: DoD / WoW / MoM comparisons ----------
+// Deliberately count/amount deltas only — no RM/team scoring formula.
+// That's held back until there's a score distribution to calibrate
+// against, so this doesn't ship a guessed-at judgment of anyone's work.
+const insightsState = { granularity: 'day', wired: false };
+
+/** Rolling window of `days` days ending today, and the equal-length window immediately before it. */
+function periodWindows(days) {
+  const currentTo = new Date(); currentTo.setHours(23, 59, 59, 999);
+  const currentFrom = new Date(currentTo); currentFrom.setDate(currentFrom.getDate() - (days - 1)); currentFrom.setHours(0, 0, 0, 0);
+  const prevTo = new Date(currentFrom.getTime() - 1);
+  const prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - (days - 1)); prevFrom.setHours(0, 0, 0, 0);
+  return { currentFrom, currentTo, prevFrom, prevTo };
+}
+
+// fetchAll + .length, not a count:'exact' head request — this codebase has
+// repeatedly hit PostgREST's 1000-row cap silently truncating a raw count
+// (see records()'s comment above), so every other headline number here
+// pages the same way.
+async function countInRange(table, from, to) {
+  const rows = await fetchAll(() => supabase.from(table).select('id').eq('is_deleted', false).gte('created_at', from.toISOString()).lte('created_at', to.toISOString()));
+  return rows.length;
+}
+
+async function getPeriodComparison(granularity) {
+  const days = { day: 1, week: 7, month: 30 }[granularity];
+  const w = periodWindows(days);
+  const iso = (d) => d.toISOString().slice(0, 10);
+
+  const [leadsNow, leadsPrev, dealsNow, dealsPrev, msNow, msPrev] = await Promise.all([
+    countInRange('leads', w.currentFrom, w.currentTo),
+    countInRange('leads', w.prevFrom, w.prevTo),
+    countInRange('deals', w.currentFrom, w.currentTo),
+    countInRange('deals', w.prevFrom, w.prevTo),
+    getMilestoneCounts(iso(w.currentFrom), iso(w.currentTo)),
+    getMilestoneCounts(iso(w.prevFrom), iso(w.prevTo)),
+  ]);
+
+  const msNowByName = Object.fromEntries(msNow.map((m) => [m.milestone, m]));
+  const msPrevByName = Object.fromEntries(msPrev.map((m) => [m.milestone, m]));
+
+  const metrics = [
+    { label: 'Leads created', current: leadsNow, prev: leadsPrev },
+    { label: 'Lender deals created', current: dealsNow, prev: dealsPrev },
+    ...MILESTONES.map((name) => ({
+      label: name,
+      current: msNowByName[name]?.deal_count || 0,
+      prev: msPrevByName[name]?.deal_count || 0,
+      currentAmount: msNowByName[name]?.total_amount || 0,
+      prevAmount: msPrevByName[name]?.total_amount || 0,
+    })),
+  ];
+
+  return metrics.map((m) => ({ ...m, delta: m.current - m.prev }));
+}
+
+function renderInsights(metrics) {
+  $('insightsMetrics').innerHTML = metrics.map((m) => {
+    const deltaClass = m.delta > 0 ? 'trend-up' : m.delta < 0 ? 'trend-down' : 'trend-flat';
+    const arrow = m.delta > 0 ? '▲' : m.delta < 0 ? '▼' : '–';
+    const amountLine = m.currentAmount !== undefined
+      ? `<div class="muted">${inr(m.currentAmount)} vs ${inr(m.prevAmount)}</div>` : '';
+    return `<div class="simple-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <strong>${esc(m.label)}</strong>
+      <div style="text-align:right;">
+        <div>${m.current} <span class="muted">vs ${m.prev}</span> <span class="${deltaClass}">${arrow} ${Math.abs(m.delta)}</span></div>
+        ${amountLine}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function initInsightsControls() {
+  if (insightsState.wired) return;
+  insightsState.wired = true;
+  $('insightsPills').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-granularity]');
+    if (!button || button.dataset.granularity === insightsState.granularity) return;
+    insightsState.granularity = button.dataset.granularity;
+    loadInsights();
+  });
+}
+
+async function loadInsights() {
+  initInsightsControls();
+  $('insightsPills').innerHTML = renderGranularityPills(insightsState.granularity);
+  try {
+    renderInsights(await getPeriodComparison(insightsState.granularity));
+  } catch (error) {
+    console.error(error);
+    $('insightsMetrics').innerHTML = emptyState('fa-triangle-exclamation', 'Could not load insights', 'Try refreshing the page.');
+  }
+}
+
 let teamPerfData = null; // cached { teams, managers, rms, leads, deals, callStats } for the currently loaded view
 
 // Calendar week starting Monday 00:00 local time — duplicated per app
@@ -463,23 +558,51 @@ async function loadSettings() {
     });
   });
 
-  const [{ data: lenders, error: lendersError }, { data: branches, error: branchesError }, { data: consultancies, error: consultanciesError }, { data: teams, error: teamsError }] = await Promise.all([
+  const [{ data: lenders, error: lendersError }, { data: branches, error: branchesError }, { data: consultancies, error: consultanciesError }, { data: teams, error: teamsError }, { data: dealStages, error: dealStagesError }, { data: tatRows, error: tatRowsError }] = await Promise.all([
     supabase.from('lenders').select('id,name').eq('is_deleted', false).order('name'),
     supabase.from('lender_branches').select('name,lenders(name)').eq('is_deleted', false).order('name'),
     supabase.from('consultancies').select('name, bd_manager').eq('is_deleted', false).order('name').range(0, 4999),
     supabase.from('teams').select('name').eq('is_deleted', false).order('name'),
+    supabase.from('deal_stages').select('id,name').eq('is_deleted', false).eq('is_terminal', false).order('sequence_order'),
+    supabase.from('stage_tat_thresholds').select('id,deal_stage_id,threshold_days').eq('is_deleted', false),
   ]);
   if (lendersError) throw lendersError;
   if (branchesError) throw branchesError;
   if (consultanciesError) throw consultanciesError;
   if (teamsError) throw teamsError;
+  if (dealStagesError) throw dealStagesError;
+  if (tatRowsError) throw tatRowsError;
   $('branchLenderSelect').innerHTML = lenders.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   $('lenderBranchesList').innerHTML = branches.map((b) => `<div class="simple-row"><strong>${esc(b.name)}</strong><div class="muted">${esc(b.lenders?.name || '–')}</div></div>`).join('') || '<p class="muted">No branches configured.</p>';
   $('consultanciesList').innerHTML = consultancies.map((c) => `<div class="simple-row"><strong>${esc(c.name)}</strong><div class="muted">${c.bd_manager ? `BD manager: ${esc(c.bd_manager)}` : 'No BD manager yet'}</div></div>`).join('') || '<p class="muted">No consultancies configured.</p>';
   $('teamsList').innerHTML = teams.map((t) => `<div class="simple-row"><strong>${esc(t.name)}</strong></div>`).join('') || '<p class="muted">No teams configured.</p>';
+
+  const tatByStage = Object.fromEntries(tatRows.map((r) => [r.deal_stage_id, r]));
+  $('tatThresholdsList').innerHTML = dealStages.map((stage) => {
+    const existing = tatByStage[stage.id];
+    return `<div class="simple-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><strong>${esc(stage.name)}</strong><input type="number" min="1" data-threshold-for="${stage.id}" value="${existing ? existing.threshold_days : ''}" placeholder="not tracked" style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);font-size:12.5px;"></div>`;
+  }).join('') || '<p class="muted">No stages configured.</p>';
+  document.querySelectorAll('[data-threshold-for]').forEach((input) => {
+    input.addEventListener('change', async (event) => {
+      const stageId = event.target.dataset.thresholdFor;
+      const raw = event.target.value.trim();
+      const { data: auth } = await supabase.auth.getUser();
+      // Cleared back to blank = stop tracking this stage. Soft-deleted via
+      // update, same as every other lookup table here — there's no delete
+      // policy, only admin-gated insert/update.
+      const { error: saveError } = raw === ''
+        ? await supabase.from('stage_tat_thresholds').update({ is_deleted: true, updated_by: auth.user.id }).eq('deal_stage_id', stageId)
+        : await supabase.from('stage_tat_thresholds').upsert(
+            { deal_stage_id: stageId, threshold_days: Number(raw), is_deleted: false, created_by: auth.user.id, updated_by: auth.user.id },
+            { onConflict: 'deal_stage_id' }
+          );
+      if (saveError) return showToast(saveError.message, true);
+      showToast('Saved.');
+    });
+  });
 }
-async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
-function changeView(view) { activeView = view; if (view === 'team-performance') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], reports: ['Reports', 'Export and review business performance.'], 'team-performance': ['Team performance', 'Overall, team-wise, and RM-wise breakdowns.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
+async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'insights') await loadInsights(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
+function changeView(view) { activeView = view; if (view === 'team-performance') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], reports: ['Reports', 'Export and review business performance.'], insights: ['Insights', 'Day-over-day, week-over-week, and month-over-month trends.'], 'team-performance': ['Team performance', 'Overall, team-wise, and RM-wise breakdowns.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
 document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'team-performance') teamPerfData = null; loadActive(); }); $('documentStatus').addEventListener('change', loadDocuments); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });

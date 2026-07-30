@@ -15,6 +15,7 @@ import {
   FOLLOWUP_REQUIRED_DISPOSITIONS,
 } from '../services/leadService.js';
 import { initDealsTab } from './dealPanel.js';
+import { initDealTimelineTree } from './dealTimelineTree.js';
 import { initDocumentsTab } from './documentPanel.js';
 import { initApplicantDetailsTab } from './applicantDetailsPanel.js';
 import { initAcademicDetailsTab } from './academicDetailsPanel.js';
@@ -122,18 +123,25 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       // blocked by RLS too, but no point rendering a tab that always comes
       // back empty.
       const lenderMatrixPanel = document.getElementById('panelLenderMatrix');
+      const dealTreePanel = document.getElementById('panelDealTree');
       const dealsPanel = document.getElementById('panelLenders');
       const documentsPanel = document.getElementById('panelDocuments');
       if (currentUserRole === 'Consultant' || currentUserRole === 'Business Development') {
         lenderMatrixPanel.innerHTML = '';
+        dealTreePanel.innerHTML = '';
         dealsPanel.innerHTML = '<p class="empty-state">Deal information isn\'t visible from this role.</p>';
         documentsPanel.innerHTML = '<p class="empty-state">Document management isn\'t visible from this role.</p>';
       } else {
-        const dealsTab = await initDealsTab(dealsPanel, leadId, { currentUser, showToast, onDealUpdated: onLeadUpdated });
+        const dealTree = await initDealTimelineTree(dealTreePanel, leadId);
+        const dealsTab = await initDealsTab(dealsPanel, leadId, {
+          currentUser,
+          showToast,
+          onDealUpdated: () => { onLeadUpdated(); dealTree.refresh(); },
+        });
         await initLenderStatusPanel(lenderMatrixPanel, leadId, {
           currentUser,
           showToast,
-          onShared: () => { onLeadUpdated(); dealsTab.refresh(); },
+          onShared: () => { onLeadUpdated(); dealsTab.refresh(); dealTree.refresh(); },
         });
         await initDocumentsTab(documentsPanel, leadId, { currentUser, showToast, coApplicants });
       }

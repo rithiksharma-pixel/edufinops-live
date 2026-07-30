@@ -12,6 +12,7 @@
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
 import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
+import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
 // re-declared so the two lists can never drift apart.
@@ -139,17 +140,6 @@ export async function getLenderBreakdown() {
   return Object.values(byLender).sort((a, b) => b.dealCount - a.dealCount);
 }
 
-// How many days a deal can sit in a stage before it's flagged as stuck.
-// V1: hardcoded per-stage default. Revisit as an admin-configurable
-// setting once there's a Settings surface for it.
-const STAGE_TAT_THRESHOLD_DAYS = {
-  'Bank Prospect': 7,
-  Login: 5,
-  Sanction: 10,
-  'PF Paid': 5,
-  Disbursement: 7,
-};
-
 /**
  * "Needs attention" = overdue follow-up, a deal on hold/rejected, a deal
  * that's overstayed its current stage's TAT threshold, or an overdue task.
@@ -157,6 +147,8 @@ const STAGE_TAT_THRESHOLD_DAYS = {
  * whole team instead of one bank.
  */
 export async function getAttentionSummary() {
+  const thresholds = await getTatThresholds(supabase);
+
   // All paged — `totalLeads` and `onTrackCount` are rendered as headline
   // numbers, so a 1000-row truncation here showed a wrong pipeline size.
   const leadsData = await fetchAll(
@@ -207,10 +199,10 @@ export async function getAttentionSummary() {
   const tatBreachedDeals = dealsData.filter((d) => {
     if (d.is_on_hold || d.is_rejected) return false;
     const stageName = d.current_deal_stage?.name;
-    if (!stageName || !STAGE_TAT_THRESHOLD_DAYS[stageName]) return false;
+    if (!stageName || !thresholds[stageName]) return false;
     const enteredAt = enteredCurrentStageAt[d.id]?.created_at || d.created_at;
     const daysInStage = (now - new Date(enteredAt).getTime()) / (24 * 60 * 60 * 1000);
-    return daysInStage > STAGE_TAT_THRESHOLD_DAYS[stageName];
+    return daysInStage > thresholds[stageName];
   });
 
   const flaggedDeals = dealsData.filter((d) => d.is_on_hold || d.is_rejected || tatBreachedDeals.includes(d));
@@ -221,7 +213,7 @@ export async function getAttentionSummary() {
     flaggedDeals: flaggedDeals.map((d) => ({
       leadId: d.lead_id,
       name: d.leads?.student_name,
-      reason: d.is_rejected ? 'Rejected' : d.is_on_hold ? 'On hold' : `Overstayed ${d.current_deal_stage?.name} (${STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name]}d TAT)`,
+      reason: d.is_rejected ? 'Rejected' : d.is_on_hold ? 'On hold' : `Overstayed ${d.current_deal_stage?.name} (${thresholds[d.current_deal_stage?.name]}d TAT)`,
     })),
     overdueTasks: overdueTasksData.map((t) => ({ leadId: t.leads?.id, title: t.title, dueDate: t.due_date, student: t.leads?.student_name, owner: t.assigned_to?.full_name })),
     onTrackCount,

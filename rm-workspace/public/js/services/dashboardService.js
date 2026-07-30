@@ -6,6 +6,7 @@
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
 import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
+import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
 
 const LEAD_SELECT = `
   id, student_name, student_phone, course_name, university_name,
@@ -68,19 +69,9 @@ export async function getDocumentsPending() {
   return data;
 }
 
-// Same per-stage TAT thresholds used on Manager/Admin Dashboard —
-// duplicated rather than shared, matching this codebase's existing
-// pattern of each app owning its own copy of small constants (e.g.
-// STAGE_TABLE_MAP in dealService.js vs lenderDealService.js).
-const STAGE_TAT_THRESHOLD_DAYS = {
-  'Bank Prospect': 7,
-  Login: 5,
-  Sanction: 10,
-  'PF Paid': 5,
-  Disbursement: 7,
-};
-
 export async function getMyTatBreachedDeals() {
+  const thresholds = await getTatThresholds(supabase);
+
   const { data: dealsData, error: dealsError } = await fetchAllResult(() => supabase
     .from('deals')
     .select('id, is_on_hold, is_rejected, created_at, leads(id, student_name), current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)')
@@ -105,12 +96,12 @@ export async function getMyTatBreachedDeals() {
     .filter((d) => {
       if (d.is_on_hold || d.is_rejected) return false;
       const stageName = d.current_deal_stage?.name;
-      if (!stageName || !STAGE_TAT_THRESHOLD_DAYS[stageName]) return false;
+      if (!stageName || !thresholds[stageName]) return false;
       const enteredAt = enteredCurrentStageAt[d.id]?.created_at || d.created_at;
       const daysInStage = (now - new Date(enteredAt).getTime()) / (24 * 60 * 60 * 1000);
-      return daysInStage > STAGE_TAT_THRESHOLD_DAYS[stageName];
+      return daysInStage > thresholds[stageName];
     })
-    .map((d) => ({ leadId: d.leads?.id, student: d.leads?.student_name, stage: d.current_deal_stage?.name, thresholdDays: STAGE_TAT_THRESHOLD_DAYS[d.current_deal_stage?.name] }));
+    .map((d) => ({ leadId: d.leads?.id, student: d.leads?.student_name, stage: d.current_deal_stage?.name, thresholdDays: thresholds[d.current_deal_stage?.name] }));
 }
 
 export async function getLenderUpdates() {
