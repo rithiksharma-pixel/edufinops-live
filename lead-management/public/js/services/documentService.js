@@ -4,6 +4,7 @@
 // this file also records the metadata row via upload_document_record.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAllResult } from '../../../../shared/js/fetchAll.js';
 
 const BUCKET = 'lead-documents';
 
@@ -17,18 +18,21 @@ export async function getDocumentTypes() {
   return data;
 }
 
+// document_type_id comes back alongside the joined type so the progress
+// meter can match a document to the exact (owner, document type) slot it
+// fills — the joined name/category alone can't tell two types apart.
 export async function getDocumentsForLead(leadId) {
-  const { data, error } = await supabase
+  const { data, error } = await fetchAllResult(() => supabase
     .from('documents')
     .select(`
-      id, file_name, file_size_bytes, uploaded_at, verification_status, rejection_reason, remarks, storage_path, co_applicant_id,
+      id, file_name, file_size_bytes, uploaded_at, verification_status, rejection_reason, remarks, storage_path, co_applicant_id, document_type_id,
       document_types ( name, category ),
       uploaded_by_user:users!documents_uploaded_by_fkey ( full_name ),
       co_applicants ( full_name )
     `)
     .eq('lead_id', leadId)
     .eq('is_deleted', false)
-    .order('uploaded_at', { ascending: false });
+    .order('uploaded_at', { ascending: false }));
   if (error) throw error;
   return data;
 }

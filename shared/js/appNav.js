@@ -90,8 +90,24 @@ function toggleTheme() {
   const current = root.getAttribute('data-theme')
     || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const next = current === 'dark' ? 'light' : 'dark';
+
+  // Disable transitions across the swap. An element that both transitions a
+  // property AND sources it from a custom property keeps its old paint when
+  // that token changes — buttons stayed white in dark mode until this was
+  // added. See the .zt-theme-switching rule in design-tokens.css.
+  root.classList.add('zt-theme-switching');
   root.setAttribute('data-theme', next);
   try { localStorage.setItem('zt-theme', next); } catch { /* storage disabled */ }
+
+  // Reading a layout property forces a SYNCHRONOUS style recalculation, so
+  // the new token values are committed while transitions are still off.
+  // Deferring this to requestAnimationFrame is not enough — the class came
+  // back before the new value had been committed, and the transition then
+  // resumed from the stale paint (verified: dark→light left the background
+  // dark). This one line is what makes the suppression actually work.
+  void root.offsetHeight;
+
+  root.classList.remove('zt-theme-switching');
 }
 
 function render() {

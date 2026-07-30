@@ -223,3 +223,94 @@
   .drawer-tabs { width: 170px; }
   .drawer-body { padding: 18px; }
 }
+
+/* ---------------------------------------------------------
+   Documents tab — file completeness meter
+   Five segments matching the (applies_to, category) cells of
+   document_types. Every colour is a token: this panel renders in
+   both light and dark, and hardcoded hex has broken dark mode here
+   before.
+   --------------------------------------------------------- */
+.doc-meter { margin-bottom: 22px; }
+.doc-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.doc-meter-title { font-size: 13px; font-weight: 600; color: var(--ink-900); }
+.doc-meter-total { font-size: 12px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+
+.doc-meter-segments { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+
+.doc-meter-seg {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; text-align: left; cursor: pointer;
+  /* background-color, not the `background` shorthand, and the transition
+     names background-color too. Transitioning the shorthand across a
+     custom-property change leaves the old paint behind: on switching to
+     dark these buttons stayed white with near-white text, while `color`
+     — which was NOT in the transition — updated correctly. */
+  background-color: var(--bg-surface); color: var(--ink-900);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font: inherit;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.doc-meter-seg:hover { border-color: var(--accent); }
+.doc-meter-seg.open { border-color: var(--accent); background-color: var(--accent-soft); }
+.doc-meter-seg.complete .doc-meter-count { color: var(--success); font-weight: 600; }
+/* A stage that cannot be measured yet — no document types configured, or
+   no co-applicant on the lead. Muted so it reads as "not applicable"
+   rather than "0%", which would look like a failure. */
+.doc-meter-seg.na { opacity: .55; cursor: default; }
+.doc-meter-seg.na:hover { border-color: var(--border); }
+
+.doc-meter-seg-label { font-size: 12px; font-weight: 500; line-height: 1.3; }
+.doc-meter-count { font-size: 11px; color: var(--ink-500); font-variant-numeric: tabular-nums; }
+
+.doc-meter-bar {
+  display: flex; height: 6px; border-radius: 999px; overflow: hidden;
+  background: var(--paper-sunken);
+}
+.doc-meter-fill { height: 100%; transition: width .25s ease; }
+.doc-meter-fill.verified { background: var(--success); }
+/* Striped, not just a lighter fill: "uploaded but unverified" is a
+   different KIND of state from verified, and stripes survive being
+   printed, screenshotted, or viewed by someone colour-blind. */
+.doc-meter-fill.pending {
+  background: repeating-linear-gradient(45deg,
+    var(--warning) 0 3px, transparent 3px 6px);
+  background-color: var(--warning-soft);
+}
+.doc-meter-fill.rejected { background: var(--danger); }
+
+.doc-meter-hint { font-size: 11px; color: var(--ink-500); margin: 8px 0 0; }
+
+.doc-meter-detail {
+  margin-top: 12px; padding: 12px 14px;
+  background: var(--paper-sunken); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.doc-meter-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.doc-meter-detail-title { font-size: 12px; font-weight: 600; }
+.doc-meter-jump { font-size: 11px; padding: 4px 9px; }
+.doc-meter-note { font-size: 12px; color: var(--ink-500); margin: 0; line-height: 1.5; }
+
+.doc-meter-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+}
+.doc-meter-item:last-child { border-bottom: 0; }
+.doc-meter-item .st { width: 14px; flex-shrink: 0; font-size: 11px; }
+.doc-meter-item.verified .st { color: var(--success); }
+.doc-meter-item.pending  .st { color: var(--warning); }
+.doc-meter-item.rejected .st { color: var(--danger); }
+.doc-meter-item.missing  .st { color: var(--ink-300); }
+.doc-meter-item .opt,
+.doc-meter-item .who {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 999px;
+  background: var(--paper-raised); color: var(--ink-500); border: 1px solid var(--border);
+}
+.doc-meter-item-state { margin-left: auto; font-size: 11px; color: var(--ink-500); }
+.doc-meter-item.missing .doc-meter-item-state { color: var(--ink-300); }
+.doc-meter-item.rejected .doc-meter-item-state { color: var(--danger); }
+
+@media (max-width: 640px) {
+  .doc-meter-segments { grid-template-columns: repeat(2, 1fr); }
+}

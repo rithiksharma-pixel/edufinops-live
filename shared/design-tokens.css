@@ -149,6 +149,22 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+/* Suppress every transition for one frame while the theme flips.
+   A property that is BOTH transitioned AND fed by a custom property keeps
+   its old paint when that property changes — verified: a button declaring
+   `background-color: var(--bg-surface); transition: background-color .12s`
+   stayed white in dark mode, while `color` (not transitioned) flipped
+   correctly. Removing the transition made it resolve immediately.
+   This affects anything with a token-driven transition, including .btn
+   below, so it is fixed here once rather than per component.
+   appNav.js adds and removes this class around the toggle. */
+:root.zt-theme-switching,
+:root.zt-theme-switching *,
+:root.zt-theme-switching *::before,
+:root.zt-theme-switching *::after {
+  transition: none !important;
+}
+
 html, body {
   margin: 0;
   padding: 0;
