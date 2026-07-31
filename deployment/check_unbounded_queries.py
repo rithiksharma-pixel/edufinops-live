@@ -31,6 +31,8 @@ SAFE_TABLES = {
     'deal_stage_statuses', 'deal_hold_reasons', 'deal_rejection_reasons',
     'lead_lost_reasons', 'lead_lender_not_shared_reasons', 'document_types',
     'deal_query_categories', 'lenders', 'lender_branches', 'announcements',
+    # one row per deal stage, so bounded by config not customer volume
+    'stage_tat_thresholds',
 }
 
 # Reads already reviewed and confirmed bounded by a filter -- e.g. a query
