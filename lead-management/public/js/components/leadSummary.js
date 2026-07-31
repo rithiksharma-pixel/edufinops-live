@@ -11,7 +11,7 @@
 // can fetch in one extra call — no new tables, no summarisation model.
 // =========================================================
 import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../services/leadService.js';
-import { getLenderStatusForLead } from '../services/lenderStatusService.js';
+import { getLenderStatusForLead, getTatForLead } from '../services/lenderStatusService.js';
 import { formatCurrency } from '../utils/validation.js';
 
 const HOW_MANY_CALLS = 3;
@@ -89,7 +89,7 @@ function callsHtml(calls, timeline) {
  * the best live outcome is the first thing read — that is the answer to
  * "can this student get funded", which a lender list sorted by name buries.
  */
-function lendersHtml(rows) {
+function lendersHtml(rows, tatByDeal) {
   const shared = rows.filter((r) => r.share_status === 'Shared');
   const declined = [];
   const live = [];
@@ -109,13 +109,20 @@ function lendersHtml(rows) {
       notShared.length ? ` — ${notShared.length} on the list.` : '.'}</p>`;
   }
 
-  const row = (r, cls) => `
+  // A breach is shown on the lender row rather than as a separate list,
+  // because "which lender is stuck" is the actionable form of the question.
+  const row = (r, cls) => {
+    const tat = tatByDeal?.get(r.deals?.id);
+    const breach = tat?.is_breached
+      ? `<span class="lead-sum-tat">${tat.days_over}d over TAT</span>`
+      : tat ? `<span class="lead-sum-lender-who">${tat.days_in_stage}/${tat.threshold_days}d</span>` : '';
+    return `
     <div class="lead-sum-lender ${cls}">
       <span class="lead-sum-lender-name">${escapeHtml(r.lenders?.name || 'Lender')}</span>
       <span class="lead-sum-lender-stage">${escapeHtml(r.stage)}</span>
-      ${r.deals?.current_deal_stage?.name && r.deals?.assigned_loan_officer?.full_name
-        ? `<span class="lead-sum-lender-who">${escapeHtml(r.deals.assigned_loan_officer.full_name)}</span>` : ''}
+      ${breach}
     </div>`;
+  };
 
   return `
     <div class="lead-sum-lenders">
@@ -164,7 +171,12 @@ export async function renderLeadSummary(host, { lead, timeline, effectiveStatus 
 
   const slot = host.querySelector('[data-lender-slot]');
   try {
-    slot.innerHTML = lendersHtml(await getLenderStatusForLead(lead.id));
+    // TAT is best-effort: if it fails the lender list must still render.
+    const [rows, tat] = await Promise.all([
+      getLenderStatusForLead(lead.id),
+      getTatForLead(lead.id).catch(() => []),
+    ]);
+    slot.innerHTML = lendersHtml(rows, new Map((tat || []).map((t) => [t.deal_id, t])));
   } catch (err) {
     // A summary failing must not look like the lead failing.
     console.error('lead summary: lender status failed', err);

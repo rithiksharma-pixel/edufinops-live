@@ -62,3 +62,18 @@ export async function shareLeadWithLender(rowId, loanOfficerId, remarks) {
   if (error) throw error;
   return data;
 }
+
+/**
+ * TAT breach state per deal for one lead, from v_deal_tat. Kept separate
+ * from getLenderStatusForLead so the summary can render lender rows without
+ * waiting on it, and so a TAT problem never blocks the lender list.
+ * The view already excludes terminal, rejected and on-hold deals.
+ */
+export async function getTatForLead(leadId) {
+  const { data, error } = await supabase
+    .from('v_deal_tat')
+    .select('deal_id, stage, days_in_stage, threshold_days, is_breached, days_over')
+    .eq('lead_id', leadId);
+  if (error) throw error;
+  return data;
+}

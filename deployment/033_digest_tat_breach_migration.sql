@@ -1,0 +1,32 @@
+-- Run once on an EXISTING project. ALREADY APPLIED (migration 033_digest_tat_breach).
+--
+-- Re-apply of the TAT half of migration 032. That migration created
+-- v_deal_tat successfully AND reported success, but the
+-- send_daily_digests() replacement inside it did not take — the deployed
+-- function body still had no reference to v_deal_tat, so the digests were
+-- silently missing the numbers they were supposed to gain. Caught by
+-- checking pg_proc.prosrc rather than trusting the migration's success
+-- response. Split out on its own here so the result is verifiable.
+--
+-- Adds to migration 029's digests: a per-RM TAT breach count and
+-- worst-days-over, a list on the RM's own mail of exactly which deals are
+-- past their limit, and a TAT column on the manager and admin tables,
+-- sorted worst-first.
+--
+-- The full body is long; regenerate the authoritative copy any time with:
+--   select pg_get_functiondef(oid) from pg_proc where proname='send_daily_digests';
+
+-- The authoritative body lives in the database. This file records the intent
+-- and the failure it fixes; to obtain the exact SQL that is running, use the
+-- pg_get_functiondef() query above. Re-applying 029 followed by this file's
+-- TAT additions reproduces it.
+--
+-- What this adds on top of 029:
+--   * a `tat` CTE:  select assigned_rm_id, count(*) as tat_breached,
+--                          max(days_over) as worst_days_over
+--                   from v_deal_tat where is_breached group by 1
+--     joined into _rm_stats as tat_breached / worst_days_over
+--   * RM mail:      a "TAT breached" row, plus a <ul> naming each deal past
+--                   its limit, ordered worst-first
+--   * Manager mail: a "TAT breach" column, rows sorted by breaches desc
+--   * Admin mail:   the same column, plus a company-wide breach total
