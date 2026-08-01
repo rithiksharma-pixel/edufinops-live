@@ -1,0 +1,44 @@
+-- ALREADY APPLIED (035_internal_staff_full_lead_access + 036_stage_movers_respect_admin_lock).
+--
+-- Open the whole pipeline to internal staff, and lock lead stage to Admin.
+-- Requested to limit the damage from the bulk migration: RMs could only see
+-- their OWN leads, and 7,161 of the 10,397 imported leads have no RM at all,
+-- so nobody could find or correct them.
+--
+-- SCOPE — "RM & team members" is read as INTERNAL STAFF only:
+--   Admin, Manager, Associate Team Manager, Relationship Manager, Counselor
+-- Consultant and Business Development are deliberately EXCLUDED: they are
+-- external partners whose RLS exists to stop one consultancy seeing another's
+-- students. Lender is excluded so a bank cannot see rival banks' deals.
+-- Widening those is a separate, much larger decision.
+--
+-- Policies are ADDITIVE — the older narrower ones remain, so reverting this
+-- migration restores previous behaviour exactly.
+--
+-- Grants: SELECT + UPDATE + INSERT on leads, deals, and the four stage-detail
+-- tables plus disbursements, so Login / Sanction / PF / Disbursement dates are
+-- both visible and editable.
+--
+-- LEAD STAGE IS CARVED BACK OUT. The broad UPDATE above would otherwise
+-- include current_stage_id. trg_guard_lead_stage_change refuses any non-Admin
+-- change to that column. The stage is normally computed rather than typed, so
+-- the legitimate movers set a transaction-local flag the guard honours:
+--   recompute_lead_stage()  automation, from deal activity
+--   change_lead_stage()     the direct setter — now Admin-only, explicitly
+--   mark_lead_lost()        everyday RM work, left open (see 036 header)
+--   reopen_lead()           same
+--
+-- can_edit_lead() also recognises internal staff, or they could see every
+-- lead but not mark one Lost.
+--
+-- Verified as a Relationship Manager: sees 11,906 leads (was 133), 222 login
+-- dates, 45 sanction dates, 40 PF dates; can edit another RM's lead; is
+-- BLOCKED from changing lead stage.
+--
+-- Full DDL is in the applied migrations; regenerate with:
+--   select pg_get_functiondef(oid) from pg_proc
+--   where proname in ('is_internal_staff','guard_lead_stage_change',
+--                     'change_lead_stage','mark_lead_lost','can_edit_lead',
+--                     'recompute_lead_stage');
+--   select policyname, tablename, cmd, qual, with_check from pg_policies
+--   where policyname like '%internal_staff%';
