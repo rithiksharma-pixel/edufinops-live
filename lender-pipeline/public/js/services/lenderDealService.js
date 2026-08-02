@@ -22,8 +22,11 @@ export const STAGE_TABLE_MAP = {
   Login: {
     table: 'deal_login_details',
     fields: [
-      { key: 'loan_required_amount', label: 'Loan required amount', type: 'number' },
-      { key: 'login_amount', label: 'Login amount', type: 'number' },
+      // login_id was missing here while the internal form had it, so a bank
+      // could not record its OWN login reference through its own portal —
+      // the one number that side of the relationship actually owns. Kept
+      // first for the same reason it is first internally.
+      { key: 'login_id', label: 'Login ID', type: 'text' },
       { key: 'login_date', label: 'Login date', type: 'date' },
       { key: 'probable_sanction_date', label: 'Probable sanction date', type: 'date' },
     ],
