@@ -15,6 +15,7 @@ import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 import {
   getConsultancyReport, getConsultancyLeads, conversionRates, toCsv,
+  downloadText, buildPartnerReportHtml,
 } from './services/consultancyReportService.js';
 
 const state = { rows: [], from: '', to: '', consultancy: '', min: 0 };
@@ -135,9 +136,8 @@ const LEAD_COLUMNS = [
 const slug = (s) => (s || 'consultancy').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 60);
 
 async function openDetail(row) {
-  const drawer = document.getElementById('repDrawer');
-  const overlay = document.getElementById('repOverlay');
-  drawer.hidden = false; overlay.hidden = false;
+  // Only the overlay is toggled — the drawer lives inside it.
+  document.getElementById('repOverlay').hidden = false;
 
   document.getElementById('repDrawerName').textContent = row.consultancy_name;
   const c = conversionRates(row);
@@ -160,22 +160,48 @@ async function openDetail(row) {
       <div><span>Disbursed</span><strong>${money(row.disbursed_amount)}</strong></div>
       <div><span>Avg days since activity</span><strong>${row.avg_age_days ?? '–'}d</strong></div>
     </div>
-    <div style="display:flex;gap:8px;margin:16px 0;">
-      <button class="btn btn-primary" id="repExportLeads"><i class="fa-solid fa-download"></i> Export these leads</button>
+    <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="repExportReport" disabled><i class="fa-solid fa-file-lines"></i> Share report (dashboard + leads)</button>
+      <button class="btn btn-ghost" id="repExportLeads" disabled><i class="fa-solid fa-download"></i> Export leads (CSV)</button>
     </div>
     <h3 style="margin:18px 0 8px;">Leads</h3>
     <div id="repLeads"><div class="spinner-block"><span class="spinner"></span><span>Loading leads…</span></div></div>
   `;
 
+  // Wired BEFORE the fetch, against a mutable array. Previously these were
+  // attached after it, so any failure took an early return and left a button
+  // that rendered but did nothing when clicked.
   let leads = [];
+  const btnReport = document.getElementById('repExportReport');
+  const btnCsv = document.getElementById('repExportLeads');
+
+  btnCsv.addEventListener('click', () => {
+    downloadCsv(toCsv(leads, LEAD_COLUMNS), `${slug(row.consultancy_name)}-leads.csv`);
+    showToast(`Exported ${leads.length} leads`);
+  });
+  btnReport.addEventListener('click', () => {
+    const html = buildPartnerReportHtml(row, leads, {
+      from: state.from, to: state.to,
+      generatedOn: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    downloadText(html, `${slug(row.consultancy_name)}-report.html`);
+    showToast('Report downloaded — open it in a browser or send it on');
+  });
+
   try {
     leads = await getConsultancyLeads(row, state.from, state.to);
   } catch (err) {
     console.error('consultancy lead detail failed', err);
     document.getElementById('repLeads').innerHTML =
-      '<p class="empty-state">Could not load the lead list.</p>';
+      `<p class="empty-state">Could not load the lead list.<br>
+       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></p>`;
+    // The summary numbers came from the row we already have, so the report is
+    // still worth exporting — just without the lead list.
+    btnReport.disabled = false;
     return;
   }
+  btnReport.disabled = false;
+  btnCsv.disabled = false;
 
   document.getElementById('repLeads').innerHTML = leads.length
     ? `<div style="overflow-x:auto;"><table class="lead-table"><thead><tr>
@@ -197,7 +223,6 @@ async function openDetail(row) {
 }
 
 function closeDetail() {
-  document.getElementById('repDrawer').hidden = true;
   document.getElementById('repOverlay').hidden = true;
 }
 
@@ -252,7 +277,12 @@ async function bootstrap() {
     showToast(`Exported ${rows.length} consultancies`);
   });
   document.getElementById('repDrawerClose').addEventListener('click', closeDetail);
-  document.getElementById('repOverlay').addEventListener('click', closeDetail);
+  // Only a click on the scrim itself closes. Without the target check every
+  // click that bubbles up from inside the drawer — including the export
+  // buttons — would close it instead of doing its job.
+  document.getElementById('repOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeDetail();
+  });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
 
   await load();
