@@ -7,7 +7,7 @@ import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
-import { listLeads, getStageCounts } from './services/leadService.js';
+import { listLeads, getStageCounts, LEAD_PAGE_SIZE } from './services/leadService.js';
 import { getLeadStages, getLeadSources, getAssignableRms } from './services/lookupService.js';
 import { renderLeadTable } from './components/leadTable.js';
 import { renderFunnelCards } from './components/funnelCards.js';
@@ -24,21 +24,42 @@ const state = {
   sources: [],
   rms: [],
   filters: { ...DEFAULT_FILTERS },
+  page: 0,
 };
 
 let smartViewTabs;
 
+/**
+ * Any filter change must return to page 1. Staying on page 7 while the
+ * result set shrinks to two pages shows an empty table that looks like the
+ * filter matched nothing.
+ */
+function resetAndRefresh() {
+  state.page = 0;
+  return refreshLeadsAndFunnel();
+}
+
 async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
   try {
-    const [leads, counts] = await Promise.all([listLeads(state.filters), getStageCounts(state.filters)]);
-    renderLeadTable(tbody, leads, (leadId) => drawer.open(leadId));
-    renderResultCount(leads.length);
+    const [page, counts] = await Promise.all([
+      listLeads(state.filters, { limit: LEAD_PAGE_SIZE, offset: state.page * LEAD_PAGE_SIZE }),
+      getStageCounts(state.filters),
+    ]);
+    // A filter change can leave you past the end of a now-shorter result set.
+    // Snap back to page 0 and refetch rather than showing an empty table.
+    if (page.rows.length === 0 && page.total > 0 && state.page > 0) {
+      state.page = 0;
+      return refreshLeadsAndFunnel();
+    }
+    renderLeadTable(tbody, page.rows, (leadId) => drawer.open(leadId));
+    renderResultCount(page.total, page.rows.length);
+    renderPager(page.total);
     renderFunnelCards(document.getElementById('funnelRow'), state.stages, counts, state.filters.stageId, (stageId) => {
       state.filters.stageId = stageId || '';
       document.getElementById('filterStage').value = state.filters.stageId;
       smartViewTabs?.clearActive();
-      refreshLeadsAndFunnel();
+      resetAndRefresh();
     });
   } catch (err) {
     console.error(err);
@@ -50,17 +71,17 @@ async function refreshLeadsAndFunnel() {
 /**
  * "1,248 leads · Stage: Login · RM: Damini" above the table.
  *
- * The count is leads.length rather than a second COUNT query because
- * listLeads already paged the whole result set into memory — asking the
- * database again could only disagree with what is actually on screen.
+ * `total` is the exact server-side count that came back with the same
+ * request as the rows, so the strip and the pager can never disagree with
+ * each other. `shown` is how many landed on this page.
  *
  * The active-filter trail matters as much as the number: a count of 12 is
  * alarming until you can see it is 12 *because* someone left a date range on.
  */
-function renderResultCount(n) {
+function renderResultCount(total, shown) {
   const el = document.getElementById('leadCount');
   if (!el) return;
-  if (n === null) { el.textContent = ''; return; }
+  if (total === null) { el.textContent = ''; return; }
 
   const f = state.filters;
   const nameOf = (list, id, key = 'name') => list.find((x) => x.id === id)?.[key];
@@ -76,8 +97,36 @@ function renderResultCount(n) {
     bits.push(`${label} ${f.dateFrom || '…'} → ${f.dateTo || '…'}`);
   }
 
-  el.innerHTML = `<strong>${n.toLocaleString('en-IN')}</strong> ${n === 1 ? 'lead' : 'leads'}`
+  // "1–100 of 11,949" rather than a bare page size — otherwise the number on
+  // screen looks like the whole pipeline shrank to 100.
+  const from = state.page * LEAD_PAGE_SIZE + 1;
+  const to = state.page * LEAD_PAGE_SIZE + shown;
+  const range = total > shown ? `${from.toLocaleString('en-IN')}–${to.toLocaleString('en-IN')} of ` : '';
+
+  el.innerHTML = `<strong>${range}${total.toLocaleString('en-IN')}</strong> ${total === 1 ? 'lead' : 'leads'}`
     + (bits.length ? `<span class="lead-count-filters"> · ${bits.map(escapeHtml).join(' · ')}</span>` : '');
+}
+
+/** Prev/Next pager. Hidden entirely when everything fits on one page. */
+function renderPager(total) {
+  const el = document.getElementById('leadPager');
+  if (!el) return;
+  const pages = Math.ceil(total / LEAD_PAGE_SIZE);
+  if (pages <= 1) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <button class="btn btn-ghost" id="pagePrev" ${state.page === 0 ? 'disabled' : ''}>
+      <i class="fa-solid fa-chevron-left"></i> Previous</button>
+    <span class="pager-status">Page ${state.page + 1} of ${pages.toLocaleString('en-IN')}</span>
+    <button class="btn btn-ghost" id="pageNext" ${state.page >= pages - 1 ? 'disabled' : ''}>
+      Next <i class="fa-solid fa-chevron-right"></i></button>`;
+
+  document.getElementById('pagePrev').addEventListener('click', () => {
+    if (state.page > 0) { state.page -= 1; refreshLeadsAndFunnel(); }
+  });
+  document.getElementById('pageNext').addEventListener('click', () => {
+    if (state.page < pages - 1) { state.page += 1; refreshLeadsAndFunnel(); }
+  });
 }
 
 function escapeHtml(str) {
@@ -98,7 +147,7 @@ function applyFilters(filters) {
   document.getElementById('filterDateFrom').value = state.filters.dateFrom;
   document.getElementById('filterDateTo').value = state.filters.dateTo;
   document.getElementById('filterSearch').value = state.filters.search;
-  refreshLeadsAndFunnel();
+  resetAndRefresh();
 }
 
 function populateFilterDropdowns() {
@@ -124,31 +173,31 @@ function populateFilterDropdowns() {
   stageSelect.addEventListener('change', (e) => {
     state.filters.stageId = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
   sourceSelect.addEventListener('change', (e) => {
     state.filters.sourceId = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
   rmSelect.addEventListener('change', (e) => {
     state.filters.rmId = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
 
   const prioritySelect = document.getElementById('filterPriority');
   prioritySelect.addEventListener('change', (e) => {
     state.filters.priority = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
 
   const overdueOnlyInput = document.getElementById('filterOverdueOnly');
   overdueOnlyInput.addEventListener('change', (e) => {
     state.filters.overdueOnly = e.target.checked;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
 
   let searchDebounce;
@@ -157,7 +206,7 @@ function populateFilterDropdowns() {
     searchDebounce = setTimeout(() => {
       state.filters.search = e.target.value.trim();
       smartViewTabs?.clearActive();
-      refreshLeadsAndFunnel();
+      resetAndRefresh();
     }, 300);
   });
 
@@ -170,17 +219,17 @@ function populateFilterDropdowns() {
     smartViewTabs?.clearActive();
     // Only re-query if a range is actually set — switching the basis with no
     // dates chosen changes nothing.
-    if (state.filters.dateFrom || state.filters.dateTo) refreshLeadsAndFunnel();
+    if (state.filters.dateFrom || state.filters.dateTo) resetAndRefresh();
   });
   dateFromInput.addEventListener('change', (e) => {
     state.filters.dateFrom = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
   dateToInput.addEventListener('change', (e) => {
     state.filters.dateTo = e.target.value;
     smartViewTabs?.clearActive();
-    refreshLeadsAndFunnel();
+    resetAndRefresh();
   });
 
   document.getElementById('btnClearFilters').addEventListener('click', () => {

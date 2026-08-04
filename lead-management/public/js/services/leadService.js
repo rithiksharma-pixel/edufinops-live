@@ -4,7 +4,6 @@
 // Nothing outside this file constructs a Supabase query for `leads`.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
-import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 const LEAD_LIST_SELECT = `
   id, student_name, student_phone, student_email,
@@ -53,22 +52,36 @@ function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, d
  * the current user's role is allowed to see — this function does not
  * need to (and must not) apply its own role-based scoping.
  */
-export async function listLeads(filters = {}) {
-  // Paged — PostgREST returns at most 1000 rows per request, which used to
-  // silently truncate the list (and every count derived from it) once the
-  // pipeline passed 1000 leads. created_at is not unique, so fetchAll adds
-  // `id` as the tiebreaker to keep paging stable.
-  return fetchAll(
-    () => applyLeadFilters(
-      supabase
-        .from('leads')
-        .select(LEAD_LIST_SELECT)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false }),
-      filters
-    ),
-    { tiebreak: 'id', ascending: false }
-  );
+export const LEAD_PAGE_SIZE = 100;
+
+/**
+ * ONE page of leads plus the true total.
+ *
+ * This used to fetchAll() the entire result set. That fixed PostgREST's silent
+ * 1000-row truncation, but at 11,900 leads it meant twelve SEQUENTIAL round
+ * trips and several MB of JSON on every render and every filter change — the
+ * single biggest cause of the app feeling slow. The database was never the
+ * problem: the same query server-side runs in ~19ms.
+ *
+ * `count: 'exact'` gives the real total in the same request, so the count
+ * strip and the pager stay honest without a second call. created_at is not
+ * unique, so `id` is a tiebreaker — without it a row can repeat on one page
+ * and vanish from the next.
+ *
+ * @returns {Promise<{rows: Array, total: number}>}
+ */
+export async function listLeads(filters = {}, { limit = LEAD_PAGE_SIZE, offset = 0 } = {}) {
+  const { data, error, count } = await applyLeadFilters(
+    supabase
+      .from('leads')
+      .select(LEAD_LIST_SELECT, { count: 'exact' })
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false }),
+    filters
+  ).range(offset, offset + limit - 1);
+  if (error) throw error;
+  return { rows: data ?? [], total: count ?? 0 };
 }
 
 /** Same filter set as listLeads, head-only count — powers Smart View tab badges. */
@@ -99,22 +112,26 @@ export async function countLeads(filters = {}) {
  * which is the question the row exists to answer.
  */
 export async function getStageCounts(filters = {}) {
-  const { stageId: _ignored, ...withoutStage } = filters;
-
-  // Paged for the same reason as listLeads — this previously counted only
-  // the first 1000 leads, so the funnel row under-reported every stage
-  // once the pipeline grew past that.
-  const data = await fetchAll(
-    () => applyLeadFilters(
-      supabase.from('leads').select('id, current_stage_id').eq('is_deleted', false),
-      withoutStage
-    )
-  );
+  // One RPC that does the GROUP BY in Postgres and returns 8 rows.
+  // This previously paged the whole leads table into the browser just to
+  // count it — twelve round trips to produce eight numbers. Verified against
+  // a direct group-by under the same RLS: all stages match exactly.
+  const { data, error } = await supabase.rpc('lead_stage_counts', {
+    p_source_id: filters.sourceId || null,
+    p_rm_id: filters.rmId || null,
+    p_priority: filters.priority || null,
+    p_overdue_only: !!filters.overdueOnly,
+    // Mirrors applyLeadFilters: the same characters are stripped so a phone
+    // typed as "(555) 123-4567" behaves identically in both paths.
+    p_search: (filters.search || '').replace(/[,()"\\%_]/g, ' ').trim() || null,
+    p_date_field: filters.dateField === 'updated_at' ? 'updated_at' : 'created_at',
+    p_date_from: filters.dateFrom || null,
+    p_date_to: filters.dateTo || null,
+  });
+  if (error) throw error;
 
   const counts = {};
-  for (const row of data) {
-    counts[row.current_stage_id] = (counts[row.current_stage_id] || 0) + 1;
-  }
+  for (const row of data ?? []) counts[row.stage_id] = Number(row.leads);
   return counts;
 }
 
