@@ -176,6 +176,23 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
+/* Result count above the table. Sits on the sunken fill so it reads as part
+   of the table's header furniture rather than as a floating caption. */
+.lead-count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  padding: 11px 16px;
+  font-size: 13px;
+  color: var(--ink-700);
+  background: var(--paper-sunken);
+  border-bottom: 1px solid var(--border);
+  min-height: 41px;              /* holds its height before the first load */
+}
+.lead-count strong { font-size: 15px; font-weight: 600; color: var(--ink-900); }
+.lead-count-filters { color: var(--ink-500); }
+
 .lead-table { width: 100%; border-collapse: collapse; }
 .lead-table th {
   text-align: left;

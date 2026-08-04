@@ -90,13 +90,25 @@ export async function countLeads(filters = {}) {
  * (Supabase JS doesn't do GROUP BY directly without a Postgres function;
  * for a table this size a client-side reduce is cheap and avoids an extra
  * RPC just for counting).
+ *
+ * Takes the same filters as listLeads MINUS the stage, so the cards agree
+ * with the list below them. The stage is deliberately excluded: the cards
+ * *are* the stage selector, so scoping them by the selected stage would zero
+ * every other card and you could never click your way back out. Excluding it
+ * means each card answers "how many would I get if I picked this instead",
+ * which is the question the row exists to answer.
  */
-export async function getStageCounts() {
+export async function getStageCounts(filters = {}) {
+  const { stageId: _ignored, ...withoutStage } = filters;
+
   // Paged for the same reason as listLeads — this previously counted only
   // the first 1000 leads, so the funnel row under-reported every stage
   // once the pipeline grew past that.
   const data = await fetchAll(
-    () => supabase.from('leads').select('id, current_stage_id').eq('is_deleted', false)
+    () => applyLeadFilters(
+      supabase.from('leads').select('id, current_stage_id').eq('is_deleted', false),
+      withoutStage
+    )
   );
 
   const counts = {};

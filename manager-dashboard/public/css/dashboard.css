@@ -81,3 +81,97 @@
   .milestone-range { gap: 8px; }
   .milestone-range label { font-size: 11px; }
 }
+
+/* =========================================================
+   PARTNER REPORTS (reports.html)
+   Self-contained rather than importing Lead Management's stylesheet —
+   that sheet carries page layout this page does not want.
+   ========================================================= */
+.report-note {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: var(--paper-sunken); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px; margin-bottom: 18px;
+  font-size: 13px; line-height: 1.55; color: var(--ink-700);
+}
+.report-note i { color: var(--accent); margin-top: 2px; }
+
+.filter-bar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+}
+.filter-field { display: flex; flex-direction: column; gap: 5px; }
+.filter-field label { font-size: 11px; color: var(--ink-500); }
+.filter-field input {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 10px; font: inherit; font-size: 13px;
+  background: var(--bg-surface); color: var(--ink-900);
+}
+.filter-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* Count strip above the table — same treatment as Lead Management's, so the
+   two lists read as the same product. */
+.lead-count {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px;
+  padding: 11px 16px; font-size: 13px; color: var(--ink-700);
+  background: var(--paper-sunken); border-bottom: 1px solid var(--border);
+  min-height: 41px;
+}
+.lead-count strong { font-size: 15px; font-weight: 600; color: var(--ink-900); }
+.lead-count-filters { color: var(--ink-500); }
+
+.lead-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lead-table th {
+  text-align: left; font-size: 11px; font-weight: 500; color: var(--ink-500);
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: var(--paper-sunken); white-space: nowrap;
+}
+.lead-table td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.lead-table tbody tr:last-child td { border-bottom: none; }
+.lead-table .num, .lead-table th.num {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.lead-table .muted { color: var(--ink-500); }
+.rep-row { cursor: pointer; }
+.rep-row:hover { background: var(--paper-sunken); }
+.student-name { font-weight: 500; color: var(--ink-900); }
+.student-phone { font-size: 12px; color: var(--ink-500); font-family: var(--font-mono); }
+
+.badge {
+  display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  background: var(--paper-sunken); border: 1px solid var(--border); color: var(--ink-500);
+  vertical-align: middle;
+}
+.badge-accent {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
+}
+
+.funnel-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.funnel-card {
+  flex: 1 1 92px; background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 14px; text-align: left;
+}
+.funnel-card .count {
+  display: block; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 20px; font-weight: 600; line-height: 1.1;
+}
+.funnel-card .label { display: block; font-size: 11px; color: var(--ink-500); margin-top: 4px; }
+
+.report-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px;
+  background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.report-kv > div {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  background: var(--bg-surface); padding: 10px 13px; font-size: 13px;
+}
+.report-kv span { color: var(--ink-500); }
+.report-kv strong { font-variant-numeric: tabular-nums; }
+
+.empty-state { padding: 22px; text-align: center; color: var(--ink-500); font-size: 13px; }
+
+@media (max-width: 720px) {
+  .filter-actions { margin-left: 0; width: 100%; }
+}

@@ -31,8 +31,9 @@ let smartViewTabs;
 async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
   try {
-    const [leads, counts] = await Promise.all([listLeads(state.filters), getStageCounts()]);
+    const [leads, counts] = await Promise.all([listLeads(state.filters), getStageCounts(state.filters)]);
     renderLeadTable(tbody, leads, (leadId) => drawer.open(leadId));
+    renderResultCount(leads.length);
     renderFunnelCards(document.getElementById('funnelRow'), state.stages, counts, state.filters.stageId, (stageId) => {
       state.filters.stageId = stageId || '';
       document.getElementById('filterStage').value = state.filters.stageId;
@@ -42,7 +43,47 @@ async function refreshLeadsAndFunnel() {
   } catch (err) {
     console.error(err);
     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Could not load leads. Please refresh.</td></tr>';
+    renderResultCount(null);
   }
+}
+
+/**
+ * "1,248 leads · Stage: Login · RM: Damini" above the table.
+ *
+ * The count is leads.length rather than a second COUNT query because
+ * listLeads already paged the whole result set into memory — asking the
+ * database again could only disagree with what is actually on screen.
+ *
+ * The active-filter trail matters as much as the number: a count of 12 is
+ * alarming until you can see it is 12 *because* someone left a date range on.
+ */
+function renderResultCount(n) {
+  const el = document.getElementById('leadCount');
+  if (!el) return;
+  if (n === null) { el.textContent = ''; return; }
+
+  const f = state.filters;
+  const nameOf = (list, id, key = 'name') => list.find((x) => x.id === id)?.[key];
+  const bits = [];
+  if (f.stageId) bits.push(`Stage: ${nameOf(state.stages, f.stageId) || '–'}`);
+  if (f.sourceId) bits.push(`Source: ${nameOf(state.sources, f.sourceId) || '–'}`);
+  if (f.rmId) bits.push(`RM: ${nameOf(state.rms, f.rmId, 'full_name') || '–'}`);
+  if (f.priority) bits.push(`Priority: ${f.priority}`);
+  if (f.overdueOnly) bits.push('Overdue only');
+  if (f.search) bits.push(`Search: "${f.search}"`);
+  if (f.dateFrom || f.dateTo) {
+    const label = f.dateField === 'updated_at' ? 'Updated' : 'Created';
+    bits.push(`${label} ${f.dateFrom || '…'} → ${f.dateTo || '…'}`);
+  }
+
+  el.innerHTML = `<strong>${n.toLocaleString('en-IN')}</strong> ${n === 1 ? 'lead' : 'leads'}`
+    + (bits.length ? `<span class="lead-count-filters"> · ${bits.map(escapeHtml).join(' · ')}</span>` : '');
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
 }
 
 /** Applies a filter set (from a Smart View tab or a URL deep-link) and syncs every filter-bar control to match. */
