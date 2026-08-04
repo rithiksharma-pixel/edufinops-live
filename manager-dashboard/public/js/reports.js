@@ -17,7 +17,7 @@ import {
   getConsultancyReport, getConsultancyLeads, conversionRates, toCsv,
 } from './services/consultancyReportService.js';
 
-const state = { rows: [], from: '', to: '', search: '', min: 0 };
+const state = { rows: [], from: '', to: '', consultancy: '', min: 0 };
 
 const n = (v) => Number(v || 0).toLocaleString('en-IN');
 const pct = (v) => (v === null ? '–' : `${v}%`);
@@ -30,10 +30,32 @@ function money(v) {
 }
 
 function visibleRows() {
-  const q = state.search.trim().toLowerCase();
   return state.rows.filter((r) =>
     (r.total_leads >= state.min) &&
-    (!q || (r.consultancy_name || '').toLowerCase().includes(q)));
+    (!state.consultancy || r.consultancy_name === state.consultancy));
+}
+
+/**
+ * Rebuilds the consultancy dropdown from whatever the report returned, so it
+ * can only ever offer names that actually have leads in the selected range.
+ * Keeps the current selection if it survives the new range, otherwise falls
+ * back to "All" rather than silently showing an empty table.
+ */
+function populateConsultancyDropdown() {
+  const sel = document.getElementById('repConsultancy');
+  const previous = state.consultancy;
+
+  const names = [...state.rows]
+    .sort((a, b) => (a.consultancy_name || '').localeCompare(b.consultancy_name || '', 'en'));
+
+  sel.innerHTML = `<option value="">All consultancies (${names.length})</option>`
+    + names.map((r) => `<option value="${escapeHtml(r.consultancy_name)}">`
+        + `${escapeHtml(r.consultancy_name)} — ${n(r.total_leads)}`
+        + `${r.is_linked ? '' : ' (unlinked)'}</option>`).join('');
+
+  const stillThere = previous && names.some((r) => r.consultancy_name === previous);
+  state.consultancy = stillThere ? previous : '';
+  sel.value = state.consultancy;
 }
 
 function render() {
@@ -44,11 +66,11 @@ function render() {
     `<strong>${n(rows.length)}</strong> ${rows.length === 1 ? 'consultancy' : 'consultancies'}`
     + `<span class="lead-count-filters"> · ${n(rows.reduce((s, r) => s + Number(r.total_leads), 0))} leads`
     + (state.from || state.to ? ` · created ${state.from || '…'} → ${state.to || '…'}` : '')
-    + (state.search ? ` · "${escapeHtml(state.search)}"` : '')
+    + (state.consultancy ? ` · ${escapeHtml(state.consultancy)}` : '')
     + '</span>';
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="11">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the search, the date range, or the minimum-leads filter.')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="11">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the consultancy, the date range, or the minimum-leads filter.')}</td></tr>`;
     return;
   }
 
@@ -181,12 +203,20 @@ function closeDetail() {
 
 async function load() {
   const body = document.getElementById('repBody');
+  body.innerHTML = '<tr><td colspan="11"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>';
   try {
     state.rows = await getConsultancyReport(state.from, state.to);
+    populateConsultancyDropdown();
     render();
   } catch (err) {
+    // Surface the real reason. "Please refresh" taught us nothing when this
+    // page sat on its spinner — the actual cause was a PostgREST 404 because
+    // the schema cache had not picked the new function up yet.
     console.error('consultancy report failed', err);
-    body.innerHTML = '<tr><td colspan="11" class="empty-state">Could not load the report. Please refresh.</td></tr>';
+    body.innerHTML = `<tr><td colspan="11" class="empty-state">
+      Could not load the report.<br>
+      <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span>
+    </td></tr>`;
   }
 }
 
@@ -206,13 +236,13 @@ async function bootstrap() {
 
   document.getElementById('repFrom').addEventListener('change', (e) => { state.from = e.target.value; load(); });
   document.getElementById('repTo').addEventListener('change', (e) => { state.to = e.target.value; load(); });
-  document.getElementById('repSearch').addEventListener('input', (e) => { state.search = e.target.value; render(); });
+  document.getElementById('repConsultancy').addEventListener('change', (e) => { state.consultancy = e.target.value; render(); });
   document.getElementById('repMin').addEventListener('input', (e) => { state.min = Number(e.target.value) || 0; render(); });
   document.getElementById('repClear').addEventListener('click', () => {
-    state.from = ''; state.to = ''; state.search = ''; state.min = 0;
+    state.from = ''; state.to = ''; state.consultancy = ''; state.min = 0;
     document.getElementById('repFrom').value = '';
     document.getElementById('repTo').value = '';
-    document.getElementById('repSearch').value = '';
+    document.getElementById('repConsultancy').value = '';
     document.getElementById('repMin').value = '0';
     load();
   });
@@ -228,4 +258,25 @@ async function bootstrap() {
   await load();
 }
 
-guardBootstrap(bootstrap, 'Partner Reports');
+// guardBootstrap catches a bootstrap that THROWS. It cannot catch one that
+// simply never settles — an auth call that hangs leaves the page sitting on
+// its spinner with nothing in the console, which is exactly how this page
+// looked when PostgREST had not yet reloaded its schema cache. This turns a
+// silent hang into something with a next step.
+let started = false;
+const watchdog = setTimeout(() => {
+  if (started) return;
+  const body = document.getElementById('repBody');
+  if (body && body.textContent.includes('Loading')) {
+    body.innerHTML = `<tr><td colspan="11" class="empty-state">
+      Still loading after 15 seconds — something is not responding.<br>
+      <span style="font-size:12px;">Check the browser console for the failing request, then reload.</span>
+    </td></tr>`;
+  }
+}, 15000);
+
+guardBootstrap(async () => {
+  await bootstrap();
+  started = true;
+  clearTimeout(watchdog);
+}, 'Partner Reports');

@@ -49,8 +49,12 @@
           <input type="date" id="repTo" />
         </div>
         <div class="filter-field">
-          <label for="repSearch">Search consultancy</label>
-          <input type="search" id="repSearch" placeholder="Name…" />
+          <label for="repConsultancy">Consultancy</label>
+          <!-- Populated from the loaded report rows, so it can only ever
+               offer consultancies that actually have leads in range. -->
+          <select id="repConsultancy" style="min-width:260px;">
+            <option value="">All consultancies</option>
+          </select>
         </div>
         <div class="filter-field">
           <label for="repMin">Min leads</label>
@@ -103,6 +107,13 @@
     <div class="drawer-body" id="repDrawerBody"></div>
   </aside>
 
+  <!-- env.js defines window.__ENV__ and supabase-js defines window.supabase.
+       config/supabaseClient.js reads BOTH at module-evaluation time, so
+       omitting them does not fail gracefully: the module graph throws before
+       guardBootstrap is ever registered, and the page sits on its spinner
+       with no banner and nothing obvious in the console. -->
+  <script src="../../shared/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script type="module" src="js/reports.js"></script>
 </body>
 </html>
