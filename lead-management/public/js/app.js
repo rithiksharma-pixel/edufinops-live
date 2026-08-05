@@ -278,13 +278,17 @@ async function bootstrap() {
 
   populateFilterDropdowns();
 
-  smartViewTabs = await initSmartViewTabs(document.getElementById('smartViewTabs'), {
-    currentUser: state.currentUser,
-    showToast,
-    getCurrentFilters: () => ({ ...state.filters }),
-    applyFilters,
-  });
-
+  // ORDER MATTERS. The drawer and the New Lead modal are wired FIRST, before
+  // anything that hits the network again.
+  //
+  // These used to come after initSmartViewTabs, which awaits a count query per
+  // saved view. When those counts were slow (they were: 1.2s each before 042)
+  // or threw, bootstrap never reached this point and the New Lead button was
+  // simply dead — no handler, no error, nothing to click. That is exactly the
+  // "Add Lead isn't working" the team reported, and it is the same shape as
+  // the saved_views outage earlier.
+  //
+  // Creating a lead must not depend on saved views loading.
   drawer = initLeadDrawer({
     showToast,
     onLeadUpdated: refreshLeadsAndFunnel,
@@ -304,6 +308,23 @@ async function bootstrap() {
   if (state.currentUser.role === 'Lender') {
     document.getElementById('btnNewLead').style.display = 'none';
   }
+
+  // Smart Views are a convenience. Not awaited and failure-tolerant, so a
+  // slow or broken saved-views load degrades to "no tabs" instead of taking
+  // the whole page down with it. refreshLeadsAndFunnel already optional-chains
+  // smartViewTabs, so it is safe for this to still be undefined.
+  initSmartViewTabs(document.getElementById('smartViewTabs'), {
+    currentUser: state.currentUser,
+    showToast,
+    getCurrentFilters: () => ({ ...state.filters }),
+    applyFilters,
+  })
+    .then((tabs) => { smartViewTabs = tabs; })
+    .catch((err) => {
+      console.error('Smart Views failed to load', err);
+      const host = document.getElementById('smartViewTabs');
+      if (host) host.innerHTML = '';
+    });
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
