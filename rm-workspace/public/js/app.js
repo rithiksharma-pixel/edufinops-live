@@ -136,7 +136,7 @@ async function loadView(key) {
   document.getElementById('viewSubtitle').textContent = view.subtitle;
   document.getElementById('listBody').innerHTML = '<tr><td class="empty-state">Loading…</td></tr>';
   try {
-    const data = await view.load();
+    const data = await view.load(currentUser.id);
     view.render(data);
   } catch (err) {
     console.error(err);
@@ -227,13 +227,13 @@ function initCallsPeriodToggle() {
 }
 
 async function renderRmDashboard() {
-  const leads = await getAssignedLeads();
+  const leads = await getAssignedLeads(currentUser.id);
   const now = Date.now();
   const overdue = leads.filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < now);
   const today = new Date().toISOString().slice(0, 10);
   const [overdueTasks, tatBreaches] = await Promise.all([
     getMyTasks().then((tasks) => tasks.filter((t) => !t.is_completed && t.due_date && t.due_date < today)),
-    getMyTatBreachedDeals(),
+    getMyTatBreachedDeals(currentUser.id),
   ]);
 
   document.getElementById('rmDashStats').innerHTML = [
@@ -418,7 +418,7 @@ async function bootstrap() {
   initRowNavigation();
 
   try {
-    const leadOptions = await getMyOpenLeadsForTaskLink();
+    const leadOptions = await getMyOpenLeadsForTaskLink(currentUser.id);
     document.getElementById('taskLeadSelect').insertAdjacentHTML('beforeend', leadOptions.map((l) => `<option value="${l.id}">${escapeHtml(l.student_name)}</option>`).join(''));
   } catch (err) {
     console.error(err);

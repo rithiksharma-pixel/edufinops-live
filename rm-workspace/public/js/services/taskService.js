@@ -30,15 +30,17 @@ export async function toggleTaskComplete(taskId, isCompleted) {
   if (error) throw error;
 }
 
-export async function getMyOpenLeadsForTaskLink() {
-  // Paged — this fills the "link a lead" picker; a truncated list would
-  // make leads past the first 1000 impossible to attach a task to.
+export async function getMyOpenLeadsForTaskLink(rmId) {
+  // Scoped to the caller's own leads. Since 035 an RM can READ every lead, so
+  // without this filter the "link a lead" picker tried to render all 11,951 —
+  // a dropdown nobody can use, twelve round trips to build.
   // student_name is not unique, so fetchAll adds id as the tiebreaker.
   return fetchAll(
     () => supabase
       .from('leads')
       .select('id, student_name')
       .eq('is_deleted', false)
+      .eq('assigned_rm_id', rmId)
       .order('student_name')
   );
 }
