@@ -41,6 +41,85 @@ const APPS = [
 
 const state = { app: null, user: null, crumbs: [] };
 
+// ---------------------------------------------------------
+// Mobile sidebar — see .zt-navtoggle in app-nav.css for why this is
+// decided at runtime rather than from a breakpoint.
+// ---------------------------------------------------------
+const NAV_OPEN_CLASS = 'zt-nav-open';
+let mobileNavInstalled = false;
+
+function isNavOpen() {
+  return document.documentElement.classList.contains(NAV_OPEN_CLASS);
+}
+
+/** True when this app has a sidebar that's currently hidden by its own CSS. */
+function sidebarIsHidden() {
+  const sidebar = document.querySelector('.sidebar');
+  if (!sidebar) return false;
+  // While open we're the reason it's visible, so the computed value can't
+  // answer the question — but we already know it.
+  if (isNavOpen()) return true;
+  return getComputedStyle(sidebar).display === 'none';
+}
+
+/** Show the toggle only where it does something. Cheap; runs on resize. */
+function syncNavToggle() {
+  const btn = document.querySelector('.zt-navtoggle');
+  if (!btn) return;
+  btn.hidden = !sidebarIsHidden();
+}
+
+function closeMobileNav() {
+  if (!isNavOpen()) return;
+  document.documentElement.classList.remove(NAV_OPEN_CLASS);
+  document.querySelector('.zt-nav-scrim')?.remove();
+  document.querySelector('.zt-navtoggle')?.setAttribute('aria-expanded', 'false');
+}
+
+function openMobileNav() {
+  document.documentElement.classList.add(NAV_OPEN_CLASS);
+  document.querySelector('.zt-navtoggle')?.setAttribute('aria-expanded', 'true');
+  if (!document.querySelector('.zt-nav-scrim')) {
+    const scrim = document.createElement('div');
+    scrim.className = 'zt-nav-scrim';
+    scrim.addEventListener('click', closeMobileNav);
+    document.body.appendChild(scrim);
+  }
+  // Focus the first nav link so the panel is usable from the keyboard.
+  document.querySelector('.sidebar .nav-item')?.focus?.();
+}
+
+function toggleMobileNav() {
+  if (isNavOpen()) closeMobileNav(); else openMobileNav();
+}
+
+/**
+ * Document-level wiring, installed once. The toggle button itself is
+ * re-wired per render (wireEvents) because render() rebuilds the bar's
+ * markup wholesale.
+ */
+function installMobileNav() {
+  if (mobileNavInstalled) return;
+  mobileNavInstalled = true;
+
+  // Picking a destination should close the panel — in most of these apps
+  // a nav item switches view in place rather than navigating, so nothing
+  // else would dismiss it.
+  document.addEventListener('click', (e) => {
+    if (!isNavOpen()) return;
+    if (e.target.closest?.('.sidebar .nav-item')) closeMobileNav();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMobileNav();
+  });
+
+  window.addEventListener('resize', () => {
+    closeMobileNav();
+    syncNavToggle();
+  });
+}
+
 function accessibleApps(role) {
   return APPS.filter((a) => a.roles.includes(role));
 }
@@ -58,6 +137,7 @@ export function mountTopbar({ app, user, crumbs }) {
   state.user = user || null;
   if (crumbs) state.crumbs = crumbs;
   render();
+  installMobileNav();
 
   // Onboarding rides on the chrome rather than being wired app by app:
   // any portal that renders this top bar gets the tour, the help panel
@@ -159,6 +239,9 @@ function render() {
 
   host.innerHTML = `
     <div class="zt-topbar-left">
+      <button type="button" class="zt-navtoggle" hidden aria-expanded="false" aria-label="Open navigation menu" title="Menu">
+        <i class="fa-solid fa-bars"></i>
+      </button>
       <div class="zt-appswitch ${showSwitcher ? '' : 'static'}">
         <button type="button" class="zt-appswitch-btn" ${showSwitcher ? 'aria-haspopup="true" aria-expanded="false"' : 'disabled'}>
           <span class="zt-appswitch-mark"><i class="fa-solid ${currentIcon}"></i></span>
@@ -196,6 +279,12 @@ function render() {
 }
 
 function wireEvents(host) {
+  const navToggle = host.querySelector('.zt-navtoggle');
+  if (navToggle) {
+    navToggle.addEventListener('click', (e) => { e.stopPropagation(); toggleMobileNav(); });
+    syncNavToggle();
+  }
+
   const switchBtn = host.querySelector('.zt-appswitch-btn');
   const menu = host.querySelector('.zt-switch-menu');
   if (switchBtn && menu) {

@@ -18,6 +18,45 @@
 .zt-topbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; }
 .zt-topbar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 
+/* ---------- Mobile sidebar toggle ----------
+   Every app with a sidebar hides it on narrow screens, and the app
+   switcher next to this button moves between PORTALS, not between an
+   app's own views — so below the breakpoint there was no way to reach
+   Assigned Leads, Calls, Tasks or anything else in the left nav. This
+   button brings the existing sidebar back as a slide-over.
+
+   Whether it appears is decided at runtime from the sidebar's computed
+   display, not from a breakpoint hardcoded here: the apps don't all use
+   the same one, and Admin Dashboard collapses to an icon rail instead of
+   hiding, so it needs no toggle at all. Detecting beats maintaining a
+   list that silently rots when an app changes its own CSS. */
+.zt-navtoggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex-shrink: 0;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--ink-700); cursor: pointer; font-size: 15px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+/* `hidden` alone loses to the display above, so it needs saying outright. */
+.zt-navtoggle[hidden] { display: none; }
+.zt-navtoggle:hover { background: var(--bg-hover); color: var(--ink-900); }
+
+.zt-nav-scrim { position: fixed; inset: 0; z-index: 120; background: rgba(23, 23, 26, 0.44); }
+
+/* Deliberately outside any media query. The app stylesheets hide .sidebar
+   at their own breakpoints with a plain `.sidebar` selector; this is more
+   specific, so it wins wherever it's switched on — and it's only ever
+   switched on when the toggle decided the sidebar was hidden. */
+:root.zt-nav-open .sidebar {
+  display: flex;
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: min(272px, 84vw);
+  z-index: 130;
+  overflow-y: auto;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+}
+:root.zt-nav-open body { overflow: hidden; }
+
 /* ---------- App switcher ---------- */
 .zt-appswitch { position: relative; flex-shrink: 0; }
 .zt-appswitch-btn {
