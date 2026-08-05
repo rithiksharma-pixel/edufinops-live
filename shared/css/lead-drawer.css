@@ -422,3 +422,77 @@
   padding: 1px 7px; border-radius: 999px;
   background: var(--danger-soft); color: var(--danger-soft-ink);
 }
+
+/* =========================================================
+   TANGENT INTELLIGENCE — call recordings, summaries, field suggestions
+   ========================================================= */
+.ti-wrap { display: flex; flex-direction: column; gap: 18px; }
+
+.ti-upload {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 16px; border: 1px dashed var(--border); border-radius: var(--radius-md);
+  background: var(--paper-sunken);
+}
+.ti-upload label { cursor: pointer; }
+.ti-upload-hint { font-size: 12px; color: var(--ink-500); flex: 1 1 240px; }
+.ti-progress { flex-basis: 100%; font-size: 12px; color: var(--ink-500); }
+
+/* The suggestion block is the reason this screen exists — it gets the accent
+   edge so it reads as the thing to act on, not another card. */
+.ti-suggest {
+  border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md); background: var(--bg-surface); padding: 14px 16px;
+}
+.ti-suggest-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.ti-suggest-head span { font-size: 12px; color: var(--ink-500); }
+
+.ti-chip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding: 10px 0; border-top: 1px solid var(--border);
+}
+.ti-chip-main { display: flex; align-items: baseline; gap: 8px; flex: 1 1 220px; min-width: 0; }
+.ti-chip-field { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-500); }
+.ti-chip-value { font-weight: 600; }
+.ti-chip-evidence { flex-basis: 100%; font-size: 12px; color: var(--ink-500); font-style: italic; }
+.ti-chip-actions { display: flex; gap: 6px; margin-left: auto; }
+
+.ti-conf { font-size: 10px; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .04em; }
+.ti-conf-high { background: color-mix(in srgb, var(--success, #2F7A55) 16%, transparent); color: var(--success, #2F7A55); }
+.ti-conf-medium { background: color-mix(in srgb, var(--warning, #9A6B12) 16%, transparent); color: var(--warning, #9A6B12); }
+.ti-conf-low { background: var(--paper-sunken); color: var(--ink-500); }
+
+.ti-recs { display: flex; flex-direction: column; gap: 12px; }
+.ti-rec {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-surface); padding: 14px 16px;
+}
+.ti-rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ti-rec-meta { display: block; font-size: 12px; color: var(--ink-500); margin-top: 2px; }
+
+.ti-status { font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.ti-status-pending, .ti-status-processing { background: var(--paper-sunken); color: var(--ink-500); }
+.ti-status-done { background: color-mix(in srgb, var(--success, #2F7A55) 14%, transparent); color: var(--success, #2F7A55); }
+.ti-status-failed { background: color-mix(in srgb, var(--danger, #B3402F) 14%, transparent); color: var(--danger, #B3402F); }
+
+.ti-summary { margin: 12px 0 8px; font-size: 14px; line-height: 1.6; }
+.ti-meta-row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--ink-500); }
+.ti-sent { padding: 1px 6px; border-radius: 4px; background: var(--paper-sunken); }
+.ti-sent-positive { color: var(--success, #2F7A55); }
+.ti-sent-negative { color: var(--danger, #B3402F); }
+
+.ti-list { margin-top: 12px; font-size: 13px; }
+.ti-list-h { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-500); }
+.ti-list ul { margin: 4px 0 0; padding-left: 18px; }
+.ti-list li { margin-bottom: 3px; }
+.ti-list-risk li { color: var(--danger, #B3402F); }
+
+.ti-rec-actions { display: flex; gap: 8px; margin-top: 12px; }
+.ti-player { margin-top: 10px; }
+.ti-transcript {
+  margin-top: 10px; padding: 12px; max-height: 320px; overflow: auto;
+  background: var(--paper-sunken); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.7;
+  white-space: pre-wrap; word-break: break-word; font-family: inherit;
+}
+.ti-error { color: var(--danger, #B3402F); font-size: 13px; margin: 8px 0 0; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }

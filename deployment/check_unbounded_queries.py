@@ -57,6 +57,8 @@ REVIEWED_SAFE = {
     'lead-management/public/js/services/savedViewsService.js:saved_views',           # per-user, tiny
     'lead-management/public/js/services/dealService.js:deals',                       # .eq('lead_id')
     'lead-management/public/js/services/lenderStatusService.js:v_deal_tat',          # .eq('lead_id')
+    'lead-management/public/js/services/callIntelligenceService.js:call_recordings',       # .eq('lead_id')
+    'lead-management/public/js/services/callIntelligenceService.js:call_field_suggestions', # .eq('lead_id') + status
 }
 
 BOUNDED_MARKERS = ('.range(', '.limit(', 'head: true', 'head:true',

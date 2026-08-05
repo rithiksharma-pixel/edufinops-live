@@ -17,6 +17,7 @@ import {
 import { initDealsTab } from './dealPanel.js';
 import { initDealTimelineTree } from './dealTimelineTree.js';
 import { initDocumentsTab } from './documentPanel.js';
+import { initCallIntelligenceTab } from './callIntelligencePanel.js';
 import { initApplicantDetailsTab } from './applicantDetailsPanel.js';
 import { initAcademicDetailsTab } from './academicDetailsPanel.js';
 import { initFamilyTab } from './familyPanel.js';
@@ -126,11 +127,15 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       const dealTreePanel = document.getElementById('panelDealTree');
       const dealsPanel = document.getElementById('panelLenders');
       const documentsPanel = document.getElementById('panelDocuments');
+      const intelligencePanel = document.getElementById('panelIntelligence');
       if (currentUserRole === 'Consultant' || currentUserRole === 'Business Development') {
         lenderMatrixPanel.innerHTML = '';
         dealTreePanel.innerHTML = '';
         dealsPanel.innerHTML = '<p class="empty-state">Deal information isn\'t visible from this role.</p>';
         documentsPanel.innerHTML = '<p class="empty-state">Document management isn\'t visible from this role.</p>';
+        // Recordings carry the borrower's own voice. Outside partners have no
+        // business hearing them, so this stays closed to those roles.
+        intelligencePanel.innerHTML = '<p class="empty-state">Call recordings aren\'t visible from this role.</p>';
       } else {
         const dealTree = await initDealTimelineTree(dealTreePanel, leadId);
         const dealsTab = await initDealsTab(dealsPanel, leadId, {
@@ -144,6 +149,15 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
           onShared: () => { onLeadUpdated(); dealsTab.refresh(); dealTree.refresh(); },
         });
         await initDocumentsTab(documentsPanel, leadId, { currentUser, showToast, coApplicants });
+        // Not awaited: transcription can take a minute and the drawer must not
+        // wait on it. The tab fills itself in and polls while work is pending.
+        initCallIntelligenceTab(intelligencePanel, leadId, {
+          showToast,
+          onLeadUpdated: () => { onLeadUpdated(); },
+        }).catch((err) => {
+          console.error('Tangent Intelligence failed to start', err);
+          intelligencePanel.innerHTML = '<p class="empty-state">Could not load call intelligence.</p>';
+        });
       }
     } catch (err) {
       console.error(err);
