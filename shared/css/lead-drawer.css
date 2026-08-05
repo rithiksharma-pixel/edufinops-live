@@ -234,6 +234,12 @@
 .lender-status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .lender-matrix-reason-row select, .lender-matrix-reason-row input { font-size: 13px; padding: 6px 9px; }
 .lender-matrix-reason-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* Share confirmation — the only irreversible, outward-facing action in the
+   drawer, so it gets a warning ground rather than looking like a form. */
+.lender-matrix-confirm-row { display: flex; flex-direction: column; gap: 10px; background: var(--warning-soft, var(--paper-sunken)); border-radius: var(--radius-sm); padding: 12px 14px; }
+.lender-matrix-confirm-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink-700); }
+.lender-matrix-confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .lender-matrix-reason-who { display: block; font-size: 11px; color: var(--ink-300); margin-top: 3px; }
 
 /* Certification-stamp mark for a Shared row — the same passport-stamp

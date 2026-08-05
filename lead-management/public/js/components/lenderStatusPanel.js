@@ -51,20 +51,12 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
       panelEl.querySelector(`[data-reason-toggle="${row.id}"]`)?.addEventListener('click', () => {
         toggleExpand(row.id, 'reason', () => renderReasonForm(row, buildReasonOptions, isOtherSelected, otherReason));
       });
-      panelEl.querySelector(`[data-share="${row.id}"]`)?.addEventListener('click', async (e) => {
-        const btn = e.currentTarget;
-        btn.disabled = true;
-        btn.textContent = 'Sharing…';
-        try {
-          await shareLeadWithLender(row.id, null, null);
-          showToast(`Shared with ${row.lenders.name}.`);
-          await refresh();
-          onShared?.();
-        } catch (err) {
-          showToast(err.message || 'Could not share with this lender.', true);
-          btn.disabled = false;
-          btn.textContent = 'Share';
-        }
+      // Share asks first. It creates the deal, sends the student's profile
+      // to an outside party, and there is no unshare — so the one action
+      // here that can't be walked back gets at least as much friction as
+      // recording why a lender was skipped.
+      panelEl.querySelector(`[data-share="${row.id}"]`)?.addEventListener('click', () => {
+        toggleExpand(row.id, 'share', () => renderShareConfirm(row));
       });
     });
   }
@@ -80,6 +72,44 @@ export async function initLenderStatusPanel(panelEl, leadId, ctx) {
     }
     slot.dataset.mode = mode;
     render(slot);
+  }
+
+  function renderShareConfirm(row) {
+    const slot = panelEl.querySelector(`[data-expand-slot="${row.id}"]`);
+    const lenderName = row.lenders?.name || 'this lender';
+    slot.innerHTML = `
+      <div class="lender-matrix-confirm-row">
+        <p class="lender-matrix-confirm-text">
+          Share this student with <strong>${escapeHtml(lenderName)}</strong>? This starts a deal and
+          sends their profile across. It can't be undone here.
+        </p>
+        <div class="lender-matrix-confirm-actions">
+          <button class="btn btn-primary" data-confirm-share style="font-size:12px;padding:6px 12px;">Share with ${escapeHtml(lenderName)}</button>
+          <button class="btn btn-ghost" data-cancel-share style="font-size:12px;padding:6px 12px;">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    slot.querySelector('[data-cancel-share]').addEventListener('click', () => {
+      slot.innerHTML = '';
+      slot.dataset.mode = '';
+    });
+
+    slot.querySelector('[data-confirm-share]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'Sharing…';
+      try {
+        await shareLeadWithLender(row.id, null, null);
+        showToast(`Shared with ${lenderName}.`);
+        await refresh();
+        onShared?.();
+      } catch (err) {
+        showToast(err.message || 'Could not share with this lender.', true);
+        btn.disabled = false;
+        btn.textContent = `Share with ${lenderName}`;
+      }
+    });
   }
 
   function renderReasonForm(row, buildReasonOptions, isOtherSelected, otherReason) {
