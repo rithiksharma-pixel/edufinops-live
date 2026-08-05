@@ -160,6 +160,17 @@
   font-size: 20px; font-weight: 600; line-height: 1.1;
 }
 .funnel-card .label { display: block; font-size: 11px; color: var(--ink-500); margin-top: 4px; }
+/* Step conversion, deliberately quieter than the count it sits under —
+   the absolute number is what gets read first. */
+.funnel-card .funnel-rate {
+  display: block; margin-top: 6px; font-size: 10.5px; color: var(--ink-500);
+  font-variant-numeric: tabular-nums;
+}
+.funnel-card-overall {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-surface));
+}
+.funnel-card-overall .count { color: var(--accent); }
 
 .report-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px;
   background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }

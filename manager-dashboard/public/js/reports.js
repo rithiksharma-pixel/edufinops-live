@@ -59,9 +59,57 @@ function populateConsultancyDropdown() {
   sel.value = state.consultancy;
 }
 
+/**
+ * Funnel totals across every row currently visible.
+ *
+ * Summed from the rows already on screen rather than re-queried, so the cards
+ * and the table can never disagree — and so the consultancy and min-leads
+ * filters (which are applied client-side) are reflected without a round trip.
+ *
+ * Conversion is computed from the SUMMED counts, not by averaging each
+ * consultancy's percentage. Averaging percentages would let a consultancy
+ * with 2 leads weigh as heavily as one with 200.
+ */
+function renderTotals(rows) {
+  const el = document.getElementById('repTotals');
+  if (!el) return;
+
+  const sum = (k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
+  const t = {
+    total_leads: sum('total_leads'),
+    login: sum('login'),
+    sanction: sum('sanction'),
+    pf_paid: sum('pf_paid'),
+    disbursement: sum('disbursement'),
+    lost: sum('lost'),
+  };
+  const c = conversionRates(t);
+
+  const cards = [
+    ['Leads', t.total_leads, null],
+    ['Login', t.login, c.leadToLogin],
+    ['Sanction', t.sanction, c.loginToSanction],
+    ['PF Paid', t.pf_paid, c.sanctionToPf],
+    ['Disbursement', t.disbursement, c.pfToDisbursement],
+    ['Lost', t.lost, null],
+  ];
+
+  el.innerHTML = cards.map(([label, value, rate]) => `
+    <div class="funnel-card">
+      <span class="count">${n(value)}</span>
+      <span class="label">${label}</span>
+      ${rate === null ? '' : `<span class="funnel-rate">${pct(rate)} of previous</span>`}
+    </div>`).join('')
+    + `<div class="funnel-card funnel-card-overall">
+         <span class="count">${pct(c.leadToDisbursement)}</span>
+         <span class="label">Lead → Disbursement</span>
+       </div>`;
+}
+
 function render() {
   const body = document.getElementById('repBody');
   const rows = visibleRows();
+  renderTotals(rows);
 
   document.getElementById('repCount').innerHTML =
     `<strong>${n(rows.length)}</strong> ${rows.length === 1 ? 'consultancy' : 'consultancies'}`
