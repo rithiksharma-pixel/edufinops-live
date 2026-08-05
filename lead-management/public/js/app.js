@@ -18,6 +18,9 @@ import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
 const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', overdueOnly: false, search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
 
+/** Roles whose default view is their own book rather than the whole pipeline. */
+const OWN_BOOK_ROLES = ['Relationship Manager'];
+
 const state = {
   currentUser: null,
   stages: [],
@@ -25,7 +28,23 @@ const state = {
   rms: [],
   filters: { ...DEFAULT_FILTERS },
   page: 0,
+  // Set at bootstrap. Non-empty means "this user's list is scoped to their own
+  // leads by default" — it becomes the rmId that Clear and every Smart View
+  // fall back to, instead of blank.
+  scopeRmId: '',
 };
+
+/**
+ * The filter set this user starts from.
+ *
+ * RLS still lets an RM read every lead — that is deliberate and stays, so
+ * search and handovers work. This is purely about what they LAND on. Opening
+ * Lead Management to 11,951 leads, 588 of which are yours, is not a working
+ * list. Clearing filters returns here, not to the whole company.
+ */
+function defaultFilters() {
+  return { ...DEFAULT_FILTERS, rmId: state.scopeRmId };
+}
 
 let smartViewTabs;
 
@@ -137,7 +156,7 @@ function escapeHtml(str) {
 
 /** Applies a filter set (from a Smart View tab or a URL deep-link) and syncs every filter-bar control to match. */
 function applyFilters(filters) {
-  state.filters = { ...DEFAULT_FILTERS, ...filters };
+  state.filters = { ...defaultFilters(), ...filters };
   document.getElementById('filterStage').value = state.filters.stageId;
   document.getElementById('filterSource').value = state.filters.sourceId;
   document.getElementById('filterRm').value = state.filters.rmId;
@@ -167,6 +186,9 @@ function populateFilterDropdowns() {
     'beforeend',
     state.rms.map((u) => `<option value="${u.id}">${escapeHtml(u.full_name)}</option>`).join('')
   );
+  // Reflect the starting scope, so an RM sees "Praveen" selected rather than
+  // "All RMs" above a list that is plainly not all RMs.
+  rmSelect.value = state.filters.rmId;
 
   // Every direct filter-bar edit also clears the active Smart View tab
   // highlight — the filters no longer exactly match what was saved.
@@ -276,6 +298,22 @@ async function bootstrap() {
   state.sources = sources;
   state.rms = rms;
 
+  // An RM lands on their own book. Managers, ATMs and Admins keep the full
+  // pipeline, which is the whole point of their screens.
+  if (OWN_BOOK_ROLES.includes(state.currentUser.role)) {
+    state.scopeRmId = state.currentUser.id;
+    state.filters.rmId = state.scopeRmId;
+
+    // Say so on the page. A list headed "Every student loan lead" that shows
+    // 588 of 11,951 reads as a bug, which is how this surfaced in the first place.
+    const subtitle = document.getElementById('leadPageSubtitle');
+    if (subtitle) {
+      subtitle.textContent = 'Leads assigned to you. Switch Assigned RM to "All RMs" to search the wider pipeline.';
+    }
+    const navLabel = document.querySelector('.sidebar-nav .nav-item');
+    if (navLabel) navLabel.innerHTML = '<i class="fa-solid fa-diagram-project"></i> My Leads';
+  }
+
   populateFilterDropdowns();
 
   // ORDER MATTERS. The drawer and the New Lead modal are wired FIRST, before
@@ -318,6 +356,8 @@ async function bootstrap() {
     showToast,
     getCurrentFilters: () => ({ ...state.filters }),
     applyFilters,
+    baseFilters: defaultFilters,
+    baseLabel: state.scopeRmId ? 'My Leads' : 'All Leads',
   })
     .then((tabs) => { smartViewTabs = tabs; })
     .catch((err) => {

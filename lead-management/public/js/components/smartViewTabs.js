@@ -9,9 +9,16 @@ import { getSavedViews, createSavedView, deleteSavedView } from '../services/sav
 import { countLeads } from '../services/leadService.js';
 
 export async function initSmartViewTabs(containerEl, ctx) {
-  const { currentUser, showToast, getCurrentFilters, applyFilters } = ctx;
+  const {
+    currentUser, showToast, getCurrentFilters, applyFilters,
+    // The filter set this user starts from. For an RM it pins them to their
+    // own book; for everyone else it is empty. Counts MUST be computed on top
+    // of it, or the first tab reads "All Leads 11,951" above a list of 588.
+    baseFilters = () => ({}),
+    baseLabel = 'All Leads',
+  } = ctx;
   let views = [];
-  let activeViewId = null; // null = "All Leads"
+  let activeViewId = null; // null = the base view
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -30,13 +37,16 @@ export async function initSmartViewTabs(containerEl, ctx) {
   }
 
   async function render() {
+    // Each saved view is applied ON TOP of the base, so its count is too —
+    // otherwise a tab's badge disagrees with the list it produces.
+    const base = baseFilters();
     const [allCount, viewCounts] = await Promise.all([
-      countLeads({}),
-      Promise.all(views.map((v) => countLeads(v.filters))),
+      countLeads(base),
+      Promise.all(views.map((v) => countLeads({ ...base, ...v.filters }))),
     ]);
 
     containerEl.innerHTML = [
-      tabHtml(null, 'All Leads', allCount, activeViewId === null, false),
+      tabHtml(null, baseLabel, allCount, activeViewId === null, false),
       ...views.map((v, i) => tabHtml(v.id, v.name, viewCounts[i], activeViewId === v.id, true)),
       `<button class="smart-view-tab smart-view-tab-add" data-action="add-view" title="Save the current filters as a view"><i class="fa-solid fa-plus"></i></button>`,
     ].join('');
