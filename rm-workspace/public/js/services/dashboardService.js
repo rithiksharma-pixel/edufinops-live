@@ -7,6 +7,7 @@
 import { supabase } from '../config/supabaseClient.js';
 import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
+import { getOpeningStageId } from './leadService.js';
 
 const LEAD_SELECT = `
   id, student_name, student_phone, course_name, university_name,
@@ -38,20 +39,31 @@ export async function getTodaysFollowUps() {
   );
 }
 
+/**
+ * "New" = still sitting at the pipeline's opening stage, untouched since
+ * creation.
+ *
+ * This used to take the MINIMUM sequence_order present in the RM's own
+ * leads and match on that, which quietly turned into a lie the moment an
+ * RM cleared their genuinely-new ones: with nothing left at stage 1, the
+ * minimum became whatever stage was now lowest, and already-worked leads
+ * appeared here captioned "not yet actioned". The RM doing the best job
+ * saw the most fake work.
+ *
+ * Anchored to the real opening stage instead, which also lets the filter
+ * run server-side rather than fetching every lead to throw most away.
+ */
 export async function getNewLeads() {
-  const data = await fetchAll(
+  const openingStageId = await getOpeningStageId();
+  return fetchAll(
     () => supabase
       .from('leads')
       .select(LEAD_SELECT)
       .eq('is_deleted', false)
+      .eq('current_stage_id', openingStageId)
       .order('created_at', { ascending: false }),
     { tiebreak: 'id', ascending: false }
   );
-  // "New" = still at the very first stage (untouched since creation).
-  // Filtered client-side on sequence_order since it's a small, already-
-  // RLS-scoped result set, not worth a second round trip for.
-  const minOrder = Math.min(...data.map((l) => l.lead_stages?.sequence_order ?? Infinity));
-  return data.filter((l) => l.lead_stages?.sequence_order === minOrder);
 }
 
 export async function getDocumentsPending() {
