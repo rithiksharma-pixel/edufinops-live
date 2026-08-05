@@ -2,9 +2,9 @@ import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
-import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
+import { getLeadSources, getConsultancies, createLead, findLeadsByPhone } from './services/leadService.js';
 import { getMyCalls, CONNECTED_DISPOSITIONS } from './services/callService.js';
-import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell } from './utils/validation.js';
+import { formatCurrency, formatDateTime, formatDate, isOverdue, escapeHtml, followUpCell, validateLeadForm } from './utils/validation.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 // Cross-app import, not a duplicate — same drawer lead-management uses,
@@ -283,6 +283,12 @@ function initLeadModal() {
   const consultancySelect = document.getElementById('f_consultancy_id');
   const consultancyOtherInput = document.getElementById('f_consultancy_other_name');
   const errorEl = document.getElementById('leadFormError');
+  const submitBtn = document.getElementById('btnSubmitLead');
+
+  // Phone the RM has already been warned about and chosen to save anyway.
+  // Warn-then-allow rather than block: duplicates are usually a mistake but
+  // sometimes genuinely two students on one family number.
+  let pendingDuplicate = null;
 
   function isBdPartnership() {
     const selected = leadSources.find((s) => s.id === sourceSelect.value);
@@ -308,9 +314,21 @@ function initLeadModal() {
   async function open() {
     errorEl.textContent = '';
     form.reset();
+    // Reset the duplicate prompt too — otherwise a modal closed while it
+    // read "Save anyway" reopens still saying so, for a different student.
+    pendingDuplicate = null;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Save lead';
     if (sourceSelect.options.length <= 0) {
       leadSources = await getLeadSources();
-      sourceSelect.innerHTML = leadSources.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+      // Leading blank option on purpose. Without it the browser pre-selects
+      // the first source, so every lead saved without touching this field
+      // silently carried whichever source happened to sort first — and the
+      // "select where this lead came from" guard could never fire, because
+      // the field was never empty.
+      sourceSelect.innerHTML =
+        '<option value="">Select a source…</option>' +
+        leadSources.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
     }
     if (consultancySelect.options.length <= 0) {
       const consultancies = await getConsultancies();
@@ -337,19 +355,15 @@ function initLeadModal() {
     const formData = new FormData(form);
     const payload = Object.fromEntries(formData.entries());
 
-    if (!payload.student_name?.trim() || !payload.student_phone?.trim()) {
-      errorEl.textContent = 'Student name and phone are required.';
+    // The same validator Lead Management and Consultant Portal run, so the
+    // phone and email rules no longer depend on which app typed the lead in.
+    const { valid, errors } = validateLeadForm(payload);
+    if (!valid) {
+      errorEl.textContent = Object.values(errors)[0];
+      form.querySelector(`[name="${Object.keys(errors)[0]}"]`)?.focus();
       return;
     }
     const amount = Number(payload.loan_amount_requested);
-    if (!payload.loan_amount_requested || Number.isNaN(amount) || amount <= 0) {
-      errorEl.textContent = 'Enter a loan amount greater than zero.';
-      return;
-    }
-    if (!payload.lead_source_id) {
-      errorEl.textContent = 'Select where this lead came from.';
-      return;
-    }
 
     let consultancyId = null;
     let consultancyOtherName = null;
@@ -363,7 +377,32 @@ function initLeadModal() {
       }
     }
 
-    const submitBtn = document.getElementById('btnSubmitLead');
+    // Duplicate check, once per phone number. Only sees leads this RM can
+    // read (their own) — see findLeadsByPhone — so it catches re-entering
+    // someone you already hold, not a duplicate held by another RM.
+    const phone = payload.student_phone.trim();
+    if (pendingDuplicate !== phone) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Checking…';
+      let existing = [];
+      try {
+        existing = await findLeadsByPhone(phone);
+      } catch (err) {
+        // A failed lookup must not block a legitimate save.
+        console.error('duplicate check failed', err);
+      } finally {
+        submitBtn.disabled = false;
+      }
+      if (existing.length > 0) {
+        pendingDuplicate = phone;
+        const names = existing.slice(0, 3).map((l) => l.student_name).join(', ');
+        errorEl.textContent = `You already have a lead on this number — ${names}. Press Save again to add this one anyway.`;
+        submitBtn.textContent = 'Save anyway';
+        return;
+      }
+      submitBtn.textContent = 'Save lead';
+    }
+
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving…';
     try {
