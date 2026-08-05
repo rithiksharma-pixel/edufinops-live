@@ -89,7 +89,7 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       renderHeader(lead, effectiveStatus);
       if (onOpen) onOpen(lead);
       renderActionBar(lead, { canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole), activateTab, toggleCallForm });
-      renderCallForm(lead, currentUser, showToast, onLeadUpdated);
+      renderCallForm(lead, currentUser, showToast, onLeadUpdated, () => open(leadId));
       renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, () => open(leadId), timeline);
       renderTimeline(timeline);
 
@@ -214,7 +214,7 @@ function setCallFormOpen(open) {
   if (open) form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
-function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
+function renderCallForm(lead, currentUser, showToast, onLeadUpdated, reload) {
   const container = document.getElementById('drawerCallForm');
   if (!['Admin', 'Manager', 'Relationship Manager'].includes(currentUser.role)) {
     container.innerHTML = '';
@@ -304,18 +304,19 @@ function renderCallForm(lead, currentUser, showToast, onLeadUpdated) {
         currentUser.id
       );
       showToast('Call logged.');
-      // Done — clear the form for the next call and close the panel, so
-      // saving is the end of the interaction rather than leaving an open
-      // panel that needs a second toggle click to dismiss.
-      document.getElementById('callNotes').value = '';
-      document.getElementById('callTaskTitle').value = '';
-      document.getElementById('callTaskDueDate').value = '';
       setCallFormOpen(false);
       onLeadUpdated();
+      // Reload the drawer itself, not just the list behind it. Without
+      // this, the Timeline tab and the summary's "Last 3 calls" — the two
+      // places you'd look to confirm — kept showing the state from before
+      // the call until you closed and reopened the lead. reload() rebuilds
+      // this form too, so there's nothing to clear by hand.
+      await reload();
     } catch (err) {
       console.error(err);
       showToast(err.message || 'Could not log this call.', true);
-    } finally {
+      // Only restore the button on failure; on success the whole form has
+      // been replaced by reload() and `btn` is a detached node.
       btn.disabled = false;
       btn.textContent = 'Log call';
     }
