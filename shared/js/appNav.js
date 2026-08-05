@@ -22,6 +22,7 @@
 // =========================================================
 
 import { escapeHtml } from './utils.js';
+import { initOnboarding, wireHelpButton } from './onboarding.js';
 
 const SUPABASE_REF = 'wgzgqbfankdbqxxcesci';
 const LOGIN_PATH = '/authentication/public/login.html';
@@ -57,6 +58,19 @@ export function mountTopbar({ app, user, crumbs }) {
   state.user = user || null;
   if (crumbs) state.crumbs = crumbs;
   render();
+
+  // Onboarding rides on the chrome rather than being wired app by app:
+  // any portal that renders this top bar gets the tour, the help panel
+  // and the shortcuts for free, and there is no per-app list to keep in
+  // sync. Guarded internally against being called twice.
+  const current = APPS.find((a) => a.key === app);
+  initOnboarding({
+    appKey: app,
+    appLabel: current ? current.label : 'Zolve Tangent',
+    user: state.user,
+    apps: state.user ? accessibleApps(state.user.role) : [],
+    onToggleTheme: toggleTheme,
+  });
 }
 
 /**
@@ -120,11 +134,16 @@ function render() {
   const apps = state.user ? accessibleApps(state.user.role) : [];
   const showSwitcher = apps.length > 1; // no menu if there's nowhere else to go
 
-  const menuItems = apps.map((a) => `
+  // The number badge is how the "g then N" shortcut gets discovered:
+  // it sits next to the destination it belongs to, in the menu someone
+  // already opened because they wanted to go there. Only the first nine
+  // are addressable, which is every role's full list today.
+  const menuItems = apps.map((a, i) => `
     <a class="zt-switch-item ${a.key === state.app ? 'current' : ''}" href="${a.path}" role="menuitem">
       <i class="fa-solid ${a.icon}"></i>
       <span>${escapeHtml(a.label)}</span>
       ${a.key === state.app ? '<i class="fa-solid fa-check zt-switch-check"></i>' : ''}
+      ${i < 9 ? `<span class="zt-switch-num" title="Press g then ${i + 1}">g ${i + 1}</span>` : ''}
     </a>`).join('');
 
   const crumbHtml = state.crumbs.map((c) => {
@@ -154,7 +173,11 @@ function render() {
       <nav class="zt-crumbs" aria-label="Breadcrumb">${crumbHtml}</nav>
     </div>
     <div class="zt-topbar-right">
-      <button type="button" class="zt-theme-toggle" title="Toggle light / dark" aria-label="Toggle light or dark theme">
+      <span class="zt-seq-hint" aria-hidden="true"></span>
+      <button type="button" class="zt-help-btn" id="ztHelpBtn" title="Help &amp; tips (h)" aria-label="Open help and tips">
+        <i class="fa-solid fa-circle-question"></i>
+      </button>
+      <button type="button" class="zt-theme-toggle" title="Toggle light / dark (t)" aria-label="Toggle light or dark theme">
         <i class="fa-solid fa-sun zt-ic-light"></i><i class="fa-solid fa-moon zt-ic-dark"></i>
       </button>
       ${state.user ? `
@@ -188,6 +211,10 @@ function wireEvents(host) {
 
   const themeBtn = host.querySelector('.zt-theme-toggle');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+
+  // Re-wired on every render: the markup above is rebuilt wholesale, so
+  // the previous button (and its listener) no longer exists.
+  wireHelpButton();
 
   const signout = host.querySelector('.zt-signout');
   if (signout) signout.addEventListener('click', doSignOut);
