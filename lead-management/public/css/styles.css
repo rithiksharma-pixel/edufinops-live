@@ -266,10 +266,12 @@ button, input, select { font-family: inherit; font-size: inherit; }
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-modal);
-  width: min(640px, 92vw);
-  max-height: 88vh;
+  width: min(760px, 94vw);
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
+  /* Nothing inside may push the dialog wider than the viewport. */
+  overflow: hidden;
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -277,13 +279,23 @@ button, input, select { font-family: inherit; font-size: inherit; }
   border-bottom: 1px solid var(--border);
 }
 .modal-header h2 { margin: 0; font-size: 17px; font-weight: 500; }
-.modal-body { padding: 20px 22px; overflow-y: auto; }
+/* overflow-x hidden, not auto: a horizontal scrollbar here is always a bug,
+   never something the user wants to use. */
+.modal-body { padding: 20px 22px; overflow-y: auto; overflow-x: hidden; }
 .form-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* auto-fit + minmax collapses to a single column on narrow screens instead
+     of keeping two columns that no longer fit. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 14px 16px;
 }
-.form-field { display: flex; flex-direction: column; gap: 5px; }
+/* min-width: 0 is the fix for the form scrolling sideways.
+   A grid item defaults to min-width:auto, meaning it refuses to shrink below
+   its content. One long option in the consultancy picker ("Protocelestial
+   Technologies Private Limited (NBYULA)") was therefore widening its whole
+   column, blowing the grid past the dialog and forcing a horizontal scroll to
+   reach the right-hand fields. */
+.form-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .form-field label { font-size: 13px; font-weight: 500; color: var(--ink-700); }
 .form-field input, .form-field select, .form-field textarea {
   padding: 9px 11px;
@@ -292,7 +304,15 @@ button, input, select { font-family: inherit; font-size: inherit; }
   background: var(--bg-surface);
   font-family: inherit;
   resize: vertical;
+  /* Fill the track and never exceed it, whatever the content length. */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
+/* Long option text truncates rather than stretching the control. */
+.form-field select { text-overflow: ellipsis; }
+/* Full-width rows for fields that genuinely need the room. */
+.form-field.form-field-wide { grid-column: 1 / -1; }
 .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
   outline: none;
   border-color: var(--accent);

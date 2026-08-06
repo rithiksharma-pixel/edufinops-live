@@ -138,8 +138,17 @@ function render() {
     return `<i class="fa-solid fa-angle-right zt-crumb-sep"></i>${node}`;
   }).join('');
 
+  // Back button. Rendered only when there is somewhere to go: on a tab opened
+  // straight into this page, history.back() would either do nothing or leave
+  // the app entirely, and a button that silently does nothing is worse than
+  // no button. Lives in the shared topbar so every app gets it from one place.
+  const canGoBack = window.history.length > 1;
+
   host.innerHTML = `
     <div class="zt-topbar-left">
+      ${canGoBack ? `<button type="button" class="zt-back" title="Go back" aria-label="Go back">
+        <i class="fa-solid fa-arrow-left"></i>
+      </button>` : ''}
       <div class="zt-appswitch ${showSwitcher ? '' : 'static'}">
         <button type="button" class="zt-appswitch-btn" ${showSwitcher ? 'aria-haspopup="true" aria-expanded="false"' : 'disabled'}>
           <span class="zt-appswitch-mark"><i class="fa-solid ${currentIcon}"></i></span>
@@ -184,6 +193,25 @@ function wireEvents(host) {
     });
     document.addEventListener('click', (e) => { if (!host.contains(e.target)) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  }
+
+  // Back closes an open drawer/modal FIRST if there is one. Opening a lead
+  // does not push a history entry, so a plain history.back() from an open
+  // drawer would jump off the page entirely — which reads as the app losing
+  // your place. Falls through to real history navigation otherwise.
+  const backBtn = host.querySelector('.zt-back');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      if (window.__closeLeadModal && document.querySelector('.modal-overlay:not([hidden])')) {
+        window.__closeLeadModal();
+        return;
+      }
+      if (window.__closeLeadDrawer && document.querySelector('.drawer-overlay:not([hidden])')) {
+        window.__closeLeadDrawer();
+        return;
+      }
+      window.history.back();
+    });
   }
 
   const themeBtn = host.querySelector('.zt-theme-toggle');

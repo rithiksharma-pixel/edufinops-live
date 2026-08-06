@@ -32,14 +32,20 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   function toggleConsultancyField() {
     const show = isBdPartnership();
     consultancyField.hidden = !show;
-    // BD name is only meaningful for a BD Partnership lead, so it appears
-    // and disappears with the consultancy picker.
-    bdNameField.hidden = !show;
+
+    // BD name stays VISIBLE for every source. It used to appear only for a BD
+    // Partnership lead, which meant anyone filling the form for another source
+    // simply could not see the field and had no way to record who brought the
+    // lead in. It is still only REQUIRED for BD Partnership; the label says so.
+    const bdLabel = bdNameField.querySelector('label');
+    if (bdLabel) bdLabel.textContent = show ? 'BD name *' : 'BD name';
+
     if (!show) {
       consultancySelect.value = '';
       consultancyOtherInput.hidden = true;
       consultancyOtherInput.value = '';
-      bdNameInput.value = '';
+      // The typed BD name is deliberately NOT cleared here — switching source
+      // by mistake should not silently discard what someone already entered.
     }
   }
 
@@ -137,12 +143,14 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
       } else {
         consultancyId = consultancySelect.value;
       }
-      bdName = bdNameInput.value.trim();
-      if (!bdName) {
+      if (!bdNameInput.value.trim()) {
         showErrors({ bd_name: 'Enter the BD name for this lead.' });
         return;
       }
     }
+    // Captured for every source, not just BD Partnership — if someone took the
+    // trouble to name who sourced the lead, that belongs on the record.
+    bdName = bdNameInput.value.trim() || null;
 
     const submitBtn = document.getElementById('btnSubmitLead');
     submitBtn.disabled = true;

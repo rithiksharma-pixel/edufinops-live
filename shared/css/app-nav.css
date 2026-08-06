@@ -16,6 +16,19 @@
 }
 
 .zt-topbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; }
+
+/* ---------- Back ---------- */
+.zt-back {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0; margin-right: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm, 8px);
+  background: var(--bg-surface); color: var(--ink-700);
+  font-size: 13px; cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.zt-back:hover { background: var(--paper-sunken); color: var(--ink-900); border-color: var(--ink-300); }
+.zt-back:active { transform: translateY(1px); }
+.zt-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .zt-topbar-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 
 /* ---------- App switcher ---------- */
