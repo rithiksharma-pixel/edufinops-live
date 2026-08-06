@@ -148,12 +148,6 @@ function renderPager(total) {
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
-}
-
 /** Applies a filter set (from a Smart View tab or a URL deep-link) and syncs every filter-bar control to match. */
 function applyFilters(filters) {
   state.filters = { ...defaultFilters(), ...filters };
