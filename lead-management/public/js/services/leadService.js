@@ -17,6 +17,27 @@ const LEAD_LIST_SELECT = `
 `;
 
 /**
+ * Every column the "Date basis" filter may use. A whitelist, because the value
+ * is interpolated into a query as a column name — the <select> is a UI
+ * convenience, not a security boundary. Keep in sync with the dropdown in
+ * index.html and with lead_stage_counts()'s CASE in migration 045b.
+ */
+export const DATE_FIELDS = new Set([
+  'created_at', 'updated_at',
+  'login_date', 'sanction_date', 'pf_date', 'disbursed_date',
+]);
+
+/** Label for each, used in the active-filter trail above the table. */
+export const DATE_FIELD_LABELS = {
+  created_at: 'Created',
+  updated_at: 'Updated',
+  login_date: 'Login',
+  sanction_date: 'Sanction',
+  pf_date: 'PF',
+  disbursed_date: 'Disbursed',
+};
+
+/**
  * Applies the shared filter set (used by both listLeads and countLeads,
  * so a Smart View's tab count always matches what the list actually
  * shows once you click it) to a `leads` query builder in place.
@@ -37,12 +58,20 @@ function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, d
     if (s) query = query.or(`student_name.ilike.%${s}%,student_phone.ilike.%${s}%`);
   }
 
-  // Date-range filter. Whitelist the column so only the two intended
-  // timestamps can ever be filtered on. `dateTo` is inclusive of the whole
-  // selected day (end-of-day), so a From==To picks that single day.
-  const field = dateField === 'updated_at' ? 'updated_at' : 'created_at';
-  if (dateFrom) query = query.gte(field, `${dateFrom}T00:00:00`);
-  if (dateTo) query = query.lte(field, `${dateTo}T23:59:59.999`);
+  // Date-range filter. Still a whitelist — the value comes from a <select>,
+  // but it reaches a query builder, so it is never trusted as a column name.
+  //
+  // The four milestone columns are plain `date` on leads, denormalised from
+  // the per-deal detail tables by trigger (045). Timestamps need an
+  // end-of-day bound to make `To` inclusive; dates compare directly.
+  if (DATE_FIELDS.has(dateField) && dateField.endsWith('_date')) {
+    if (dateFrom) query = query.gte(dateField, dateFrom);
+    if (dateTo) query = query.lte(dateField, dateTo);
+  } else {
+    const field = dateField === 'updated_at' ? 'updated_at' : 'created_at';
+    if (dateFrom) query = query.gte(field, `${dateFrom}T00:00:00`);
+    if (dateTo) query = query.lte(field, `${dateTo}T23:59:59.999`);
+  }
 
   return query;
 }
@@ -124,7 +153,7 @@ export async function getStageCounts(filters = {}) {
     // Mirrors applyLeadFilters: the same characters are stripped so a phone
     // typed as "(555) 123-4567" behaves identically in both paths.
     p_search: (filters.search || '').replace(/[,()"\\%_]/g, ' ').trim() || null,
-    p_date_field: filters.dateField === 'updated_at' ? 'updated_at' : 'created_at',
+    p_date_field: DATE_FIELDS.has(filters.dateField) ? filters.dateField : 'created_at',
     p_date_from: filters.dateFrom || null,
     p_date_to: filters.dateTo || null,
   });

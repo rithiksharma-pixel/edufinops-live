@@ -7,7 +7,7 @@ import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
-import { listLeads, getStageCounts, LEAD_PAGE_SIZE } from './services/leadService.js';
+import { listLeads, getStageCounts, LEAD_PAGE_SIZE, DATE_FIELD_LABELS } from './services/leadService.js';
 import { getLeadStages, getLeadSources, getAssignableRms } from './services/lookupService.js';
 import { renderLeadTable } from './components/leadTable.js';
 import { renderFunnelCards } from './components/funnelCards.js';
@@ -112,7 +112,7 @@ function renderResultCount(total, shown) {
   if (f.overdueOnly) bits.push('Overdue only');
   if (f.search) bits.push(`Search: "${f.search}"`);
   if (f.dateFrom || f.dateTo) {
-    const label = f.dateField === 'updated_at' ? 'Updated' : 'Created';
+    const label = DATE_FIELD_LABELS[f.dateField] || 'Created';
     bits.push(`${label} ${f.dateFrom || '…'} → ${f.dateTo || '…'}`);
   }
 
