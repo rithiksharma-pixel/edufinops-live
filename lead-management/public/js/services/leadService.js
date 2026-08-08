@@ -387,6 +387,23 @@ export async function assignLeadToRm(leadId, newRmId, reason) {
   if (error) throw error;
 }
 
+/**
+ * Assigns many leads in one call. The RPC loops assign_lead() internally, so
+ * each lead still gets its lead_assignments row and 'Reassigned' timeline
+ * event — identical audit trail to assigning them one by one, without 385
+ * sequential round trips from the browser.
+ * @returns {Promise<number>} how many were assigned
+ */
+export async function assignLeadsBulk(leadIds, newRmId, reason) {
+  const { data, error } = await supabase.rpc('assign_leads_bulk', {
+    p_lead_ids: leadIds,
+    p_new_rm_id: newRmId,
+    p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
 export async function getLostReasons() {
   const { data, error } = await supabase
     .from('lead_lost_reasons')

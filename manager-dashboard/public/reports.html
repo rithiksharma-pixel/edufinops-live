@@ -41,7 +41,18 @@
 
       <section class="filter-bar" style="margin-bottom:18px;">
         <div class="filter-field">
-          <label for="repFrom">Leads created from</label>
+          <label for="repDateField">Date basis</label>
+          <select id="repDateField" style="min-width:150px;">
+            <option value="created_at">Created date</option>
+            <option value="updated_at">Last modified</option>
+            <option value="login_date">Login date</option>
+            <option value="sanction_date">Sanction date</option>
+            <option value="pf_date">PF date</option>
+            <option value="disbursed_date">Disbursement date</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="repFrom">From</label>
           <input type="date" id="repFrom" />
         </div>
         <div class="filter-field">

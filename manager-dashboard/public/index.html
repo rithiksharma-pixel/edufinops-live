@@ -58,17 +58,6 @@
         <div id="milestoneCounts"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
       </section>
 
-      <section class="table-card" style="margin-bottom:22px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 0;">
-          <h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Unassigned leads</h3>
-          <span class="badge badge-warning" id="unassignedOverdueBadge" hidden></span>
-        </div>
-        <table class="data-table">
-          <thead><tr><th>Student</th><th>Source</th><th>Loan amount</th><th>Waiting</th><th>Assign to RM</th></tr></thead>
-          <tbody id="unassignedLeadsBody"><tr><td colspan="5"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
-        </table>
-      </section>
-
       <div class="grid-two" style="margin-bottom:22px;">
         <section class="chart-card">
           <h3>Needs attention</h3>
@@ -105,12 +94,38 @@
       </section>
 
       <section class="table-card">
-        <h3 class="section-title" style="padding:16px 20px 0;font-size:14px;font-weight:500;">RM performance</h3>
-        <table class="data-table">
-          <thead><tr><th>RM</th><th>Assigned leads</th><th>Overdue follow-ups</th><th>Deals</th><th>Disbursed (Closed Won)</th><th>Calls this week</th><th>Connect rate</th></tr></thead>
-          <tbody id="rmPerformanceBody"><tr><td colspan="7" class="empty-state">Loading…</td></tr></tbody>
-        </table>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px 0;">
+          <h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Performance</h3>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="period-toggle" id="perfPeriod">
+              <button data-period="day">Day</button>
+              <button data-period="week">Week</button>
+              <button data-period="month">Month</button>
+              <button data-period="all" class="active">Overall</button>
+            </div>
+            <select class="trend-select" id="perfGroupBy">
+              <option value="owner">By owner</option>
+              <option value="team">By team</option>
+              <option value="manager">By manager</option>
+            </select>
+            <button class="btn btn-ghost" id="btnPerfCsv"><i class="fa-solid fa-file-arrow-down"></i> CSV</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead><tr>
+              <th id="perfGroupHeader">RM</th>
+              <th class="num">Leads</th><th class="num">Logins</th><th class="num">Sanctions</th>
+              <th class="num">PF</th><th class="num">Disbursed</th><th class="num">Disbursed value</th>
+              <th class="num">Referrals</th><th class="num">PF from referrals</th>
+              <th class="num">Overdue</th><th class="num">Calls (wk)</th><th class="num">Connect</th>
+            </tr></thead>
+            <tbody id="rmPerformanceBody"><tr><td colspan="12" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </section>
+
+
 
       <div class="grid-two" style="margin-top:22px;">
         <section class="chart-card">
@@ -122,6 +137,28 @@
           <div id="tatWorstOffenders"></div>
         </section>
       </div>
+
+      <!-- Moved to the bottom: it is a housekeeping queue, not the headline.
+           Bulk assign is Admin/Manager only, enforced by assign_leads_bulk(). -->
+      <section class="table-card" id="unassignedSection" style="margin-top:22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px 0;">
+          <h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Unassigned leads</h3>
+          <span class="badge badge-warning" id="unassignedOverdueBadge" hidden></span>
+        </div>
+        <div class="bulk-bar" id="unassignedBulkBar" hidden>
+          <span class="bulk-count" id="bulkCount">0 selected</span>
+          <select id="bulkRmSelect"><option value="">Assign all selected to…</option></select>
+          <button class="btn btn-primary" id="btnBulkAssign">Assign</button>
+          <button class="btn btn-ghost" id="btnBulkClear">Clear</button>
+        </div>
+        <table class="data-table">
+          <thead><tr>
+            <th style="width:34px;"><input type="checkbox" id="bulkSelectAll" aria-label="Select all on this page" /></th>
+            <th>Student</th><th>Source</th><th>Loan amount</th><th>Waiting</th><th>Assign to RM</th>
+          </tr></thead>
+          <tbody id="unassignedLeadsBody"><tr><td colspan="6"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
+        </table>
+      </section>
     </main>
   </div>
 

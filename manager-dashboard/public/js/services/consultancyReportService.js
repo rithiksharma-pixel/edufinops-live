@@ -12,10 +12,17 @@ import { supabase } from '../config/supabaseClient.js';
  * One row per consultancy for the given window (null = all time).
  * @returns {Promise<Array>} ordered by total_leads desc, as the RPC returns it
  */
-export async function getConsultancyReport(from = null, to = null) {
+export const REPORT_DATE_FIELDS = {
+  created_at: 'Created', updated_at: 'Last modified', login_date: 'Login',
+  sanction_date: 'Sanction', pf_date: 'PF', disbursed_date: 'Disbursement',
+};
+
+export async function getConsultancyReport(from = null, to = null, dateField = 'created_at') {
   const { data, error } = await supabase.rpc('consultancy_report', {
     p_from: from || null,
     p_to: to || null,
+    // Whitelisted client-side too, so a stale value can never reach the RPC.
+    p_date_field: REPORT_DATE_FIELDS[dateField] ? dateField : 'created_at',
   });
   if (error) throw error;
   return data ?? [];
@@ -27,12 +34,13 @@ export async function getConsultancyReport(from = null, to = null) {
  * `consultancy_other_name` has no id, so it is matched by name instead —
  * which is why both arguments exist and exactly one is populated.
  */
-export async function getConsultancyLeads(row, from = null, to = null) {
+export async function getConsultancyLeads(row, from = null, to = null, dateField = 'created_at') {
   const { data, error } = await supabase.rpc('consultancy_lead_detail', {
     p_consultancy_id: row.consultancy_id || null,
     p_consultancy_name: row.consultancy_id ? null : row.consultancy_name,
     p_from: from || null,
     p_to: to || null,
+    p_date_field: REPORT_DATE_FIELDS[dateField] ? dateField : 'created_at',
   });
   if (error) throw error;
   return data ?? [];
@@ -104,9 +112,13 @@ const showPct = (v) => (v === null ? '–' : `${v}%`);
  * so it states what the numbers mean and where they are weak rather than
  * presenting them as more solid than they are.
  */
-export function buildPartnerReportHtml(row, leads, { from, to, generatedOn } = {}) {
+export function buildPartnerReportHtml(row, leads, { from, to, generatedOn, basis } = {}) {
   const c = conversionRates(row);
-  const range = from || to ? `Leads created ${from || 'any time'} to ${to || 'today'}` : 'All leads, all time';
+  // Name the basis: "leads created in August" and "leads that logged in during
+  // August" are different questions with different answers.
+  const range = from || to
+    ? `${basis || 'Created'} date ${from || 'any time'} to ${to || 'today'}`
+    : 'All leads, all time';
 
   const funnel = [
     ['Leads received', row.total_leads],

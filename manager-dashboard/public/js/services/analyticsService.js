@@ -41,39 +41,65 @@ export async function getTeamFunnel() {
     .map(([name, count]) => ({ name, count }));
 }
 
-export async function getRmPerformance() {
-  // Both paged — per-RM lead counts and disbursed totals were computed from
-  // at most the first 1000 rows, so every RM's numbers were understated.
-  const leads = await fetchAll(
-    () => supabase
-      .from('leads')
-      .select('id, assigned_rm_id, loan_amount_requested, next_follow_up_at, assigned_rm:users!leads_assigned_rm_id_fkey(full_name)')
-      .eq('is_deleted', false)
-      .not('assigned_rm_id', 'is', null)
-  );
+/** Grouping options for the performance table. */
+export const PERF_GROUPS = { owner: 'RM', team: 'Team', manager: 'Manager' };
 
-  const deals = await fetchAll(
-    () => supabase
-      .from('deals')
-      .select('id, total_disbursed_amount, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name), leads!inner(assigned_rm_id)')
-      .eq('is_deleted', false)
-  );
-
-  const byRm = {};
-  leads.forEach((l) => {
-    const rmId = l.assigned_rm_id;
-    if (!byRm[rmId]) byRm[rmId] = { id: rmId, name: l.assigned_rm?.full_name || 'Unknown', leadCount: 0, overdueCount: 0, disbursedAmount: 0, dealCount: 0 };
-    byRm[rmId].leadCount += 1;
-    if (l.next_follow_up_at && new Date(l.next_follow_up_at) < new Date()) byRm[rmId].overdueCount += 1;
+/**
+ * Performance per owner / team / manager for a date window.
+ *
+ * One RPC. This used to pull EVERY lead and EVERY deal into the browser and
+ * reduce them client-side — two paged fetches, 24+ sequential round trips, to
+ * produce about thirty rows.
+ *
+ * Each metric counts against its OWN date: leads by created_at, logins by
+ * login_date, sanctions by sanction_date and so on. "Logins this week" means
+ * leads that logged in this week, not leads created this week that happen to
+ * have a login. Overdue is a right-now measure and ignores the window.
+ *
+ * @param {?string} from ISO date, null for all time
+ * @param {?string} to   ISO date, inclusive
+ * @param {'owner'|'team'|'manager'} groupBy
+ */
+export async function getRmPerformance(from = null, to = null, groupBy = 'owner') {
+  const { data, error } = await supabase.rpc('rm_performance', {
+    p_from: from || null,
+    p_to: to || null,
+    p_group_by: PERF_GROUPS[groupBy] ? groupBy : 'owner',
   });
-  deals.forEach((d) => {
-    const rmId = d.leads?.assigned_rm_id;
-    if (!rmId || !byRm[rmId]) return;
-    byRm[rmId].dealCount += 1;
-    if (d.current_deal_stage?.name === 'Closed Won') byRm[rmId].disbursedAmount += Number(d.total_disbursed_amount || 0);
-  });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.group_id,
+    name: r.group_name,
+    leadCount: Number(r.leads),
+    overdueCount: Number(r.overdue),
+    logins: Number(r.logins),
+    sanctions: Number(r.sanctions),
+    pf: Number(r.pf),
+    disbursed: Number(r.disbursed),
+    disbursedAmount: Number(r.disbursed_amount),
+    referrals: Number(r.referrals),
+    pfFromReferrals: Number(r.pf_from_referrals),
+  }));
+}
 
-  return Object.values(byRm).sort((a, b) => b.leadCount - a.leadCount);
+/**
+ * Start/end for the period pills. `all` returns nulls, which the RPC reads as
+ * "no bound" rather than as a zero-length window.
+ */
+export function periodRange(period) {
+  // Formatted from LOCAL date parts, not toISOString(). toISOString() converts
+  // to UTC first, so local midnight on 1 August in IST (UTC+5:30) becomes
+  // 31 July 18:30Z and the month silently starts a day early — every
+  // "this month" number would have quietly included the previous day.
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = new Date();
+  if (period === 'day') return { from: iso(today), to: iso(today) };
+  if (period === 'week') return { from: iso(startOfWeek()), to: iso(today) };
+  if (period === 'month') {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { from: iso(first), to: iso(today) };
+  }
+  return { from: null, to: null };
 }
 
 // Calendar week starting Monday 00:00 local time — duplicated per app

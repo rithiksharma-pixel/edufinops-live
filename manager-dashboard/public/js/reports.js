@@ -15,10 +15,10 @@ import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 import {
   getConsultancyReport, getConsultancyLeads, conversionRates, toCsv,
-  downloadText, buildPartnerReportHtml,
+  downloadText, buildPartnerReportHtml, REPORT_DATE_FIELDS,
 } from './services/consultancyReportService.js';
 
-const state = { rows: [], from: '', to: '', consultancy: '', min: 0 };
+const state = { rows: [], from: '', to: '', consultancy: '', min: 0, dateField: 'created_at' };
 
 const n = (v) => Number(v || 0).toLocaleString('en-IN');
 const pct = (v) => (v === null ? '–' : `${v}%`);
@@ -114,7 +114,7 @@ function render() {
   document.getElementById('repCount').innerHTML =
     `<strong>${n(rows.length)}</strong> ${rows.length === 1 ? 'consultancy' : 'consultancies'}`
     + `<span class="lead-count-filters"> · ${n(rows.reduce((s, r) => s + Number(r.total_leads), 0))} leads`
-    + (state.from || state.to ? ` · created ${state.from || '…'} → ${state.to || '…'}` : '')
+    + (state.from || state.to ? ` · ${REPORT_DATE_FIELDS[state.dateField]} ${state.from || '…'} → ${state.to || '…'}` : '')
     + (state.consultancy ? ` · ${escapeHtml(state.consultancy)}` : '')
     + '</span>';
 
@@ -229,7 +229,7 @@ async function openDetail(row) {
   });
   btnReport.addEventListener('click', () => {
     const html = buildPartnerReportHtml(row, leads, {
-      from: state.from, to: state.to,
+      from: state.from, to: state.to, basis: REPORT_DATE_FIELDS[state.dateField],
       generatedOn: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
     });
     downloadText(html, `${slug(row.consultancy_name)}-report.html`);
@@ -237,7 +237,7 @@ async function openDetail(row) {
   });
 
   try {
-    leads = await getConsultancyLeads(row, state.from, state.to);
+    leads = await getConsultancyLeads(row, state.from, state.to, state.dateField);
   } catch (err) {
     console.error('consultancy lead detail failed', err);
     document.getElementById('repLeads').innerHTML =
@@ -278,7 +278,7 @@ async function load() {
   const body = document.getElementById('repBody');
   body.innerHTML = '<tr><td colspan="11"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>';
   try {
-    state.rows = await getConsultancyReport(state.from, state.to);
+    state.rows = await getConsultancyReport(state.from, state.to, state.dateField);
     populateConsultancyDropdown();
     render();
   } catch (err) {
@@ -307,12 +307,14 @@ async function bootstrap() {
   document.getElementById('dataNote').innerHTML =
     '<i class="fa-solid fa-circle-info"></i> <span>Funnel counts are by <strong>current</strong> stage — a lead that reached Login and was later lost counts only under Lost, because the imported book carries no stage history. <strong>Sanctioned and disbursed amounts are near-zero</strong> until lender deals exist for the imported leads. Ageing is measured from last activity, which for untouched imported leads is the 30 July import date.</span>';
 
+  document.getElementById('repDateField').addEventListener('change', (e) => { state.dateField = e.target.value; load(); });
   document.getElementById('repFrom').addEventListener('change', (e) => { state.from = e.target.value; load(); });
   document.getElementById('repTo').addEventListener('change', (e) => { state.to = e.target.value; load(); });
   document.getElementById('repConsultancy').addEventListener('change', (e) => { state.consultancy = e.target.value; render(); });
   document.getElementById('repMin').addEventListener('input', (e) => { state.min = Number(e.target.value) || 0; render(); });
   document.getElementById('repClear').addEventListener('click', () => {
-    state.from = ''; state.to = ''; state.consultancy = ''; state.min = 0;
+    state.from = ''; state.to = ''; state.consultancy = ''; state.min = 0; state.dateField = 'created_at';
+    document.getElementById('repDateField').value = 'created_at';
     document.getElementById('repFrom').value = '';
     document.getElementById('repTo').value = '';
     document.getElementById('repConsultancy').value = '';

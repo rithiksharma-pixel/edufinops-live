@@ -186,3 +186,21 @@
 @media (max-width: 720px) {
   .filter-actions { margin-left: 0; width: 100%; }
 }
+
+/* ---------- Bulk assign bar (Unassigned leads) ---------- */
+.bulk-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 12px 20px 0; padding: 10px 14px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-sm);
+}
+.bulk-bar .bulk-count { font-size: 13px; font-weight: 600; color: var(--ink-900); }
+.bulk-bar select {
+  padding: 7px 10px; font: inherit; font-size: 13px; min-width: 210px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--ink-900);
+}
+.data-table input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+/* Right-align numeric columns and keep digits from jittering between periods. */
+.data-table .num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -3,7 +3,7 @@ import { mountTopbar } from '../../../shared/js/appNav.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
-import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis, PERF_GROUPS, periodRange } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
@@ -14,7 +14,7 @@ import { supabase } from './config/supabaseClient.js';
 // already has the correct RLS/audit-trail behavior (writes lead_assignments
 // + lead_events), and getAssignableRms is already scoped to "my team" by
 // the users table's own RLS. Nothing new is reimplemented here.
-import { assignLeadToRm } from '../../../lead-management/public/js/services/leadService.js';
+import { assignLeadToRm, assignLeadsBulk } from '../../../lead-management/public/js/services/leadService.js';
 import { getAssignableRms } from '../../../lead-management/public/js/services/lookupService.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
@@ -62,36 +62,98 @@ async function renderFunnelChart() {
   });
 }
 
+const perfState = { period: 'all', groupBy: 'owner', rows: [] };
+
 async function renderRmPerformance() {
-  const [perf, callStats] = await Promise.all([getRmPerformance(), getRmCallStats()]);
   const tbody = document.getElementById('rmPerformanceBody');
-  if (perf.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7">${emptyState('fa-people-group', 'No RMs with assigned leads yet', 'Performance will show up here once leads are assigned to your team.')}</td></tr>`;
+  const { from, to } = periodRange(perfState.period);
+
+  // Call stats are per USER, so they only line up when grouping by owner.
+  // Showing one RM's call count against a whole team's row would be a lie,
+  // so those two columns blank out for team/manager rather than mislead.
+  const byOwner = perfState.groupBy === 'owner';
+  let perf; let callStats = {};
+  try {
+    [perf, callStats] = await Promise.all([
+      getRmPerformance(from, to, perfState.groupBy),
+      byOwner ? getRmCallStats() : Promise.resolve({}),
+    ]);
+  } catch (err) {
+    console.error('performance failed', err);
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Could not load performance.<br>
+      <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
-  tbody.innerHTML = perf.map((rm) => {
-    const calls = callStats[rm.id] || { callCount: 0, connectedCount: 0 };
+
+  perfState.rows = perf;
+  document.getElementById('perfGroupHeader').textContent = PERF_GROUPS[perfState.groupBy];
+
+  if (perf.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="12">${emptyState('fa-people-group', 'Nothing in this period', 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
+    return;
+  }
+
+  const n = (v) => Number(v || 0).toLocaleString('en-IN');
+  tbody.innerHTML = perf.map((r) => {
+    const calls = callStats[r.id] || { callCount: 0, connectedCount: 0 };
     const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
     return `
-    <tr data-rm-id="${rm.id}" style="cursor:pointer;" title="Open ${escapeHtml(rm.name)}'s leads in Lead Management">
-      <td><strong>${escapeHtml(rm.name)}</strong></td>
-      <td>${rm.leadCount}</td>
-      <td>${rm.overdueCount > 0 ? `<span class="badge badge-danger">${rm.overdueCount}</span>` : '0'}</td>
-      <td>${rm.dealCount}</td>
-      <td>${formatCurrency(rm.disbursedAmount)}</td>
-      <td>${calls.callCount}</td>
-      <td>${connectRate}</td>
-    </tr>
-  `;
+    <tr ${byOwner ? `data-rm-id="${r.id}" style="cursor:pointer;" title="Open ${escapeHtml(r.name)}'s leads in Lead Management"` : ''}>
+      <td><strong>${escapeHtml(r.name)}</strong></td>
+      <td class="num">${n(r.leadCount)}</td>
+      <td class="num">${n(r.logins)}</td>
+      <td class="num">${n(r.sanctions)}</td>
+      <td class="num">${n(r.pf)}</td>
+      <td class="num">${n(r.disbursed)}</td>
+      <td class="num">${r.disbursedAmount ? formatCurrency(r.disbursedAmount) : '–'}</td>
+      <td class="num">${n(r.referrals)}</td>
+      <td class="num">${n(r.pfFromReferrals)}</td>
+      <td class="num">${r.overdueCount > 0 ? `<span class="badge badge-danger">${n(r.overdueCount)}</span>` : '0'}</td>
+      <td class="num">${byOwner ? n(calls.callCount) : '–'}</td>
+      <td class="num">${byOwner ? connectRate : '–'}</td>
+    </tr>`;
   }).join('');
 
-  // An RM row is an aggregate (many leads), not one lead — opens the full
-  // filtered list in Lead Management (new tab, so the dashboard stays put)
-  // rather than the single-lead drawer.
+  // A row is an aggregate (many leads), not one lead — opens the filtered list
+  // in Lead Management in a new tab rather than the single-lead drawer. Only
+  // meaningful per owner, since that is the filter Lead Management accepts.
   tbody.querySelectorAll('[data-rm-id]').forEach((row) => {
     row.addEventListener('click', () => {
       window.open(`../../lead-management/public/index.html?rmId=${row.dataset.rmId}`, '_blank');
     });
+  });
+}
+
+function wirePerformanceControls() {
+  const pills = document.getElementById('perfPeriod');
+  pills?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-period]');
+    if (!btn) return;
+    pills.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    perfState.period = btn.dataset.period;
+    renderRmPerformance();
+  });
+
+  document.getElementById('perfGroupBy')?.addEventListener('change', (e) => {
+    perfState.groupBy = e.target.value;
+    renderRmPerformance();
+  });
+
+  document.getElementById('btnPerfCsv')?.addEventListener('click', () => {
+    const cols = [
+      [PERF_GROUPS[perfState.groupBy], (r) => r.name],
+      ['Leads', (r) => r.leadCount], ['Logins', (r) => r.logins],
+      ['Sanctions', (r) => r.sanctions], ['PF', (r) => r.pf],
+      ['Disbursed', (r) => r.disbursed], ['Disbursed value', (r) => r.disbursedAmount],
+      ['Referrals', (r) => r.referrals], ['PF from referrals', (r) => r.pfFromReferrals],
+      ['Overdue follow-ups', (r) => r.overdueCount],
+    ];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.map((c) => esc(c[0])).join(',')]
+      .concat(perfState.rows.map((r) => cols.map((c) => esc(c[1](r))).join(',')))
+      .join('\n');
+    downloadCsv(csv, `performance-${perfState.groupBy}-${perfState.period}.csv`);
+    showToast(`Exported ${perfState.rows.length} rows`);
   });
 }
 
@@ -125,7 +187,8 @@ async function renderUnassignedLeads() {
   }
 
   if (leads.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5">${emptyState('fa-circle-check', 'All caught up', 'Every new lead has been handed off to an RM.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6">${emptyState('fa-circle-check', 'All caught up', 'Every new lead has been handed off to an RM.')}</td></tr>`;
+    document.getElementById('unassignedBulkBar').hidden = true;
     return;
   }
 
@@ -138,6 +201,7 @@ async function renderUnassignedLeads() {
       : escapeHtml(formatWaiting(l.created_at));
     return `
     <tr>
+      <td><input type="checkbox" class="bulk-check" data-lead-id="${l.id}" aria-label="Select ${escapeHtml(l.student_name)}" /></td>
       <td><strong>${escapeHtml(l.student_name)}</strong></td>
       <td>${escapeHtml(leadSourceLabel(l))}</td>
       <td class="amount">${formatCurrency(l.loan_amount_requested)}</td>
@@ -183,6 +247,79 @@ async function renderUnassignedLeads() {
       }
     });
   });
+
+  wireBulkAssign(tbody, rmOptions);
+}
+
+/**
+ * Bulk assign. One assign_leads_bulk() call rather than a loop of single
+ * assigns from the browser — 385 sequential round trips would take minutes and
+ * leave a half-assigned queue if the tab closed. The RPC still calls
+ * assign_lead() per row internally, so every lead keeps its lead_assignments
+ * row and its 'Reassigned' timeline event.
+ */
+function wireBulkAssign(tbody, rmOptions) {
+  const bar = document.getElementById('unassignedBulkBar');
+  const countEl = document.getElementById('bulkCount');
+  const select = document.getElementById('bulkRmSelect');
+  const selectAll = document.getElementById('bulkSelectAll');
+  if (!bar || !select) return;
+
+  if (select.options.length <= 1) {
+    select.insertAdjacentHTML('beforeend', rmOptions);
+  }
+
+  const checks = () => [...tbody.querySelectorAll('.bulk-check')];
+  const selected = () => checks().filter((c) => c.checked).map((c) => c.dataset.leadId);
+
+  function sync() {
+    const ids = selected();
+    bar.hidden = ids.length === 0;
+    countEl.textContent = `${ids.length} selected`;
+    if (selectAll) {
+      selectAll.checked = ids.length > 0 && ids.length === checks().length;
+      selectAll.indeterminate = ids.length > 0 && ids.length < checks().length;
+    }
+  }
+
+  checks().forEach((c) => c.addEventListener('change', sync));
+  selectAll?.addEventListener('change', () => {
+    checks().forEach((c) => { c.checked = selectAll.checked; });
+    sync();
+  });
+  document.getElementById('btnBulkClear')?.addEventListener('click', () => {
+    checks().forEach((c) => { c.checked = false; });
+    sync();
+  });
+
+  const btn = document.getElementById('btnBulkAssign');
+  btn?.addEventListener('click', async () => {
+    const ids = selected();
+    const rmId = select.value;
+    if (!ids.length) return;
+    if (!rmId) { showToast('Choose who to assign these to.', true); return; }
+
+    const name = select.options[select.selectedIndex]?.text || 'that RM';
+    // Reassigning someone else's book is not obviously reversible, so make the
+    // scale of it explicit before it happens.
+    if (!window.confirm(`Assign ${ids.length} lead${ids.length === 1 ? '' : 's'} to ${name}?`)) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Assigning…';
+    try {
+      const count = await assignLeadsBulk(ids, rmId, 'Bulk assigned from Manager Dashboard');
+      showToast(`${count} lead${count === 1 ? '' : 's'} assigned to ${name}.`);
+      await renderUnassignedLeads();
+    } catch (err) {
+      console.error('bulk assign failed', err);
+      showToast(err?.message || 'Could not assign those leads.', true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Assign';
+    }
+  });
+
+  sync();
 }
 
 async function renderAttentionList() {
@@ -417,6 +554,7 @@ async function bootstrap() {
     if (e.key === 'Escape' && window.__closeLeadDrawer) window.__closeLeadDrawer();
   });
 
+  wirePerformanceControls();
   await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 
