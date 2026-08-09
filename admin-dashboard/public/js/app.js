@@ -1,6 +1,7 @@
 import { supabase } from './config/supabaseClient.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
+import { escapeHtml } from '../../../shared/js/utils.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
 // only place calls are actually logged) — imported rather than
@@ -601,9 +602,9 @@ async function loadSettings() {
     });
   });
 }
-async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'insights') await loadInsights(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
-function changeView(view) { activeView = view; if (view === 'team-performance') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], reports: ['Reports', 'Export and review business performance.'], insights: ['Insights', 'Day-over-day, week-over-week, and month-over-month trends.'], 'team-performance': ['Team performance', 'Overall, team-wise, and RM-wise breakdowns.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
-document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'team-performance') teamPerfData = null; loadActive(); }); $('documentStatus').addEventListener('change', loadDocuments); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
+async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'analytics') await loadAnalytics(); if (activeView === 'smart-views') await loadSmartViews(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
+function changeView(view) { activeView = view; if (view === 'analytics') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], analytics: ['Analytics', 'Reports, trends and team performance in one place.'], 'smart-views': ['Smart views', 'Saved filter presets, shared with the team.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
+document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'analytics') teamPerfData = null; loadActive(); }); $('documentStatus').addEventListener('change', loadDocuments); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
 $('lenderBranchForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('lender_branches').insert({ lender_id: form.get('lender_id'), name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Branch added.'); loadSettings(); });
@@ -615,3 +616,124 @@ requireAdmin().then((user) => {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && window.__closeLeadDrawer) window.__closeLeadDrawer(); });
   return loadActive();
 }).catch((error) => { document.body.innerHTML = `<main style="padding:48px;font-family:Inter,sans-serif"><h1>Access unavailable</h1><p>${esc(error.message)}</p><a href="../../authentication/public/login.html">Go to sign in</a></main>`; });
+
+
+// =========================================================
+// ANALYTICS — Reports, Insights and Team Performance were three separate
+// sidebar entries for what is one question ("how are we doing"). They are now
+// sub-tabs of one view. Each sub-tab still loads only when it is opened, so
+// merging them did not make the page heavier.
+// =========================================================
+let activeSubview = 'reports';
+
+async function loadAnalytics() {
+  if (activeSubview === 'reports') return loadReports();
+  if (activeSubview === 'insights') return loadInsights();
+  if (activeSubview === 'team-performance') return loadTeamPerformance();
+}
+
+document.querySelectorAll('.subtab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    activeSubview = btn.dataset.subtab;
+    document.querySelectorAll('.subtab').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.subview').forEach((panel) => {
+      panel.hidden = panel.dataset.subview !== activeSubview;
+    });
+    loadAnalytics();
+  });
+});
+
+// =========================================================
+// SMART VIEWS — saved filter presets.
+//
+// A view published here is written with is_shared, which the RLS policy only
+// permits for an Admin or Manager (048). Everyone can READ shared views, so
+// they turn up as tabs in Lead Management for the whole team; a private view
+// stays with its owner.
+// =========================================================
+const SV_FIELDS = ['stageId', 'sourceId', 'rmId', 'priority', 'dateField', 'dateFrom', 'dateTo'];
+
+async function loadSmartViews() {
+  const form = $('smartViewForm');
+
+  // Populate the pickers once, from the same tables Lead Management filters on.
+  if (!form.dataset.ready) {
+    const [stages, sources, rms] = await Promise.all([
+      supabase.from('lead_stages').select('id, name').eq('is_deleted', false).order('sequence_order'),
+      supabase.from('lead_sources').select('id, name').eq('is_deleted', false).order('name'),
+      supabase.from('users').select('id, full_name, roles!inner(name)').eq('is_active', true).eq('is_deleted', false).order('full_name'),
+    ]);
+    const fill = (sel, rows, label) => {
+      if (!rows?.data) return;
+      sel.insertAdjacentHTML('beforeend', rows.data
+        .map((r) => `<option value="${r.id}">${escapeHtml(r[label])}</option>`).join(''));
+    };
+    fill(form.stageId, stages, 'name');
+    fill(form.sourceId, sources, 'name');
+    fill(form.rmId, { data: (rms.data || []).filter((u) => u.roles?.name === 'Relationship Manager') }, 'full_name');
+    form.dataset.ready = '1';
+  }
+
+  await renderSmartViewList();
+}
+
+async function renderSmartViewList() {
+  const host = $('smartViewList');
+  const { data, error } = await supabase
+    .from('saved_views')
+    .select('id, name, filters, is_shared, user_id')
+    .eq('is_deleted', false)
+    .order('is_shared', { ascending: false })
+    .order('name');
+  if (error) { host.innerHTML = `<p class="empty-state">${escapeHtml(error.message)}</p>`; return; }
+  if (!data.length) { host.innerHTML = '<p class="empty-state">No views yet. Create one on the left.</p>'; return; }
+
+  host.innerHTML = data.map((v) => {
+    // Show what the view actually filters on, so a name like "Hot" is not the
+    // only clue about what it does.
+    const f = v.filters || {};
+    const bits = Object.entries(f)
+      .filter(([, val]) => val !== '' && val !== false && val != null)
+      .map(([k]) => k)
+      .join(', ') || 'no filters';
+    return `<div class="sv-row">
+      <div><strong>${escapeHtml(v.name)}</strong>
+        ${v.is_shared ? '<span class="badge">shared</span>' : '<span class="badge">private</span>'}
+        <div class="sv-meta">${escapeHtml(bits)}</div></div>
+      <button class="btn btn-ghost" data-sv-delete="${v.id}">Delete</button>
+    </div>`;
+  }).join('');
+
+  host.querySelectorAll('[data-sv-delete]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!window.confirm('Delete this view? Anyone using it will lose the tab.')) return;
+      const { error: delErr } = await supabase.from('saved_views')
+        .update({ is_deleted: true }).eq('id', btn.dataset.svDelete);
+      if (delErr) return showToast(delErr.message, true);
+      showToast('View deleted.');
+      renderSmartViewList();
+    });
+  });
+}
+
+$('smartViewForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const filters = {};
+  SV_FIELDS.forEach((k) => { if (form[k]?.value) filters[k] = form[k].value; });
+  if (form.overdueOnly.checked) filters.overdueOnly = true;
+
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from('saved_views').insert({
+    user_id: auth.user.id,
+    name: form.name.value.trim(),
+    filters,
+    is_shared: form.isShared.checked,
+  });
+  // The RLS policy is what actually enforces "only Admin/Manager may publish",
+  // so surface its refusal rather than pretending the checkbox was advisory.
+  if (error) return showToast(error.message, true);
+  form.reset();
+  showToast(form.isShared.checked ? 'View published to the team.' : 'View saved.');
+  renderSmartViewList();
+});

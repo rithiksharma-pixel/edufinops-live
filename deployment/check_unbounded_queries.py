@@ -59,6 +59,8 @@ REVIEWED_SAFE = {
     'lead-management/public/js/services/lenderStatusService.js:v_deal_tat',          # .eq('lead_id')
     'lead-management/public/js/services/callIntelligenceService.js:call_recordings',       # .eq('lead_id')
     'lead-management/public/js/services/callIntelligenceService.js:call_field_suggestions', # .eq('lead_id') + status
+    'admin-dashboard/public/js/app.js:users',        # smart-view RM picker; bounded by staff headcount (41)
+    'admin-dashboard/public/js/app.js:saved_views',  # own + shared views only, a handful per user
 }
 
 BOUNDED_MARKERS = ('.range(', '.limit(', 'head: true', 'head:true',
