@@ -58,16 +58,21 @@
         <div id="milestoneCounts"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
       </section>
 
-      <div class="grid-two" style="margin-bottom:22px;">
-        <section class="chart-card">
-          <h3>Needs attention</h3>
-          <div id="attentionList"></div>
-        </section>
-        <section class="chart-card">
-          <h3>By lender</h3>
-          <div id="lenderBreakdown"></div>
-        </section>
-      </div>
+      <section class="chart-card" style="margin-bottom:22px;">
+        <h3>By lender</h3>
+        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">Where each bank's deals currently sit. Declines are Credit and Student decline combined.</p>
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="lenderTable">
+            <thead><tr>
+              <th>Lender</th>
+              <th class="num">Bank Prospect</th><th class="num">Login</th><th class="num">Sanction</th>
+              <th class="num">PF Paid</th><th class="num">Disbursement</th><th class="num">Declined</th>
+              <th class="num">Total</th><th class="num">Disbursed value</th>
+            </tr></thead>
+            <tbody id="lenderBreakdown"><tr><td colspan="9"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="chart-card">
         <h3>Funnel — leads by stage</h3>

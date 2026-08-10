@@ -3,7 +3,7 @@ import { mountTopbar } from '../../../shared/js/appNav.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
-import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getAttentionSummary, getTatAnalysis, PERF_GROUPS, periodRange } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getTatAnalysis, PERF_GROUPS, periodRange } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
@@ -322,42 +322,44 @@ function wireBulkAssign(tbody, rmOptions) {
   sync();
 }
 
-async function renderAttentionList() {
-  const summary = await getAttentionSummary();
-  const container = document.getElementById('attentionList');
-  const rowAttr = (leadId) => (leadId ? ` data-lead-id="${leadId}" style="cursor:pointer;"` : ' style=""');
-  const overdueHtml = summary.overdueLeads.slice(0, 8).map((l) =>
-    `<div${rowAttr(l.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.name)} <span style="color:var(--ink-500);">· ${escapeHtml(l.rm || '–')}</span></span><span class="badge badge-danger">Overdue follow-up</span></div>`
-  ).join('');
-  const flaggedHtml = summary.flaggedDeals.slice(0, 8).map((d) =>
-    `<div${rowAttr(d.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.name || '–')}</span><span class="badge badge-warning">${escapeHtml(d.reason)}</span></div>`
-  ).join('');
-  const overdueTasksHtml = summary.overdueTasks.slice(0, 8).map((t) =>
-    `<div${rowAttr(t.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)} <span style="color:var(--ink-500);">· ${escapeHtml(t.owner || '–')}${t.student ? ' · ' + escapeHtml(t.student) : ''}</span></span><span class="badge badge-danger">Overdue task</span></div>`
-  ).join('');
-  const total = summary.overdueLeads.length + summary.flaggedDeals.length + summary.overdueTasks.length;
-  container.innerHTML = total === 0
-    ? emptyState('fa-circle-check', 'Everything is on track', `${summary.onTrackCount} of ${summary.totalLeads} leads on track — no overdue items right now.`)
-    : `<div style="margin-bottom:10px;font-size:12px;color:var(--ink-500);">${summary.onTrackCount} of ${summary.totalLeads} leads on track</div>` + overdueHtml + flaggedHtml + overdueTasksHtml;
-  container.querySelectorAll('[data-lead-id]').forEach((row) => {
-    row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
-  });
-}
+/**
+ * Deals per lender, as a table rather than a run-on line of "Login: 125 ·
+ * Bank Prospect: 9 · ...". Fixed columns in pipeline order mean you can read
+ * DOWN a column to compare banks at the same stage, which is the actual
+ * question — the old text list made that impossible because every lender
+ * listed its stages in a different order.
+ */
+const LENDER_STAGE_COLUMNS = ['Bank Prospect', 'Login', 'Sanction', 'PF Paid', 'Disbursement'];
 
 async function renderLenderBreakdown() {
-  const breakdown = await getLenderBreakdown();
-  const container = document.getElementById('lenderBreakdown');
-  if (breakdown.length === 0) {
-    container.innerHTML = emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.');
+  const tbody = document.getElementById('lenderBreakdown');
+  let breakdown;
+  try {
+    breakdown = await getLenderBreakdown();
+  } catch (err) {
+    console.error('lender breakdown failed', err);
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Could not load lender deals.<br>
+      <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
-  container.innerHTML = breakdown.map((lender) => {
-    const stagesText = Object.entries(lender.stageCounts).map(([name, count]) => `${escapeHtml(name)}: ${count}`).join(' · ');
-    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:500;"><span>${escapeHtml(lender.name)}</span><span class="amount">${lender.dealCount} deals</span></div>
-      <div style="font-size:12px;color:var(--ink-500);margin-top:2px;">${stagesText}</div>
-      ${lender.disbursedAmount > 0 ? `<div style="font-size:12px;color:var(--success);margin-top:2px;">${formatCurrency(lender.disbursedAmount)} disbursed</div>` : ''}
-    </div>`;
+  if (!breakdown.length) {
+    tbody.innerHTML = `<tr><td colspan="9">${emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.')}</td></tr>`;
+    return;
+  }
+
+  const n = (v) => (v ? Number(v).toLocaleString('en-IN') : '–');
+  tbody.innerHTML = breakdown.map((l) => {
+    const c = l.stageCounts || {};
+    // Credit Decline and Student Decline are both "the bank said no" for this
+    // view; splitting them across two columns of mostly zeros helps nobody.
+    const declined = (c['Credit Decline'] || 0) + (c['Student Decline'] || 0);
+    return `<tr>
+      <td><strong>${escapeHtml(l.name)}</strong></td>
+      ${LENDER_STAGE_COLUMNS.map((stage) => `<td class="num">${n(c[stage])}</td>`).join('')}
+      <td class="num">${declined ? `<span class="badge badge-danger">${n(declined)}</span>` : '–'}</td>
+      <td class="num"><strong>${n(l.dealCount)}</strong></td>
+      <td class="num">${l.disbursedAmount > 0 ? formatCurrency(l.disbursedAmount) : '–'}</td>
+    </tr>`;
   }).join('');
 }
 
@@ -542,7 +544,7 @@ async function bootstrap() {
 
   leadDrawer = initLeadDrawer({
     showToast,
-    onLeadUpdated: () => Promise.all([renderAttentionList(), renderRmPerformance()]),
+    onLeadUpdated: () => renderRmPerformance(),
     currentUser: user,
   });
 
@@ -555,7 +557,7 @@ async function bootstrap() {
   });
 
   wirePerformanceControls();
-  await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderAttentionList(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
+  await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 
 guardBootstrap(bootstrap, 'Manager Dashboard');
