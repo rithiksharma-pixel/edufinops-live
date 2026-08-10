@@ -131,9 +131,11 @@ function renderSidebarApps() {
   const others = accessibleApps(state.user.role).filter((a) => a.key !== state.app);
   if (!others.length) return;
 
+  // Plain nav items, continuous with the ones already there. No "Go to"
+  // heading and no divider: grouping them under a label still reads as "these
+  // live somewhere else", which is the thing being fixed.
   nav.insertAdjacentHTML('beforeend', `
     <div class="zt-sidebar-apps">
-      <span class="zt-sidebar-sep">Go to</span>
       ${others.map((a) => `
         <a class="nav-item" href="${a.path}">
           <i class="fa-solid ${a.icon}"></i> ${escapeHtml(a.label)}

@@ -18,18 +18,10 @@
 .zt-topbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; }
 
 /* ---------- Other apps, in the sidebar ----------
-   Styled from currentColor rather than a fixed palette: this block is injected
-   into six different sidebars, some dark-on-light and some light-on-dark, and
-   it has to sit correctly in all of them. */
-.zt-sidebar-apps {
-  display: flex; flex-direction: column; gap: 2px;
-  margin-top: 14px; padding-top: 12px;
-  border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-}
-.zt-sidebar-sep {
-  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
-  opacity: .55; padding: 0 12px 6px;
-}
+   Deliberately invisible as a container: just a flex column matching the gap
+   of the items above it, so the apps read as part of ONE nav list rather than
+   as a separate group. Each link keeps its host app's own .nav-item styling. */
+.zt-sidebar-apps { display: flex; flex-direction: column; gap: 2px; }
 
 /* ---------- Back ---------- */
 .zt-back {
