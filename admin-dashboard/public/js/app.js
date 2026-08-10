@@ -28,17 +28,15 @@ async function records(table, select) { return fetchAll(() => supabase.from(tabl
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
 async function loadOverview() {
-  const [leads, deals, docs, users, eventResponse, overdueTasks, stageEvents, tatThresholds] = await Promise.all([
+  const [leads, deals, docs, users, overdueTasks, stageEvents, tatThresholds] = await Promise.all([
     records('leads', 'id, lead_stages(name), next_follow_up_at'),
     records('deals', 'id, total_disbursed_amount, is_on_hold, is_rejected, created_at, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)'),
     records('documents', 'id, verification_status'),
     records('users', 'id, is_active'),
-    supabase.from('lead_events').select('event_type, created_at, leads(id, student_name), users(full_name)').eq('is_deleted', false).order('created_at', { ascending: false }).limit(8),
     fetchAll(() => supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10))),
     fetchAll(() => supabase.from('deal_events').select('id, deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }), { tiebreak: 'id', ascending: false }),
     getTatThresholds(supabase),
   ]);
-  if (eventResponse.error) throw eventResponse.error;
   const totalDisbursed = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
   // Only "Active leads" has an honest drill-down target — the rest are
   // deal-level/user-level counts, and Lead Management's list is leads-only.
@@ -52,8 +50,7 @@ async function loadOverview() {
     card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
   });
 
-  const stages = leads.reduce((all, lead) => { const name = lead.lead_stages?.name || 'Unassigned'; all[name] = (all[name] || 0) + 1; return all; }, {}); const largest = Math.max(1, ...Object.values(stages));
-  $('stageChart').innerHTML = Object.entries(stages).map(([name, count]) => `<div class="bar-row"><span>${esc(name)}</span><div class="bar-track"><div class="bar-fill" style="width:${count / largest * 100}%"></div></div><strong>${count}</strong></div>`).join('') || emptyState('fa-diagram-project', 'No leads yet', 'Leads will appear here once the team starts adding them.');
+  await renderFunnel();
 
   const enteredCurrentStageAt = {}; stageEvents.forEach((ev) => { if (!enteredCurrentStageAt[ev.deal_id]) enteredCurrentStageAt[ev.deal_id] = ev.created_at; });
   const now = Date.now();
@@ -69,10 +66,6 @@ async function loadOverview() {
   $('attentionList').innerHTML = attention.length
     ? attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('')
     : emptyState('fa-circle-check', 'Everything is on track', 'No overdue items right now — nice work.');
-  $('activityList').innerHTML = (eventResponse.data || []).map((event) => `<div class="activity-row"${event.leads?.id ? ` data-lead-id="${event.leads.id}" style="cursor:pointer;"` : ''}><strong>${esc(event.event_type)}</strong> · ${esc(event.leads?.student_name || 'Lead')}<div class="muted">${esc(event.users?.full_name || 'System')} · ${new Date(event.created_at).toLocaleString('en-IN')}</div></div>`).join('') || emptyState('fa-clock-rotate-left', 'No activity yet', 'Stage changes and calls will show up here as the team works leads.');
-  document.querySelectorAll('#activityList [data-lead-id]').forEach((row) => {
-    row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
-  });
 }
 
 async function loadDocuments() { const status = $('documentStatus').value; const data = await fetchAll(() => { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if (status) request = request.eq('verification_status', status); return request; }, { tiebreak: 'id', ascending: false }); $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
@@ -736,4 +729,76 @@ $('smartViewForm').addEventListener('submit', async (event) => {
   form.reset();
   showToast(form.isShared.checked ? 'View published to the team.' : 'View saved.');
   renderSmartViewList();
+});
+
+
+// =========================================================
+// FUNNEL — cumulative, with conversion and TAT.
+//
+// "Login" counts every lead that reached Login OR WENT PAST IT. The old card
+// showed each stage's current occupancy, so Login read 2,470 when 4,315 leads
+// had actually logged in — the ones that moved on to Sanction, PF or
+// Disbursement had left the Login bucket. That is why the numbers never
+// matched what the team believed.
+//
+// The RPC counts a stage as reached if EITHER the current stage says so OR
+// the milestone date does. That second signal matters because Lead Lost sits
+// at sequence_order 900: a lost lead's stage tells you nothing about how far
+// it got, but its login_date does.
+// =========================================================
+const funnelState = { period: 'all', basis: 'created' };
+
+function funnelRange(period) {
+  const d = new Date();
+  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  if (period === 'today') return { from: iso(d), to: iso(d) };
+  if (period === 'month') return { from: iso(new Date(d.getFullYear(), d.getMonth(), 1)), to: iso(d) };
+  // Apr–Jul of the current year: the intake window the team plans around.
+  if (period === 'apr-jul') return { from: `${d.getFullYear()}-04-01`, to: `${d.getFullYear()}-07-31` };
+  return { from: null, to: null };
+}
+
+async function renderFunnel() {
+  const host = $('funnelTable');
+  const { from, to } = funnelRange(funnelState.period);
+  const { data, error } = await supabase.rpc('lead_funnel_summary', {
+    p_from: from, p_to: to, p_basis: funnelState.basis,
+  });
+  if (error) {
+    host.innerHTML = `<p class="empty-state">Could not load the funnel.<br><span style="font-size:12px;">${esc(error.message)}</span></p>`;
+    return;
+  }
+
+  const top = Math.max(1, ...data.map((r) => Number(r.reached)));
+  host.innerHTML = `<div class="funnel-rows">${data.map((r) => {
+    const n = Number(r.reached);
+    return `<div class="funnel-row-item">
+      <span class="fr-stage">${esc(r.stage_name)}</span>
+      <div class="fr-track"><div class="fr-fill" style="width:${(n / top) * 100}%"></div></div>
+      <strong class="fr-count">${n.toLocaleString('en-IN')}</strong>
+      <span class="fr-conv" title="Conversion from the previous stage">${
+        r.conversion_pct === null ? '' : `${r.conversion_pct}%`}</span>
+      <span class="fr-tat" title="Average days from the previous milestone">${
+        r.avg_days_to_reach === null ? '' : `${r.avg_days_to_reach}d`}</span>
+    </div>`;
+  }).join('')}</div>
+  <p class="funnel-note">
+    Conversion is against the stage above. TAT is measured between recorded
+    milestone dates, so it covers only leads carrying both — and
+    <strong>Lead&nbsp;→&nbsp;Login TAT is not shown</strong>: for the migrated book
+    <code>created_at</code> is the import date, not when the lead arrived, so
+    111 leads have a login date before it.
+  </p>`;
+}
+
+document.getElementById('funnelPeriod')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-fp]');
+  if (!btn) return;
+  document.querySelectorAll('#funnelPeriod button').forEach((b) => b.classList.toggle('active', b === btn));
+  funnelState.period = btn.dataset.fp;
+  renderFunnel();
+});
+document.getElementById('funnelBasis')?.addEventListener('change', (e) => {
+  funnelState.basis = e.target.value;
+  renderFunnel();
 });
