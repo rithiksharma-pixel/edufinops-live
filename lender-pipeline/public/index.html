@@ -21,6 +21,7 @@
       <nav class="sidebar-nav">
         <a class="nav-item active" data-view="dashboard" href="#"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
         <a class="nav-item" data-view="pipeline" href="#"><i class="fa-solid fa-building-columns"></i> Our Pipeline</a>
+        <a class="nav-item" data-view="reports" href="#"><i class="fa-solid fa-chart-column"></i> Reports</a>
         <a class="nav-item" data-view="profile" href="#"><i class="fa-solid fa-id-card"></i> Bank Details</a>
       </nav>
       <div class="sidebar-footer">
@@ -53,6 +54,36 @@
             <thead><tr><th>Student</th><th>Requested amount</th><th>Stage</th><th>Status</th></tr></thead>
             <tbody id="dealsBody"><tr><td colspan="4"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
           </table>
+        </section>
+      </div>
+
+      <div id="reportsPanel" hidden>
+        <header class="main-header">
+          <div><h1>Reports</h1><p class="subtitle">Your institution's throughput, for any period you choose.</p></div>
+        </header>
+
+        <section class="table-card" style="padding:20px;margin-bottom:20px;">
+          <div class="bd-toolbar">
+            <div class="period-toggle" id="lrPresets">
+              <button type="button" class="pill-btn" data-days="7">7d</button>
+              <button type="button" class="pill-btn active" data-days="30">30d</button>
+              <button type="button" class="pill-btn" data-days="90">90d</button>
+              <button type="button" class="pill-btn" data-days="365">1y</button>
+            </div>
+            <label class="bd-daterange">From <input type="date" id="lrFrom"></label>
+            <label class="bd-daterange">To <input type="date" id="lrTo"></label>
+            <button type="button" class="btn btn-secondary" id="lrApply">Apply</button>
+            <span class="bd-toolbar-spacer"></span>
+            <button type="button" class="btn btn-ghost" id="lrCsv"><i class="fa-solid fa-file-arrow-down"></i> Download CSV</button>
+          </div>
+          <div id="lrCounts"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
+        </section>
+
+        <section class="table-card" style="padding:20px;">
+          <h3 class="bd-subhead">Movement over time</h3>
+          <p class="bd-subnote">How many of your cases hit each milestone per period, counted on the date recorded against them.</p>
+          <div class="trend-toolbar"><div class="period-toggle" id="lrGranularity"></div></div>
+          <div id="lrTrend"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
         </section>
       </div>
 
