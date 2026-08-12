@@ -20,6 +20,7 @@ import { initLeadDrawer } from '../../../lead-management/public/js/components/le
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { getMilestoneCounts, getMilestoneRows } from './services/milestoneService.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
+import { mountBdPerformance } from '../../../shared/js/bdPerformancePanel.js';
 
 let leadDrawer;
 
@@ -411,6 +412,13 @@ async function bootstrap() {
 
   initTrendControls();
   initMilestoneControls();
+  // Mounts and loads itself; it owns its own date range and downloads.
+  mountBdPerformance({
+    container: document.getElementById('bdPerformancePanel'),
+    supabase,
+    showToast,
+    downloadCsv,
+  });
   await populateTrendLenders();
 
   document.addEventListener('keydown', (e) => {

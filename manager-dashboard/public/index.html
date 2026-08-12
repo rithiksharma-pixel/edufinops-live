@@ -104,7 +104,16 @@
         <div id="dealTrendMatrix"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
       </section>
 
-      <section class="table-card">
+      <!-- BD performance. The panel is shared with the Admin Dashboard; the
+           RPCs behind it are RLS-scoped, so a Manager sees their own team's
+           leads here and an Admin sees the org — same code, same layout. -->
+      <section class="chart-card" style="margin-top:22px;">
+        <h3>BD performance</h3>
+        <p class="subtitle" style="margin:0 0 16px;font-size:12.5px;">Channels, leads and pipeline milestones by BD person.</p>
+        <div id="bdPerformancePanel"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
+      </section>
+
+      <section class="table-card" style="margin-top:22px;">
         <h3 class="section-title" style="padding:16px 20px 0;font-size:14px;font-weight:500;">RM performance</h3>
         <table class="data-table">
           <thead><tr><th>RM</th><th>Assigned leads</th><th>Overdue follow-ups</th><th>Deals</th><th>Disbursed (Closed Won)</th><th>Calls this week</th><th>Connect rate</th></tr></thead>

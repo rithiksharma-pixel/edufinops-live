@@ -18,26 +18,44 @@ function deltaFor(counts, buckets) {
   return latest - prev;
 }
 
-function deltaCell(delta) {
+function deltaCell(delta, format) {
   if (delta === null) return '<td class="trend-delta">–</td>';
   if (delta === 0) return '<td class="trend-delta"><span class="trend-flat">0</span></td>';
   const up = delta > 0;
-  return `<td class="trend-delta"><span class="${up ? 'trend-up' : 'trend-down'}">${up ? '▲' : '▼'} ${Math.abs(delta)}</span></td>`;
+  return `<td class="trend-delta"><span class="${up ? 'trend-up' : 'trend-down'}">${up ? '▲' : '▼'} ${format(Math.abs(delta))}</span></td>`;
 }
 
 /**
- * @param {{buckets:Array, rows:Array<{label,counts,total}>, deltaLabel?:string}} data
+ * @param {object}   data
+ * @param {Array}    data.buckets
+ * @param {Array<{label,counts,total}>} data.rows
+ * @param {string}   [data.deltaLabel='Δ']
+ * @param {string}   [data.rowLabel='Stage']  Header above the row-name column.
+ * @param {string}   [data.footLabel='All stages'] Label on the totals row.
+ * @param {Function} [data.formatValue]       Renders a cell value. Defaults to
+ *   the number itself; pass a currency formatter for money metrics.
+ * @param {string}   [data.emptyTitle]
+ * @param {string}   [data.emptyHint]
  * @returns {string} HTML for the matrix, or an empty state when nothing moved.
  */
-export function renderTrendMatrix({ buckets, rows, deltaLabel = 'Δ' }) {
+export function renderTrendMatrix({
+  buckets,
+  rows,
+  deltaLabel = 'Δ',
+  rowLabel = 'Stage',
+  footLabel = 'All stages',
+  formatValue = (n) => n,
+  emptyTitle = 'No movement in this period',
+  emptyHint = 'Stage changes will show up here as the team works leads.',
+}) {
   const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
   if (grandTotal === 0) {
-    return emptyState('fa-chart-line', 'No movement in this period', 'Stage changes will show up here as the team works leads.');
+    return emptyState('fa-chart-line', emptyTitle, emptyHint);
   }
 
   const head = `
     <tr>
-      <th class="trend-rowhead">Stage</th>
+      <th class="trend-rowhead">${escapeHtml(rowLabel)}</th>
       ${buckets.map((b) => `<th>${escapeHtml(b.label)}</th>`).join('')}
       <th class="trend-total">Total</th>
       <th class="trend-delta">${escapeHtml(deltaLabel)}</th>
@@ -46,31 +64,31 @@ export function renderTrendMatrix({ buckets, rows, deltaLabel = 'Δ' }) {
   const body = rows.map((r) => {
     const cells = buckets.map((b) => {
       const n = r.counts[b.key] || 0;
-      return `<td class="${n === 0 ? 'trend-zero' : ''}">${n}</td>`;
+      return `<td class="${n === 0 ? 'trend-zero' : ''}">${formatValue(n)}</td>`;
     }).join('');
     return `
       <tr>
         <td class="trend-rowhead">${escapeHtml(r.label)}</td>
         ${cells}
-        <td class="trend-total">${r.total}</td>
-        ${deltaCell(deltaFor(r.counts, buckets))}
+        <td class="trend-total">${formatValue(r.total)}</td>
+        ${deltaCell(deltaFor(r.counts, buckets), formatValue)}
       </tr>`;
   }).join('');
 
   // Column totals — "how much moved at all", the header number for the period.
   const colTotals = buckets.map((b) => {
     const n = rows.reduce((sum, r) => sum + (r.counts[b.key] || 0), 0);
-    return `<td class="${n === 0 ? 'trend-zero' : ''}">${n}</td>`;
+    return `<td class="${n === 0 ? 'trend-zero' : ''}">${formatValue(n)}</td>`;
   }).join('');
   const allCounts = {};
   buckets.forEach((b) => { allCounts[b.key] = rows.reduce((sum, r) => sum + (r.counts[b.key] || 0), 0); });
 
   const foot = `
     <tr class="trend-foot">
-      <td class="trend-rowhead">All stages</td>
+      <td class="trend-rowhead">${escapeHtml(footLabel)}</td>
       ${colTotals}
-      <td class="trend-total">${grandTotal}</td>
-      ${deltaCell(deltaFor(allCounts, buckets))}
+      <td class="trend-total">${formatValue(grandTotal)}</td>
+      ${deltaCell(deltaFor(allCounts, buckets), formatValue)}
     </tr>`;
 
   return `<div class="trend-scroll"><table class="trend-table"><thead>${head}</thead><tbody>${body}${foot}</tbody></table></div>`;

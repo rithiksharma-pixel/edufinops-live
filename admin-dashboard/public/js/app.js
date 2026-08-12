@@ -12,6 +12,8 @@ import { initLeadDrawer } from '../../../lead-management/public/js/components/le
 import { fetchAll, fetchAllResult } from '../../../shared/js/fetchAll.js';
 import { getTatThresholds } from '../../../shared/js/tatThresholds.js';
 import { getMilestoneCounts, MILESTONES } from '../../../manager-dashboard/public/js/services/milestoneService.js';
+import { mountBdPerformance } from '../../../shared/js/bdPerformancePanel.js';
+import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 
 let leadDrawer;
 
@@ -541,6 +543,21 @@ function initBulkAdd() {
   $('teamBulkBtn').addEventListener('click', () => bulkAddNames({ table: 'teams', textId: 'teamBulkText', resultId: 'teamBulkResult', label: 'team', plural: 'teams' }).catch((e) => showBulkResult('teamBulkResult', e.message, true)));
 }
 
+// ---------- BD performance ----------
+// The panel owns its own date range, granularity and downloads, so it is
+// mounted once and refreshed on later visits rather than re-rendered — a
+// re-mount would silently reset whatever range the Admin had chosen.
+let bdPanel = null;
+function loadBdPerformance() {
+  if (bdPanel) { bdPanel.refresh(); return; }
+  bdPanel = mountBdPerformance({
+    container: $('bdPerformancePanel'),
+    supabase,
+    showToast,
+    downloadCsv,
+  });
+}
+
 const DOCUMENT_CATEGORIES = ['KYC', 'Academics', 'Financials', 'Other'];
 
 async function loadSettings() {
@@ -601,8 +618,8 @@ async function loadSettings() {
     });
   });
 }
-async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'insights') await loadInsights(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
-function changeView(view) { activeView = view; if (view === 'team-performance') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], reports: ['Reports', 'Export and review business performance.'], insights: ['Insights', 'Day-over-day, week-over-week, and month-over-month trends.'], 'team-performance': ['Team performance', 'Overall, team-wise, and RM-wise breakdowns.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
+async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'reports') await loadReports(); if (activeView === 'insights') await loadInsights(); if (activeView === 'team-performance') await loadTeamPerformance(); if (activeView === 'bd-performance') loadBdPerformance(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
+function changeView(view) { activeView = view; if (view === 'team-performance') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], reports: ['Reports', 'Export and review business performance.'], insights: ['Insights', 'Day-over-day, week-over-week, and month-over-month trends.'], 'team-performance': ['Team performance', 'Overall, team-wise, and RM-wise breakdowns.'], 'bd-performance': ['BD performance', 'Channels, leads and pipeline milestones by BD person.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
 document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'team-performance') teamPerfData = null; loadActive(); }); $('documentStatus').addEventListener('change', loadDocuments); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
