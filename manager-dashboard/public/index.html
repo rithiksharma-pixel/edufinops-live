@@ -112,6 +112,7 @@
               <option value="owner">By owner</option>
               <option value="team">By team</option>
               <option value="manager">By manager</option>
+              <option value="bd">By BD</option>
             </select>
             <button class="btn btn-ghost" id="btnPerfCsv"><i class="fa-solid fa-file-arrow-down"></i> CSV</button>
           </div>
@@ -120,12 +121,13 @@
           <table class="data-table">
             <thead><tr>
               <th id="perfGroupHeader">RM</th>
+              <th class="num">Channels</th><th class="num">Active</th>
               <th class="num">Leads</th><th class="num">Logins</th><th class="num">Sanctions</th>
               <th class="num">PF</th><th class="num">Disbursed</th><th class="num">Disbursed value</th>
               <th class="num">Referrals</th><th class="num">PF from referrals</th>
               <th class="num">Overdue</th><th class="num">Calls (wk)</th><th class="num">Connect</th>
             </tr></thead>
-            <tbody id="rmPerformanceBody"><tr><td colspan="12" class="empty-state">Loading…</td></tr></tbody>
+            <tbody id="rmPerformanceBody"><tr><td colspan="14" class="empty-state">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>

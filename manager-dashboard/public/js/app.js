@@ -72,6 +72,10 @@ async function renderRmPerformance() {
   // Showing one RM's call count against a whole team's row would be a lie,
   // so those two columns blank out for team/manager rather than mislead.
   const byOwner = perfState.groupBy === 'owner';
+  // Channels only mean anything for a BD. Same reasoning as the call columns
+  // above: blank them out for the other groupings rather than print a zero
+  // that reads as "this team owns no channels".
+  const byBd = perfState.groupBy === 'bd';
   let perf; let callStats = {};
   try {
     [perf, callStats] = await Promise.all([
@@ -80,7 +84,7 @@ async function renderRmPerformance() {
     ]);
   } catch (err) {
     console.error('performance failed', err);
-    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Could not load performance.<br>
+    tbody.innerHTML = `<tr><td colspan="14" class="empty-state">Could not load performance.<br>
       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
@@ -89,7 +93,7 @@ async function renderRmPerformance() {
   document.getElementById('perfGroupHeader').textContent = PERF_GROUPS[perfState.groupBy];
 
   if (perf.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="12">${emptyState('fa-people-group', 'Nothing in this period', 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14">${emptyState('fa-people-group', byBd ? 'No BD activity in this period' : 'Nothing in this period', byBd ? 'Leads carrying a BD name, or coming through a consultancy, show up here.' : 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
     return;
   }
 
@@ -98,16 +102,18 @@ async function renderRmPerformance() {
     const calls = callStats[r.id] || { callCount: 0, connectedCount: 0 };
     const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
     return `
-    <tr ${byOwner ? `data-rm-id="${r.id}" style="cursor:pointer;" title="Open ${escapeHtml(r.name)}'s leads in Lead Management"` : ''}>
-      <td><strong>${escapeHtml(r.name)}</strong></td>
+    <tr ${byOwner ? `data-rm-id="${r.id}" style="cursor:pointer;" title="Open ${escapeHtml(r.name)}'s leads in Lead Management"` : ''}${r.isUnattributed ? ' class="bd-unattributed"' : ''}>
+      <td><strong>${escapeHtml(r.name)}</strong>${r.isUnattributed ? ' <i class="fa-solid fa-circle-info" title="Leads from a consultancy with no BD name recorded on the lead or the consultancy"></i>' : ''}</td>
+      <td class="num">${byBd ? n(r.channels) : '–'}</td>
+      <td class="num">${byBd ? n(r.activeChannels) : '–'}</td>
       <td class="num">${n(r.leadCount)}</td>
       <td class="num">${n(r.logins)}</td>
       <td class="num">${n(r.sanctions)}</td>
       <td class="num">${n(r.pf)}</td>
       <td class="num">${n(r.disbursed)}</td>
       <td class="num">${r.disbursedAmount ? formatCurrency(r.disbursedAmount) : '–'}</td>
-      <td class="num">${n(r.referrals)}</td>
-      <td class="num">${n(r.pfFromReferrals)}</td>
+      <td class="num">${r.referrals === null ? '–' : n(r.referrals)}</td>
+      <td class="num">${r.pfFromReferrals === null ? '–' : n(r.pfFromReferrals)}</td>
       <td class="num">${r.overdueCount > 0 ? `<span class="badge badge-danger">${n(r.overdueCount)}</span>` : '0'}</td>
       <td class="num">${byOwner ? n(calls.callCount) : '–'}</td>
       <td class="num">${byOwner ? connectRate : '–'}</td>
@@ -142,6 +148,9 @@ function wirePerformanceControls() {
   document.getElementById('btnPerfCsv')?.addEventListener('click', () => {
     const cols = [
       [PERF_GROUPS[perfState.groupBy], (r) => r.name],
+      ...(perfState.groupBy === 'bd'
+        ? [['Channels', (r) => r.channels], ['Active channels', (r) => r.activeChannels]]
+        : []),
       ['Leads', (r) => r.leadCount], ['Logins', (r) => r.logins],
       ['Sanctions', (r) => r.sanctions], ['PF', (r) => r.pf],
       ['Disbursed', (r) => r.disbursed], ['Disbursed value', (r) => r.disbursedAmount],

@@ -623,6 +623,87 @@ async function loadAnalytics() {
   if (activeSubview === 'reports') return loadReports();
   if (activeSubview === 'insights') return loadInsights();
   if (activeSubview === 'team-performance') return loadTeamPerformance();
+  if (activeSubview === 'bd-performance') return loadBdPerformance();
+}
+
+// ---------- BD performance ----------
+// Same numbers the Manager Dashboard's Performance table shows under
+// "By BD" — one RPC, bd_performance() (050), which is security_invoker, so
+// an Admin gets the org and no role logic is needed here.
+const bdState = { period: 'all', rows: [], wired: false };
+
+function bdPeriodRange(period) {
+  if (period === 'all') return { from: null, to: null };
+  const days = { day: 1, week: 7, month: 30 }[period] ?? 30;
+  const to = new Date();
+  const from = new Date(to.getTime() - (days - 1) * 86400000);
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { from: iso(from), to: iso(to) };
+}
+
+async function loadBdPerformance() {
+  const tbody = $('bdPerformanceBody');
+  const { from, to } = bdPeriodRange(bdState.period);
+  let rows;
+  try {
+    const { data, error } = await supabase.rpc('bd_performance', { p_from: from, p_to: to });
+    if (error) throw error;
+    rows = data ?? [];
+  } catch (error) {
+    console.error('bd performance failed', error);
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">Could not load BD performance.<br><span style="font-size:12px;">${esc(error?.message || String(error))}</span></td></tr>`;
+    return;
+  }
+  bdState.rows = rows;
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10">${emptyState('fa-handshake', 'No BD activity in this period', 'Leads carrying a BD name, or coming through a consultancy, show up here.')}</td></tr>`;
+    return;
+  }
+  const n = (v) => Number(v || 0).toLocaleString('en-IN');
+  tbody.innerHTML = rows.map((r) => `
+    <tr${r.group_name ? '' : ' style="color:var(--ink-500);font-style:italic;"'}>
+      <td><strong>${esc(r.group_name || '(Unattributed)')}</strong>${r.group_name ? '' : ' <i class="fa-solid fa-circle-info" title="Leads from a consultancy with no BD name recorded on the lead or the consultancy"></i>'}</td>
+      <td class="num">${n(r.channels)}</td>
+      <td class="num">${n(r.active_channels)}</td>
+      <td class="num">${n(r.leads)}</td>
+      <td class="num">${n(r.logins)}</td>
+      <td class="num">${n(r.sanctions)}</td>
+      <td class="num">${n(r.pf)}</td>
+      <td class="num">${n(r.disbursed)}</td>
+      <td class="num">${Number(r.disbursed_amount) ? inr(r.disbursed_amount) : '–'}</td>
+      <td class="num">${Number(r.overdue) > 0 ? `<span class="badge">${n(r.overdue)}</span>` : '0'}</td>
+    </tr>`).join('');
+
+  // Listeners attach once; the subtab can be reopened without stacking them.
+  if (bdState.wired) return;
+  bdState.wired = true;
+  $('bdPeriod').addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-period]');
+    if (!btn) return;
+    $('bdPeriod').querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
+    bdState.period = btn.dataset.period;
+    loadBdPerformance();
+  });
+  $('btnBdCsv').addEventListener('click', () => {
+    const cols = [
+      ['BD', (r) => r.group_name || '(Unattributed)'],
+      ['Channels', (r) => r.channels], ['Active channels', (r) => r.active_channels],
+      ['Leads', (r) => r.leads], ['Logins', (r) => r.logins],
+      ['Sanctions', (r) => r.sanctions], ['PF', (r) => r.pf],
+      ['Disbursed', (r) => r.disbursed], ['Disbursed value', (r) => r.disbursed_amount],
+      ['Overdue follow-ups', (r) => r.overdue],
+    ];
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.map((c) => q(c[0])).join(',')]
+      .concat(bdState.rows.map((r) => cols.map((c) => q(c[1](r))).join(',')))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `bd-performance-${bdState.period}.csv`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    showToast(`Exported ${bdState.rows.length} rows`);
+  });
 }
 
 document.querySelectorAll('.subtab').forEach((btn) => {

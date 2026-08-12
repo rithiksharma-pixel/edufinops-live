@@ -12,6 +12,9 @@ import {
 } from './services/lenderDealService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
+import { getMilestoneCounts, getMilestoneSeries, getMilestoneRows } from './services/lenderReportService.js';
+import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
+import { buildBuckets, presetRange } from '../../../shared/js/dateBuckets.js';
 
 let currentUser;
 function formatCurrency(amount) {
@@ -400,7 +403,7 @@ async function renderMessages(dealId) {
   const panel = document.getElementById('panelMessages');
   const messages = await getMessages(dealId);
   panel.innerHTML =
-    (messages.length === 0 ? '<p class="empty-state">No messages yet.</p>' : messages.map((m) => `<div class="lender-app-card"><div style="font-size:11px;color:var(--ink-500);margin-bottom:4px;">${escapeHtml(m.sender?.full_name || 'Someone')} · ${formatDateTime(m.created_at)}</div>${escapeHtml(m.message)}</div>`).join('')) +
+    (messages.length === 0 ? '<p class="empty-state">No messages yet.</p>' : messages.map((m) => `<div class="lender-app-card"><div style="font-size:11px;color:var(--ink-500);margin-bottom:4px;">${escapeHtml(m.sender_name || 'Someone')}${m.sender_side === 'internal' ? ' · Zolve Tangent' : ''} · ${formatDateTime(m.created_at)}</div>${escapeHtml(m.message)}</div>`).join('')) +
     '<div style="display:flex;gap:8px;margin-top:14px;"><textarea id="msgInput" rows="2" placeholder="Message the internal team…" style="flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;"></textarea><button class="btn btn-primary" id="btnSendMsg">Send</button></div>';
   document.getElementById('btnSendMsg').addEventListener('click', async () => {
     const text = document.getElementById('msgInput').value.trim();
@@ -452,16 +455,133 @@ function initViewSwitching() {
   });
 }
 
-const LENDER_VIEW_CRUMBS = { dashboard: '', pipeline: 'Our Pipeline', profile: 'Bank Details' };
+const LENDER_VIEW_CRUMBS = { dashboard: '', pipeline: 'Our Pipeline', reports: 'Reports', profile: 'Bank Details' };
 
 async function showView(view) {
   document.getElementById('dashboardPanel').hidden = view !== 'dashboard';
   document.getElementById('pipelinePanel').hidden = view !== 'pipeline';
+  document.getElementById('reportsPanel').hidden = view !== 'reports';
   document.getElementById('profilePanel').hidden = view !== 'profile';
   setBreadcrumb(LENDER_VIEW_CRUMBS[view] ? [LENDER_VIEW_CRUMBS[view]] : []);
   if (view === 'dashboard') await renderDashboard();
   else if (view === 'pipeline') await refreshDealsList();
+  else if (view === 'reports') await loadReports();
   else if (view === 'profile') await loadProfileForm();
+}
+
+// ---------- Reports ----------
+const reportState = { from: null, to: null, granularity: 'month', wired: false };
+const DELTA_LABELS = { day: 'DoD', week: 'WoW', month: 'MoM' };
+
+function setReportRange(days) {
+  const { from, to } = presetRange(days);
+  reportState.from = from;
+  reportState.to = to;
+  document.getElementById('lrFrom').value = from;
+  document.getElementById('lrTo').value = to;
+}
+
+async function renderReportCounts() {
+  const target = document.getElementById('lrCounts');
+  try {
+    const counts = await getMilestoneCounts(reportState.from, reportState.to);
+    const total = counts.reduce((sum, c) => sum + c.deal_count, 0);
+    if (total === 0) {
+      target.innerHTML = emptyState('fa-chart-column', 'Nothing in this period', 'Pick a wider range, or check back once cases start moving.');
+      return;
+    }
+    target.innerHTML = `<div class="bd-totals">${counts.map((c) => `
+      <div class="bd-total-tile">
+        <div class="bd-total-value">${c.deal_count}</div>
+        <div class="bd-total-label">${escapeHtml(c.milestone)}</div>
+        <div class="bd-total-label" style="font-family:var(--font-mono);">${formatCurrency(c.total_amount)}</div>
+      </div>`).join('')}</div>`;
+  } catch (err) {
+    console.error('lender milestone counts failed', err);
+    target.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load your numbers', 'Try refreshing the page.');
+  }
+}
+
+async function renderReportTrend() {
+  document.getElementById('lrGranularity').innerHTML = renderGranularityPills(reportState.granularity);
+  const target = document.getElementById('lrTrend');
+  try {
+    const buckets = buildBuckets(reportState.from, reportState.to, reportState.granularity);
+    const { rows } = await getMilestoneSeries(reportState.from, reportState.to, reportState.granularity, buckets);
+    target.innerHTML = renderTrendMatrix({
+      buckets,
+      rows,
+      rowLabel: 'Milestone',
+      footLabel: 'All milestones',
+      deltaLabel: DELTA_LABELS[reportState.granularity],
+      emptyTitle: 'Nothing in this period',
+      emptyHint: 'Milestones on your cases will show up here.',
+    });
+  } catch (err) {
+    console.error('lender milestone series failed', err);
+    target.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load trends', 'Try refreshing the page.');
+  }
+}
+
+async function exportReportCsv(button) {
+  button.disabled = true;
+  try {
+    const rows = await getMilestoneRows(reportState.from, reportState.to);
+    if (!rows.length) { showToast('Nothing to export for this period.', true); return; }
+    const cols = ['event_date', 'milestone', 'student_name', 'student_phone', 'lender_branch', 'amount', 'reference'];
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `our_pipeline_${reportState.from}_to_${reportState.to}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'}.`);
+  } catch (err) {
+    console.error('lender CSV failed', err);
+    showToast(`Could not export: ${err.message || err}`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function loadReports() {
+  // Listeners attach once; showView('reports') can run repeatedly without
+  // stacking duplicate handlers.
+  if (!reportState.wired) {
+    reportState.wired = true;
+    setReportRange(30);
+    document.getElementById('lrPresets').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-days]');
+      if (!button) return;
+      document.querySelectorAll('#lrPresets .pill-btn').forEach((b) => b.classList.remove('active'));
+      button.classList.add('active');
+      setReportRange(Number(button.dataset.days));
+      loadReports();
+    });
+    document.getElementById('lrApply').addEventListener('click', () => {
+      const from = document.getElementById('lrFrom').value;
+      const to = document.getElementById('lrTo').value;
+      if (!from || !to) { showToast('Pick both a From and a To date.', true); return; }
+      if (from > to) { showToast('From date must be on or before To date.', true); return; }
+      reportState.from = from;
+      reportState.to = to;
+      document.querySelectorAll('#lrPresets .pill-btn').forEach((b) => b.classList.remove('active'));
+      loadReports();
+    });
+    document.getElementById('lrGranularity').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-granularity]');
+      if (!button || button.dataset.granularity === reportState.granularity) return;
+      reportState.granularity = button.dataset.granularity;
+      renderReportTrend();
+    });
+    document.getElementById('lrCsv').addEventListener('click', (event) => exportReportCsv(event.currentTarget));
+  }
+  await Promise.all([renderReportCounts(), renderReportTrend()]);
 }
 
 async function renderDashboard() {

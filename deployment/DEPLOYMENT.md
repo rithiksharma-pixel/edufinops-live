@@ -168,3 +168,96 @@ update notification_settings set notify_on_stage_change = false, notify_on_task_
 -- run the import, then:
 update notification_settings set notify_on_stage_change = true, notify_on_task_assigned = true;
 ```
+
+---
+
+## BD performance (050)
+
+**Admin Dashboard → Analytics → BD Performance**, and **Manager Dashboard →
+Performance → "By BD"** in the grouping dropdown.
+
+Per BD person: channels, active channels, leads, logins, sanctions, PF,
+disbursed and disbursed value, over Day / Week / Month / Overall, with CSV.
+
+`bd_performance()` is a deliberate sibling of `rm_performance()` (046) — same
+window handling, same column names, same each-metric-against-its-own-date
+rule — so a BD row is directly comparable with an owner/team/manager row and
+the Manager Dashboard renders both through one table.
+
+### How a BD person is identified
+
+There is no BD foreign key. Attribution is free text, read as-is:
+
+1. `leads.bd_name` if set (per lead, 026), else
+2. `consultancies.bd_manager` on the lead's consultancy (012).
+
+Names are matched case- and whitespace-insensitively; real typos stay as
+separate rows on purpose, so they are visible and fixable. Only 291 of 12,185
+leads carry a `bd_name` but 5,532 have a consultancy, so the fallback takes
+coverage from ~2% of the pipeline to ~45%.
+
+Leads that came through a consultancy with no BD owner recorded anywhere land
+in an **(Unattributed)** row. That is a data-quality signal, not a person —
+fix it by setting `bd_manager` on the consultancy (Admin → Settings).
+
+**Channels** is the roster of consultancies a BD owns and is deliberately not
+filtered by the date window. **Active** counts only those that produced a lead
+inside it.
+
+`send_bd_performance_report()` was dropped in this revision. Email delivery has
+never worked on this project (`NOTIFICATION_SECRET` unset — see above), and the
+CSV covers the manual case. Re-add it when notifications actually send.
+
+---
+
+## External portals (052, 053)
+
+Apply **052 before 053**. Findings and evidence: `deployment/PORTAL_AUDIT.md`.
+
+### 052 — apply before giving any external party a login
+
+| Fix | Why |
+|---|---|
+| `consultancies_select` scoped to internal staff **+ Business Development** | Every lender and consultant login could read all 811 partner names and their BD owners |
+| `v_lender_deal_list` | Student name and loan amount rendered blank on every row of the Lender portal |
+| `get_deal_messages()` | Lenders saw internal replies with no sender name |
+| `documents_insert` + two storage policies opened to source roles | Consultants could not upload a passport or offer letter |
+| `get_lead_lender_progress()` | Consultants could not see which bank their student was with |
+
+The BD carve-out matters: `is_internal_staff()` does **not** include Business
+Development, and BD users work in Lead Management, which reads `consultancies`
+for the New Lead form. Scoping to `is_internal_staff()` alone would break lead
+creation for the BD team.
+
+### 053 — reporting for both portals
+
+- **Lender portal → Reports**: milestone counts and amounts for any window, a
+  milestone × period matrix at daily / weekly / monthly, and a CSV.
+- **Consultant portal → My Report**: students submitted, in progress, sent to a
+  bank, logged in, sanctioned, disbursed with values; a stage breakdown; CSV.
+
+Both are scoped by the database. `v_lender_milestones` carries an
+`is_lender_side() and belongs_to_lender_org(...)` predicate;
+`source_performance()` filters on `source_user_id = auth.uid()` and refuses any
+role that is not Consultant / Business Development.
+
+### Two SECURITY DEFINER views, deliberately
+
+`v_lender_deal_list` and `v_lender_milestones` run as their owner rather than
+`security_invoker`, unlike every other reporting view here. Not an oversight —
+see the note at the top of 052. Short version: a lender has no policy on
+`leads` at all, so an invoker view over `leads` returns nothing for them, and
+granting one would expose `aadhaar_number`, `pan_number` and internal remarks.
+Both carry their authorisation in an explicit `where` clause and are declared
+`security_barrier = true`.
+
+**If you edit either view, the `where` clause IS the access control.**
+
+### One decision still open
+
+`get_lead_profile_for_lender()` returns `aadhaar_number`, `pan_number`,
+`passport_number` and the address fields to every bank a student is shared
+with, including ones that later reject. Plausibly correct for underwriting, so
+it was **left unchanged** — but Aadhaar carries handling obligations worth a
+deliberate decision. To mask it, drop the column from the `to_jsonb(l)`
+projection in that function, or replace it with its last four digits.

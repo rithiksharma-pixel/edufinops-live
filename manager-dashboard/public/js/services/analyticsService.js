@@ -42,7 +42,7 @@ export async function getTeamFunnel() {
 }
 
 /** Grouping options for the performance table. */
-export const PERF_GROUPS = { owner: 'RM', team: 'Team', manager: 'Manager' };
+export const PERF_GROUPS = { owner: 'RM', team: 'Team', manager: 'Manager', bd: 'BD' };
 
 /**
  * Performance per owner / team / manager for a date window.
@@ -58,9 +58,20 @@ export const PERF_GROUPS = { owner: 'RM', team: 'Team', manager: 'Manager' };
  *
  * @param {?string} from ISO date, null for all time
  * @param {?string} to   ISO date, inclusive
- * @param {'owner'|'team'|'manager'} groupBy
+ * 'bd' goes to a different RPC. rm_performance() inner-joins
+ * assigned_rm_id, so it can only group by things hanging off the RM record,
+ * and a BD person has no user record at all — attribution is the free text
+ * in consultancies.bd_manager / leads.bd_name. bd_performance() (migration
+ * 050) is its sibling: same window handling, same each-metric-against-its-
+ * own-date rule, same column names, plus channels. Mapped to one row shape
+ * here so the table renders either without caring which it got.
+ *
+ * @param {?string} from ISO date, null for all time
+ * @param {?string} to   ISO date, inclusive
+ * @param {'owner'|'team'|'manager'|'bd'} groupBy
  */
 export async function getRmPerformance(from = null, to = null, groupBy = 'owner') {
+  if (groupBy === 'bd') return getBdPerformance(from, to);
   const { data, error } = await supabase.rpc('rm_performance', {
     p_from: from || null,
     p_to: to || null,
@@ -79,6 +90,41 @@ export async function getRmPerformance(from = null, to = null, groupBy = 'owner'
     disbursedAmount: Number(r.disbursed_amount),
     referrals: Number(r.referrals),
     pfFromReferrals: Number(r.pf_from_referrals),
+  }));
+}
+
+/**
+ * Per-BD rows in the same shape as getRmPerformance().
+ *
+ * `id` is deliberately null: the row-click handler opens Lead Management
+ * filtered by rmId, and a BD name is not a user id — a BD row has nothing
+ * to link to, so it must not look clickable.
+ *
+ * referrals / pfFromReferrals are null rather than 0. The table blanks
+ * nulls to "-"; zero would assert this BD sourced no referrals, when the
+ * truth is the referral split is not computed per BD at all.
+ */
+async function getBdPerformance(from = null, to = null) {
+  const { data, error } = await supabase.rpc('bd_performance', {
+    p_from: from || null,
+    p_to: to || null,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: null,
+    name: r.group_name || '(Unattributed)',
+    isUnattributed: !r.group_name,
+    channels: Number(r.channels),
+    activeChannels: Number(r.active_channels),
+    leadCount: Number(r.leads),
+    overdueCount: Number(r.overdue),
+    logins: Number(r.logins),
+    sanctions: Number(r.sanctions),
+    pf: Number(r.pf),
+    disbursed: Number(r.disbursed),
+    disbursedAmount: Number(r.disbursed_amount),
+    referrals: null,
+    pfFromReferrals: null,
   }));
 }
 

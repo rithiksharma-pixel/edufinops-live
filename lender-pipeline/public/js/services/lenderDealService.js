@@ -52,32 +52,60 @@ export const STAGE_TABLE_MAP = {
   },
 };
 
+/**
+ * Reads v_lender_deal_list, NOT `deals` with an embedded `leads(...)`.
+ *
+ * A lender has no SELECT policy on `leads` — by design, since one would
+ * expose every column including aadhaar_number. PostgREST does not error on
+ * that; it returns the embedded resource as null, so the old query rendered
+ * "-" in the Student and Requested-amount columns for every single row.
+ *
+ * v_lender_deal_list (migration 052) is a security-barrier view carrying an
+ * explicit `is_lender_side() and belongs_to_lender_org(...)` predicate, and
+ * exposes a strict subset of what get_lead_profile_for_lender() already
+ * returns for the same deals.
+ *
+ * The result is re-nested into the original `leads` / `current_deal_stage`
+ * shape so callers did not have to change.
+ */
 export async function getMyBankDeals() {
   const { data, error } = await fetchAllResult(() => supabase
-    .from('deals')
-    .select(`
-      id, is_on_hold, is_rejected, total_disbursed_amount,
-      leads ( student_name, loan_amount_requested ),
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name, sequence_order ),
-      current_stage_status:deal_stage_statuses ( name )
-    `)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false }));
+    .from('v_lender_deal_list')
+    .select('deal_id, student_name, loan_amount_requested, deal_stage, deal_stage_order, deal_stage_status, is_on_hold, is_rejected, total_disbursed_amount, created_at')
+    .order('created_at', { ascending: false }), { tiebreak: 'deal_id', ascending: false });
   if (error) throw error;
-  return data;
+  return data.map((row) => ({
+    id: row.deal_id,
+    is_on_hold: row.is_on_hold,
+    is_rejected: row.is_rejected,
+    total_disbursed_amount: row.total_disbursed_amount,
+    leads: { student_name: row.student_name, loan_amount_requested: row.loan_amount_requested },
+    current_deal_stage: { name: row.deal_stage, sequence_order: row.deal_stage_order },
+    current_stage_status: row.deal_stage_status ? { name: row.deal_stage_status } : null,
+  }));
 }
 
 export async function getDealDetail(dealId) {
-  const { data: deal, error } = await supabase
-    .from('deals')
-    .select(`
-      *,
-      leads ( student_name, student_phone, course_name, university_name, loan_amount_requested ),
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( id, name, sequence_order )
-    `)
-    .eq('id', dealId)
-    .single();
+  // `deals` itself is readable (deals_select_lender_org), so only the lead
+  // columns have to come from the view — same reason as getMyBankDeals().
+  const [{ data: deal, error }, { data: leadRow, error: leadError }] = await Promise.all([
+    supabase
+      .from('deals')
+      .select(`
+        *,
+        current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( id, name, sequence_order )
+      `)
+      .eq('id', dealId)
+      .single(),
+    supabase
+      .from('v_lender_deal_list')
+      .select('student_name, student_phone, course_name, university_name, loan_amount_requested')
+      .eq('deal_id', dealId)
+      .maybeSingle(),
+  ]);
   if (error) throw error;
+  if (leadError) throw leadError;
+  deal.leads = leadRow ?? null;
 
   const stageName = deal.current_deal_stage?.name;
   const stageConfig = STAGE_TABLE_MAP[stageName];
@@ -197,13 +225,17 @@ export async function getDashboardSummary() {
   return { totalDeals: data.length, needsAttention, onTrack, closedWon, stageCounts };
 }
 
+/**
+ * Via the get_deal_messages RPC, not a `sender:users(full_name)` embed.
+ *
+ * A lender can read exactly one row of `users` — their own — so that embed
+ * resolved to null for every message an internal RM sent, and the thread
+ * showed replies with no sender. Granting a `users` policy would have
+ * exposed staff email and phone too, since RLS is row-level; the RPC
+ * returns the name and nothing else.
+ */
 export async function getMessages(dealId) {
-  const { data, error } = await supabase
-    .from('lender_deal_messages')
-    .select('id, message, created_at, sender:users ( full_name )')
-    .eq('deal_id', dealId)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: true });
+  const { data, error } = await supabase.rpc('get_deal_messages', { p_deal_id: dealId });
   if (error) throw error;
   return data;
 }
