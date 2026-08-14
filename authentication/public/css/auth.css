@@ -89,7 +89,18 @@
   color: white;
   border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
-  font-weight: 600; font-size: 14px;
+  font-weight: 600; font-size: 0;
+}
+/* The mark is the golden spiral. Drawn as a mask rather than a coloured image
+   so it picks up the mark's own `color`: white on the accent tile, navy on the
+   light tile in the auth side panel. The literal "Z" still in the markup is
+   hidden with font-size:0 -- kept so the 14 templates need no edit. */
+.brand-mark::before {
+  content: "";
+  width: 80%; height: 80%;
+  background: currentColor;
+  -webkit-mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
+          mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
 }
 .brand-name { font-weight: 600; font-size: 15px; color: var(--ink-900); }
 .brand-accent { color: var(--accent); }

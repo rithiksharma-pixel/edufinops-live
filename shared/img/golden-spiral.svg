@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-7 -7 176 114" fill="none"
+     stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Golden spiral, 1.618 : 1. Coordinates are the unit construction x100, so
+       the box is 161.8 x 100 and each arc radius is the next term down the
+       ratio: 100, 61.8, 38.2, 23.6. Every arc is a quarter turn inscribed in
+       its square, centred on the corner it shares with the next square inward.
+
+       Four arcs, not five or six. The tail terms (14.6, 9.0, ...) are true to
+       the construction but at a 28px logo they merge into a smudge, so the
+       spiral stops where it still reads. -->
+  <path d="M0 100
+           A100 100 0 0 1 100 0
+           A61.8 61.8 0 0 1 161.8 61.8
+           A38.2 38.2 0 0 1 123.6 100
+           A23.6 23.6 0 0 1 100 76.4"
+        stroke-width="11"/>
+</svg>
