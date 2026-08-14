@@ -47,6 +47,42 @@ export async function getConsultancyLeads(row, from = null, to = null, dateField
 }
 
 /**
+ * One row per BD manager for the given window.
+ *
+ * Attribution is done in the RPC, not here: a lead resolves to a BD person by
+ * leads.bd_name first, then by the bd_manager of its consultancy. See
+ * migration 050 for why the fallback is necessary (bd_name is set on ~3% of
+ * the book; the consultancy's bd_manager covers ~45%).
+ *
+ * The row with bd_manager === null is the Unattributed bucket. It is returned
+ * on purpose so the page can show it — dropping it would inflate every BD
+ * person's apparent share and stop the totals reconciling with Lead Management.
+ */
+export async function getBdReport(from = null, to = null, dateField = 'created_at') {
+  const { data, error } = await supabase.rpc('bd_report', {
+    p_from: from || null,
+    p_to: to || null,
+    p_date_field: REPORT_DATE_FIELDS[dateField] ? dateField : 'created_at',
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** The leads behind one BD row. Pass the row whose bd_manager may be null —
+ *  the RPC matches that with IS NOT DISTINCT FROM, so null selects the
+ *  Unattributed bucket rather than returning nothing. */
+export async function getBdLeads(row, from = null, to = null, dateField = 'created_at') {
+  const { data, error } = await supabase.rpc('bd_lead_detail', {
+    p_bd_manager: row.bd_manager || null,
+    p_from: from || null,
+    p_to: to || null,
+    p_date_field: REPORT_DATE_FIELDS[dateField] ? dateField : 'created_at',
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
  * Conversion percentages between funnel steps.
  *
  * Each rate is against the step above it, not against total leads — "of the
@@ -112,8 +148,11 @@ const showPct = (v) => (v === null ? '–' : `${v}%`);
  * so it states what the numbers mean and where they are weak rather than
  * presenting them as more solid than they are.
  */
-export function buildPartnerReportHtml(row, leads, { from, to, generatedOn, basis } = {}) {
+export function buildPartnerReportHtml(row, leads, { from, to, generatedOn, basis, title } = {}) {
   const c = conversionRates(row);
+  // The same builder serves the BD tab, whose rows have no consultancy_name.
+  // Callers pass `title` explicitly there; consultancy rows keep the default.
+  const subject = title || row.consultancy_name;
   // Name the basis: "leads created in August" and "leads that logged in during
   // August" are different questions with different answers.
   const range = from || to
@@ -140,7 +179,7 @@ export function buildPartnerReportHtml(row, leads, { from, to, generatedOn, basi
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${h(row.consultancy_name)} — Zolve Tangent report</title>
+<title>${h(subject)} — Zolve Tangent report</title>
 <style>
   :root{--ink:#14181f;--mut:#6b7482;--rule:#e2e5eb;--bg:#fff;--sunk:#f5f6f8;--acc:#1f4e6b}
   *{box-sizing:border-box}
@@ -164,7 +203,7 @@ export function buildPartnerReportHtml(row, leads, { from, to, generatedOn, basi
   @media print{.wrap{padding:0}body{font-size:12px}}
 </style></head><body><div class="wrap">
 
-<h1>${h(row.consultancy_name)}</h1>
+<h1>${h(subject)}</h1>
 <p class="sub">Zolve Tangent pipeline report · ${h(range)} · generated ${h(generatedOn)}</p>
 
 <h2>Pipeline</h2>

@@ -32,9 +32,21 @@
       <header class="main-header">
         <div>
           <h1>Partner reports</h1>
-          <p class="subtitle">Per-consultancy funnel, conversion and ageing — ready to share.</p>
+          <p class="subtitle" id="repSubtitle">Per-consultancy funnel, conversion and ageing — ready to share.</p>
         </div>
       </header>
+
+      <!-- Same leads, two cuts: by the consultancy that sent them, or by the
+           BD person who owns that relationship. One BD owns many
+           consultancies, so these never sum the same way. -->
+      <div class="report-tabs" role="tablist">
+        <button class="report-tab active" role="tab" data-tab="consultancy" aria-selected="true">
+          <i class="fa-solid fa-handshake"></i> Consultancies
+        </button>
+        <button class="report-tab" role="tab" data-tab="bd" aria-selected="false">
+          <i class="fa-solid fa-user-tie"></i> BD managers
+        </button>
+      </div>
 
       <!-- Honest framing up top rather than a footnote nobody reads. -->
       <div class="report-note" id="dataNote"></div>
@@ -59,12 +71,18 @@
           <label for="repTo">To</label>
           <input type="date" id="repTo" />
         </div>
-        <div class="filter-field">
+        <div class="filter-field" id="fieldConsultancy">
           <label for="repConsultancy">Consultancy</label>
           <!-- Populated from the loaded report rows, so it can only ever
                offer consultancies that actually have leads in range. -->
           <select id="repConsultancy" style="min-width:260px;">
             <option value="">All consultancies</option>
+          </select>
+        </div>
+        <div class="filter-field" id="fieldBd" hidden>
+          <label for="repBd">BD manager</label>
+          <select id="repBd" style="min-width:260px;">
+            <option value="">All BD managers</option>
           </select>
         </div>
         <div class="filter-field">
@@ -81,27 +99,56 @@
            bar answers "how many logins in this window" without exporting. -->
       <section class="funnel-row" id="repTotals" style="margin-bottom:18px;" aria-live="polite"></section>
 
-      <section class="table-card">
+      <!-- Every th carries data-sort; reports.js wires them generically and
+           paints the active arrow, so adding a column needs no JS change. -->
+      <section class="table-card" id="cardConsultancy">
         <div class="lead-count" id="repCount" aria-live="polite"></div>
         <div style="overflow-x:auto;">
-          <table class="lead-table" id="repTable">
+          <table class="lead-table sortable" id="repTable">
             <thead>
               <tr>
-                <th>Consultancy</th>
-                <th class="num">Leads</th>
-                <th class="num">Login</th>
-                <th class="num">Sanction</th>
-                <th class="num">PF Paid</th>
-                <th class="num">Disb.</th>
-                <th class="num">Lost</th>
-                <th class="num">Lead→Login</th>
-                <th class="num">→Disb.</th>
-                <th class="num">Avg age</th>
+                <th data-sort="consultancy_name">Consultancy</th>
+                <th class="num" data-sort="total_leads">Leads</th>
+                <th class="num" data-sort="login">Login</th>
+                <th class="num" data-sort="sanction">Sanction</th>
+                <th class="num" data-sort="pf_paid">PF Paid</th>
+                <th class="num" data-sort="disbursement">Disb.</th>
+                <th class="num" data-sort="lost">Lost</th>
+                <th class="num" data-sort="leadToLogin">Lead→Login</th>
+                <th class="num" data-sort="leadToDisbursement">→Disb.</th>
+                <th class="num" data-sort="avg_age_days">Avg age</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="repBody">
               <tr><td colspan="11"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="table-card" id="cardBd" hidden>
+        <div class="lead-count" id="bdCount" aria-live="polite"></div>
+        <div style="overflow-x:auto;">
+          <table class="lead-table sortable" id="bdTable">
+            <thead>
+              <tr>
+                <th data-sort="bd_manager">BD manager</th>
+                <th class="num" data-sort="consultancies">Consultancies</th>
+                <th class="num" data-sort="total_leads">Leads</th>
+                <th class="num" data-sort="login">Login</th>
+                <th class="num" data-sort="sanction">Sanction</th>
+                <th class="num" data-sort="pf_paid">PF Paid</th>
+                <th class="num" data-sort="disbursement">Disb.</th>
+                <th class="num" data-sort="lost">Lost</th>
+                <th class="num" data-sort="leadToLogin">Lead→Login</th>
+                <th class="num" data-sort="leadToDisbursement">→Disb.</th>
+                <th class="num" data-sort="avg_age_days">Avg age</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bdBody">
+              <tr><td colspan="12"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
             </tbody>
           </table>
         </div>

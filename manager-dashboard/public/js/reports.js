@@ -14,11 +14,22 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 import {
-  getConsultancyReport, getConsultancyLeads, conversionRates, toCsv,
-  downloadText, buildPartnerReportHtml, REPORT_DATE_FIELDS,
+  getConsultancyReport, getConsultancyLeads, getBdReport, getBdLeads,
+  conversionRates, toCsv, downloadText, buildPartnerReportHtml, REPORT_DATE_FIELDS,
 } from './services/consultancyReportService.js';
 
-const state = { rows: [], from: '', to: '', consultancy: '', min: 0, dateField: 'created_at' };
+const state = {
+  tab: 'consultancy',
+  rows: [], bdRows: [],
+  from: '', to: '', consultancy: '', bd: '', min: 0, dateField: 'created_at',
+  // Independent per tab: sorting by "Consultancies" makes no sense on the
+  // consultancy table, so the two must not share a key.
+  sort: { consultancy: { key: 'total_leads', dir: 'desc' }, bd: { key: 'total_leads', dir: 'desc' } },
+};
+
+/** Label for the Unattributed bucket, which the RPC returns as a null name. */
+const UNATTRIBUTED = 'Unattributed';
+const bdLabel = (r) => r.bd_manager || UNATTRIBUTED;
 
 const n = (v) => Number(v || 0).toLocaleString('en-IN');
 const pct = (v) => (v === null ? '–' : `${v}%`);
@@ -30,10 +41,82 @@ function money(v) {
   return `₹${num.toLocaleString('en-IN')}`;
 }
 
+/**
+ * Sort key -> value. Plain columns read straight off the row; the conversion
+ * columns are derived, so they need computing before they can be compared.
+ * Sorting the rendered "12.5%" text would sort lexically and put 9% after 12%.
+ */
+function sortValue(row, key) {
+  if (key === 'leadToLogin' || key === 'leadToDisbursement') return conversionRates(row)[key];
+  if (key === 'bd_manager') return bdLabel(row);
+  return row[key];
+}
+
+/**
+ * Sorts in place on a copy. Nulls always sink to the bottom regardless of
+ * direction — a consultancy with no conversion yet is not "the best" just
+ * because you clicked ascending.
+ */
+function applySort(rows, { key, dir }) {
+  if (!key) return rows;
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = sortValue(a, key);
+    const y = sortValue(b, key);
+    const xn = x === null || x === undefined || x === '';
+    const yn = y === null || y === undefined || y === '';
+    if (xn && yn) return 0;
+    if (xn) return 1;
+    if (yn) return -1;
+    if (typeof x === 'string' || typeof y === 'string') {
+      return String(x).localeCompare(String(y), 'en', { sensitivity: 'base' }) * sign;
+    }
+    return (Number(x) - Number(y)) * sign;
+  });
+}
+
+/** Paints the arrow on the active column and clears the rest. */
+function paintSortHeaders(tableId, sort) {
+  document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach((th) => {
+    const active = th.dataset.sort === sort.key;
+    th.classList.toggle('sorted', active);
+    th.dataset.dir = active ? sort.dir : '';
+    th.setAttribute('aria-sort', active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+}
+
+/** Click a header to sort by it; click the active one again to flip direction.
+ *  First click on a new column is descending, because "who has the most" is
+ *  the question being asked far more often than "who has the least". */
+function wireSorting(tableId, tabKey, rerender) {
+  document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach((th) => {
+    th.tabIndex = 0;
+    const go = () => {
+      const sort = state.sort[tabKey];
+      const key = th.dataset.sort;
+      if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
+      else { sort.key = key; sort.dir = 'desc'; }
+      rerender();
+    };
+    th.addEventListener('click', go);
+    th.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+}
+
 function visibleRows() {
-  return state.rows.filter((r) =>
+  const rows = state.rows.filter((r) =>
     (r.total_leads >= state.min) &&
     (!state.consultancy || r.consultancy_name === state.consultancy));
+  return applySort(rows, state.sort.consultancy);
+}
+
+function visibleBdRows() {
+  const rows = state.bdRows.filter((r) =>
+    (r.total_leads >= state.min) &&
+    (!state.bd || bdLabel(r) === state.bd));
+  return applySort(rows, state.sort.bd);
 }
 
 /**
@@ -110,6 +193,7 @@ function render() {
   const body = document.getElementById('repBody');
   const rows = visibleRows();
   renderTotals(rows);
+  paintSortHeaders('repTable', state.sort.consultancy);
 
   document.getElementById('repCount').innerHTML =
     `<strong>${n(rows.length)}</strong> ${rows.length === 1 ? 'consultancy' : 'consultancies'}`
@@ -146,6 +230,69 @@ function render() {
 
   body.querySelectorAll('.rep-row').forEach((tr) => {
     tr.addEventListener('click', () => openDetail(rows[Number(tr.dataset.i)]));
+  });
+}
+
+/** Rebuilds the BD dropdown from whatever the report returned, same contract
+ *  as the consultancy one: it can only offer people with leads in range. */
+function populateBdDropdown() {
+  const sel = document.getElementById('repBd');
+  const previous = state.bd;
+  const names = [...state.bdRows].sort((a, b) => bdLabel(a).localeCompare(bdLabel(b), 'en'));
+
+  sel.innerHTML = `<option value="">All BD managers (${names.length})</option>`
+    + names.map((r) => `<option value="${escapeHtml(bdLabel(r))}">`
+        + `${escapeHtml(bdLabel(r))} — ${n(r.total_leads)}</option>`).join('');
+
+  const stillThere = previous && names.some((r) => bdLabel(r) === previous);
+  state.bd = stillThere ? previous : '';
+  sel.value = state.bd;
+}
+
+function renderBd() {
+  const body = document.getElementById('bdBody');
+  const rows = visibleBdRows();
+  renderTotals(rows);
+  paintSortHeaders('bdTable', state.sort.bd);
+
+  document.getElementById('bdCount').innerHTML =
+    `<strong>${n(rows.length)}</strong> BD ${rows.length === 1 ? 'manager' : 'managers'}`
+    + `<span class="lead-count-filters"> · ${n(rows.reduce((s, r) => s + Number(r.total_leads), 0))} leads`
+    + (state.from || state.to ? ` · ${REPORT_DATE_FIELDS[state.dateField]} ${state.from || '…'} → ${state.to || '…'}` : '')
+    + (state.bd ? ` · ${escapeHtml(state.bd)}` : '')
+    + '</span>';
+
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="12">${emptyState('fa-user-tie', 'No BD managers match', 'Try clearing the BD, the date range, or the minimum-leads filter.')}</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = rows.map((r, i) => {
+    const c = conversionRates(r);
+    // The unattributed bucket is a data gap, not a person. Marked so nobody
+    // reads it as someone's book or puts it in a review deck by mistake.
+    const unattributed = r.bd_manager
+      ? ''
+      : ' <span class="badge" title="No bd_name on the lead and no BD manager on its consultancy — mostly bulk-imported leads">no BD on record</span>';
+    return `
+      <tr data-i="${i}" class="bd-row">
+        <td><div class="student-name">${escapeHtml(bdLabel(r))}${unattributed}</div></td>
+        <td class="num muted">${n(r.consultancies)}</td>
+        <td class="num">${n(r.total_leads)}</td>
+        <td class="num">${n(r.login)}</td>
+        <td class="num">${n(r.sanction)}</td>
+        <td class="num">${n(r.pf_paid)}</td>
+        <td class="num">${n(r.disbursement)}</td>
+        <td class="num muted">${n(r.lost)}</td>
+        <td class="num">${pct(c.leadToLogin)}</td>
+        <td class="num">${pct(c.leadToDisbursement)}</td>
+        <td class="num">${r.avg_age_days ?? '–'}d</td>
+        <td><i class="fa-solid fa-chevron-right" style="color:var(--ink-300)"></i></td>
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('.bd-row').forEach((tr) => {
+    tr.addEventListener('click', () => openBdDetail(rows[Number(tr.dataset.i)]));
   });
 }
 
@@ -270,8 +417,168 @@ async function openDetail(row) {
   });
 }
 
+const BD_SUMMARY_COLUMNS = [
+  { label: 'BD manager', get: (r) => bdLabel(r) },
+  { label: 'Consultancies', get: (r) => r.consultancies },
+  { label: 'Total leads', get: (r) => r.total_leads },
+  { label: 'Reached Login', get: (r) => r.login },
+  { label: 'Reached Sanction', get: (r) => r.sanction },
+  { label: 'Reached PF Paid', get: (r) => r.pf_paid },
+  { label: 'Reached Disbursement', get: (r) => r.disbursement },
+  { label: 'Lost', get: (r) => r.lost },
+  { label: 'Lead to Login %', get: (r) => conversionRates(r).leadToLogin },
+  { label: 'Login to Sanction %', get: (r) => conversionRates(r).loginToSanction },
+  { label: 'Sanction to PF %', get: (r) => conversionRates(r).sanctionToPf },
+  { label: 'Lead to Disbursement %', get: (r) => conversionRates(r).leadToDisbursement },
+  { label: 'Deals created', get: (r) => r.deals_created },
+  { label: 'Sanctioned amount', get: (r) => r.sanctioned_amount },
+  { label: 'Disbursed amount', get: (r) => r.disbursed_amount },
+  { label: 'Avg days since activity', get: (r) => r.avg_age_days },
+];
+
+/** BD lead rows carry the consultancy too — without it "which of my partners
+ *  did this come from" is unanswerable from the export. */
+const BD_LEAD_COLUMNS = [
+  { label: 'Student', get: (r) => r.student_name },
+  { label: 'Phone', get: (r) => r.student_phone },
+  { label: 'Email', get: (r) => r.student_email },
+  { label: 'Consultancy', get: (r) => r.consultancy },
+  { label: 'Stage', get: (r) => r.stage },
+  { label: 'Assigned RM', get: (r) => r.assigned_rm || 'Unassigned' },
+  { label: 'Loan amount', get: (r) => r.loan_amount },
+  { label: 'Created', get: (r) => r.created_on },
+  { label: 'Last activity', get: (r) => r.last_activity },
+  { label: 'Days idle', get: (r) => r.days_idle },
+];
+
+async function openBdDetail(row) {
+  document.getElementById('repOverlay').hidden = false;
+  const name = bdLabel(row);
+
+  document.getElementById('repDrawerName').textContent = name;
+  const c = conversionRates(row);
+  document.getElementById('repDrawerSub').textContent =
+    `${n(row.total_leads)} leads across ${n(row.consultancies)} consultancies · `
+    + `${pct(c.leadToLogin)} reach Login · ${pct(c.leadToDisbursement)} reach Disbursement`;
+
+  document.getElementById('repDrawerBody').innerHTML = `
+    <div class="funnel-row" style="margin-bottom:18px;">
+      ${[['Leads', row.total_leads], ['Login', row.login], ['Sanction', row.sanction],
+         ['PF Paid', row.pf_paid], ['Disbursement', row.disbursement], ['Lost', row.lost]]
+        .map(([label, v]) => `<div class="funnel-card"><span class="count">${n(v)}</span><span class="label">${label}</span></div>`).join('')}
+    </div>
+    <div class="report-kv">
+      <div><span>Consultancies</span><strong>${n(row.consultancies)}</strong></div>
+      <div><span>Login → Sanction</span><strong>${pct(c.loginToSanction)}</strong></div>
+      <div><span>Sanction → PF</span><strong>${pct(c.sanctionToPf)}</strong></div>
+      <div><span>PF → Disbursement</span><strong>${pct(c.pfToDisbursement)}</strong></div>
+      <div><span>Deals created</span><strong>${n(row.deals_created)}</strong></div>
+      <div><span>Sanctioned</span><strong>${money(row.sanctioned_amount)}</strong></div>
+      <div><span>Disbursed</span><strong>${money(row.disbursed_amount)}</strong></div>
+      <div><span>Avg days since activity</span><strong>${row.avg_age_days ?? '–'}d</strong></div>
+    </div>
+    <div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="bdExportReport" disabled><i class="fa-solid fa-file-lines"></i> Share report (dashboard + leads)</button>
+      <button class="btn btn-ghost" id="bdExportLeads" disabled><i class="fa-solid fa-download"></i> Export leads (CSV)</button>
+    </div>
+    <h3 style="margin:18px 0 8px;">Leads</h3>
+    <div id="bdLeads"><div class="spinner-block"><span class="spinner"></span><span>Loading leads…</span></div></div>
+  `;
+
+  // Same shape as openDetail: wired against a mutable array BEFORE the fetch,
+  // so a failed load leaves a disabled button rather than a dead live one.
+  let leads = [];
+  const btnReport = document.getElementById('bdExportReport');
+  const btnCsv = document.getElementById('bdExportLeads');
+
+  btnCsv.addEventListener('click', () => {
+    downloadCsv(toCsv(leads, BD_LEAD_COLUMNS), `${slug(name)}-bd-leads.csv`);
+    showToast(`Exported ${leads.length} leads`);
+  });
+  btnReport.addEventListener('click', () => {
+    const html = buildPartnerReportHtml(row, leads, {
+      title: `${name} — BD book`,
+      from: state.from, to: state.to, basis: REPORT_DATE_FIELDS[state.dateField],
+      generatedOn: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    });
+    downloadText(html, `${slug(name)}-bd-report.html`);
+    showToast('Report downloaded — open it in a browser or send it on');
+  });
+
+  try {
+    leads = await getBdLeads(row, state.from, state.to, state.dateField);
+  } catch (err) {
+    console.error('bd lead detail failed', err);
+    document.getElementById('bdLeads').innerHTML =
+      `<p class="empty-state">Could not load the lead list.<br>
+       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></p>`;
+    btnReport.disabled = false;
+    return;
+  }
+  btnReport.disabled = false;
+  btnCsv.disabled = false;
+
+  document.getElementById('bdLeads').innerHTML = leads.length
+    ? `<div style="overflow-x:auto;"><table class="lead-table"><thead><tr>
+         <th>Student</th><th>Consultancy</th><th>Stage</th><th>RM</th><th class="num">Days idle</th></tr></thead><tbody>
+         ${leads.map((l) => `<tr>
+           <td><div class="student-name">${escapeHtml(l.student_name)}</div>
+               <div class="student-phone">${escapeHtml(l.student_phone || '')}</div></td>
+           <td>${escapeHtml(l.consultancy || '–')}</td>
+           <td><span class="badge badge-accent">${escapeHtml(l.stage)}</span></td>
+           <td>${escapeHtml(l.assigned_rm || 'Unassigned')}</td>
+           <td class="num">${l.days_idle ?? '–'}</td>
+         </tr>`).join('')}
+       </tbody></table></div>`
+    : '<p class="empty-state">No leads in this date range.</p>';
+}
+
 function closeDetail() {
   document.getElementById('repOverlay').hidden = true;
+}
+
+async function loadBd() {
+  const body = document.getElementById('bdBody');
+  body.innerHTML = '<tr><td colspan="12"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>';
+  try {
+    state.bdRows = await getBdReport(state.from, state.to, state.dateField);
+    populateBdDropdown();
+    renderBd();
+  } catch (err) {
+    console.error('bd report failed', err);
+    body.innerHTML = `<tr><td colspan="12" class="empty-state">
+      Could not load the report.<br>
+      <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span>
+    </td></tr>`;
+  }
+}
+
+/** Loads whichever tab is showing. The two reports are separate RPCs, so the
+ *  inactive one is not fetched until you switch to it. */
+function loadActive() {
+  return state.tab === 'bd' ? loadBd() : load();
+}
+
+/**
+ * Switches tab. Both tabs share the date filters (they are the same question
+ * asked of the same leads), so switching re-runs the load with whatever is
+ * already in the filter bar rather than resetting it.
+ */
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.report-tab').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  document.getElementById('cardConsultancy').hidden = tab !== 'consultancy';
+  document.getElementById('cardBd').hidden = tab !== 'bd';
+  document.getElementById('fieldConsultancy').hidden = tab !== 'consultancy';
+  document.getElementById('fieldBd').hidden = tab !== 'bd';
+  document.getElementById('repSubtitle').textContent = tab === 'bd'
+    ? 'Per-BD-manager funnel, conversion and ageing across the consultancies they own.'
+    : 'Per-consultancy funnel, conversion and ageing — ready to share.';
+  loadActive();
 }
 
 async function load() {
@@ -307,21 +614,37 @@ async function bootstrap() {
   document.getElementById('dataNote').innerHTML =
     '<i class="fa-solid fa-circle-info"></i> <span>Funnel counts are by <strong>current</strong> stage — a lead that reached Login and was later lost counts only under Lost, because the imported book carries no stage history. <strong>Sanctioned and disbursed amounts are near-zero</strong> until lender deals exist for the imported leads. Ageing is measured from last activity, which for untouched imported leads is the 30 July import date.</span>';
 
-  document.getElementById('repDateField').addEventListener('change', (e) => { state.dateField = e.target.value; load(); });
-  document.getElementById('repFrom').addEventListener('change', (e) => { state.from = e.target.value; load(); });
-  document.getElementById('repTo').addEventListener('change', (e) => { state.to = e.target.value; load(); });
+  const renderActive = () => (state.tab === 'bd' ? renderBd() : render());
+
+  document.querySelectorAll('.report-tab').forEach((b) => {
+    b.addEventListener('click', () => setTab(b.dataset.tab));
+  });
+  wireSorting('repTable', 'consultancy', render);
+  wireSorting('bdTable', 'bd', renderBd);
+
+  document.getElementById('repDateField').addEventListener('change', (e) => { state.dateField = e.target.value; loadActive(); });
+  document.getElementById('repFrom').addEventListener('change', (e) => { state.from = e.target.value; loadActive(); });
+  document.getElementById('repTo').addEventListener('change', (e) => { state.to = e.target.value; loadActive(); });
   document.getElementById('repConsultancy').addEventListener('change', (e) => { state.consultancy = e.target.value; render(); });
-  document.getElementById('repMin').addEventListener('input', (e) => { state.min = Number(e.target.value) || 0; render(); });
+  document.getElementById('repBd').addEventListener('change', (e) => { state.bd = e.target.value; renderBd(); });
+  document.getElementById('repMin').addEventListener('input', (e) => { state.min = Number(e.target.value) || 0; renderActive(); });
   document.getElementById('repClear').addEventListener('click', () => {
-    state.from = ''; state.to = ''; state.consultancy = ''; state.min = 0; state.dateField = 'created_at';
+    state.from = ''; state.to = ''; state.consultancy = ''; state.bd = ''; state.min = 0; state.dateField = 'created_at';
     document.getElementById('repDateField').value = 'created_at';
     document.getElementById('repFrom').value = '';
     document.getElementById('repTo').value = '';
     document.getElementById('repConsultancy').value = '';
+    document.getElementById('repBd').value = '';
     document.getElementById('repMin').value = '0';
-    load();
+    loadActive();
   });
   document.getElementById('repExportAll').addEventListener('click', () => {
+    if (state.tab === 'bd') {
+      const rows = visibleBdRows();
+      downloadCsv(toCsv(rows, BD_SUMMARY_COLUMNS), 'bd-manager-report.csv');
+      showToast(`Exported ${rows.length} BD managers`);
+      return;
+    }
     const rows = visibleRows();
     downloadCsv(toCsv(rows, SUMMARY_COLUMNS), 'consultancy-report.csv');
     showToast(`Exported ${rows.length} consultancies`);

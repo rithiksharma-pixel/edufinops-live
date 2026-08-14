@@ -97,6 +97,48 @@
 }
 .report-note i { color: var(--accent); margin-top: 2px; }
 
+/* ---------- Consultancy / BD tabs ---------- */
+.report-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.report-tab {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 9px 14px; margin-bottom: -1px; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink-500);
+  transition: color .12s ease, border-color .12s ease;
+}
+.report-tab:hover { color: var(--ink-900); }
+.report-tab i { font-size: 12px; }
+.report-tab.active { color: var(--ink-900); font-weight: 600; border-bottom-color: var(--accent); }
+.report-tab.active i { color: var(--accent); }
+.report-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------- Sortable column headers ----------
+   The arrow is a ::after on the th rather than an <i> in the markup, so the
+   header cells stay plain text and the JS only has to toggle a class. A
+   dimmed neutral arrow shows on hover so it is discoverable that the column
+   sorts at all; the active column keeps its arrow permanently. */
+.lead-table.sortable th[data-sort] {
+  cursor: pointer; user-select: none; position: relative;
+  padding-right: 26px;
+}
+.lead-table.sortable th[data-sort]:hover { color: var(--ink-900); }
+.lead-table.sortable th[data-sort]::after {
+  content: "\f0dc";                       /* fa-sort */
+  font-family: "Font Awesome 6 Free"; font-weight: 900;
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; color: var(--ink-300); opacity: 0;
+  transition: opacity .12s ease;
+}
+.lead-table.sortable th[data-sort]:hover::after { opacity: 1; }
+.lead-table.sortable th.sorted { color: var(--ink-900); font-weight: 600; }
+.lead-table.sortable th.sorted::after { opacity: 1; color: var(--accent); }
+.lead-table.sortable th.sorted[data-dir="asc"]::after  { content: "\f0de"; }  /* fa-sort-up */
+.lead-table.sortable th.sorted[data-dir="desc"]::after { content: "\f0dd"; }  /* fa-sort-down */
+.lead-table.sortable th[data-sort]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 .filter-bar {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
   background: var(--bg-surface); border: 1px solid var(--border);
