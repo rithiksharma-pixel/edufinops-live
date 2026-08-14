@@ -32,10 +32,10 @@ button, input, select { font-family: inherit; font-size: inherit; }
   padding: 4px 8px 24px;
 }
 .brand-mark {
-  width: 28px; height: 28px;
+  width: 34px; height: 21px;
   background: var(--accent);
   color: white;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   font-weight: 600;
   font-size: 0;
@@ -46,7 +46,7 @@ button, input, select { font-family: inherit; font-size: inherit; }
    hidden with font-size:0 -- kept so the 14 templates need no edit. */
 .brand-mark::before {
   content: "";
-  width: 80%; height: 80%;
+  width: 84%; height: 84%;
   background: currentColor;
   -webkit-mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
           mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;

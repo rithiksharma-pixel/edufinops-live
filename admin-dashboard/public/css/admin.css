@@ -7,14 +7,14 @@ body { margin: 0; font-family: Inter, sans-serif; color: var(--ink-900); backgro
 .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 28px; font-family: Fraunces, serif; font-size: 20px; }
 .brand-mark, .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); font-family: Inter, sans-serif; font-weight: 700; }
 /* Split out: .avatar still shows a user's initial, only the brand mark loses its letter. */
-.brand-mark { color: #fff; font-size: 0; }
+.brand-mark { color: #fff; font-size: 0; width: 34px; height: 21px; border-radius: 6px; }
 /* The mark is the golden spiral. Drawn as a mask rather than a coloured image
    so it picks up the mark's own `color`: white on the accent tile, navy on the
    light tile in the auth side panel. The literal "Z" still in the markup is
    hidden with font-size:0 -- kept so the 14 templates need no edit. */
 .brand-mark::before {
   content: "";
-  width: 80%; height: 80%;
+  width: 84%; height: 84%;
   background: currentColor;
   -webkit-mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
           mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;

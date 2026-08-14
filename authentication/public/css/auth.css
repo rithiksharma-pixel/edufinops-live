@@ -24,7 +24,12 @@
 }
 .auth-side-top, .auth-side-mid, .auth-side-bottom { position: relative; z-index: 1; }
 .auth-side .auth-brand { margin-bottom: 0; }
-.auth-side .brand-mark { background: var(--paper); color: var(--navy); }
+/* The side panel is var(--navy) in BOTH themes, so it is always a dark
+   surface. This tile must therefore NOT follow the theme: in dark mode
+   --paper resolves to #0A0E17 and --navy to #0C1424, which put a near-black
+   mark on a near-black panel. Fixed values, because the contrast this needs
+   is against the panel, not against the page. */
+.auth-side .brand-mark { background: #F6F8FB; color: #101B30; }
 .auth-side .brand-name { color: #fff; }
 .auth-side .brand-accent { color: #8FB4E8; }
 
@@ -84,10 +89,10 @@
 .auth-card .auth-brand { display: none; }
 .auth-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
 .brand-mark {
-  width: 28px; height: 28px;
+  width: 34px; height: 21px;
   background: var(--accent);
   color: white;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   display: flex; align-items: center; justify-content: center;
   font-weight: 600; font-size: 0;
 }
@@ -97,7 +102,7 @@
    hidden with font-size:0 -- kept so the 14 templates need no edit. */
 .brand-mark::before {
   content: "";
-  width: 80%; height: 80%;
+  width: 84%; height: 84%;
   background: currentColor;
   -webkit-mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
           mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
