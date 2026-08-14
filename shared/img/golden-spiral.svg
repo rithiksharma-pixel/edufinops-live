@@ -1,13 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-7 -7 176 114" fill="none"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-9 -9 180 118" fill="none"
      stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Golden spiral, 1.618 : 1. Coordinates are the unit construction x100, so
-       the box is 161.8 x 100 and each arc radius is the next term down the
-       ratio: 100, 61.8, 38.2, 23.6. Every arc is a quarter turn inscribed in
-       its square, centred on the corner it shares with the next square inward.
+  <!-- Golden spiral in its golden rectangle. Coordinates are the unit
+       construction x100, so the rectangle is exactly 161.8 x 100 and each arc
+       radius is the next term down the ratio: 100, 61.8, 38.2, 23.6. Every arc
+       is a quarter turn inscribed in its square, centred on the corner it
+       shares with the next square inward.
 
-       Four arcs, not five or six. The tail terms (14.6, 9.0, ...) are true to
-       the construction but at a 28px logo they merge into a smudge, so the
-       spiral stops where it still reads. -->
+       The spiral is tangent to the frame at (0,100), (100,0), (161.8,61.8)
+       and (123.6,100). That is the construction working rather than a
+       coincidence, so the two shapes must stay in exact proportion.
+
+       Four arcs, not six. The tail terms (14.6, 9.0 and smaller) are faithful
+       but merge into a smudge at 28px, which is the size this is mostly seen
+       at. The frame is lighter than the spiral so the spiral still leads.
+
+       NOTE: no double hyphen may appear anywhere in this comment. XML forbids
+       it, and because this file is consumed as a CSS mask a parse error does
+       not show an error anywhere. The mask silently resolves to empty and the
+       logo just disappears. -->
+  <rect x="0" y="0" width="161.8" height="100" rx="3" stroke-width="6" opacity=".5"/>
+
   <path d="M0 100
            A100 100 0 0 1 100 0
            A61.8 61.8 0 0 1 161.8 61.8
