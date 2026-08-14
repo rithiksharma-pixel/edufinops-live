@@ -33,6 +33,19 @@
 --   a single row with bd_manager = null so the page can show them. Hiding
 --   them would make every BD person's share of the book look bigger than
 --   it is, and the totals would not reconcile against Lead Management.
+--   They do reconcile: the rollup sums to 12,651, the exact lead count.
+--
+-- CASE FOLDING  (added in 050b, folded in here)
+--   bd_manager is free text, so one person arrives as Nitish / NITISH /
+--   nitish. Casing is never meaningful in a name, so grouping folds it and
+--   the DISPLAYED name is the most frequent spelling actually recorded
+--   (mode()) -- never an invented canonical form.
+--
+--   Genuine spelling variants (Deepansh vs Deepanshu, Suneet vs Suneeth,
+--   Bhavin vs Bhaavin) are deliberately NOT merged. Deciding those are the
+--   same person belongs to whoever owns the BD roster, not to this function.
+--   Junk values ("NA", "Other") are likewise left visible rather than
+--   swept into Unattributed, so they get cleaned at source.
 -- =========================================================
 
 create or replace function public.bd_report(
@@ -98,7 +111,7 @@ as $function$
                  else l.disbursed_date end) is not null)
   ),
   money as (
-    select sc.bd,
+    select lower(btrim(sc.bd)) as bdkey,
            count(d.id) as deals_created,
            sum(coalesce(sd.sanction_amount, 0)) as sanctioned,
            sum(coalesce(d.total_disbursed_amount, 0)) as disbursed
@@ -107,7 +120,8 @@ as $function$
     left join deal_sanction_details sd on sd.deal_id = d.id
     group by 1
   )
-  select sc.bd,
+  select
+    mode() within group (order by sc.bd),
     count(distinct sc.cname)::bigint,
     count(*)::bigint,
     count(*) filter (where sc.seq between 10 and 70)::bigint,
@@ -121,10 +135,10 @@ as $function$
     coalesce(max(m.disbursed), 0),
     round(avg(extract(epoch from (now() - sc.touched)) / 86400)::numeric, 1)
   from scoped sc
-  left join money m on m.bd is not distinct from sc.bd
-  group by sc.bd
+  left join money m on m.bdkey is not distinct from lower(btrim(sc.bd))
+  group by lower(btrim(sc.bd))
   -- nulls last so "Unattributed" sits at the foot, not the head
-  order by (sc.bd is null), count(*) desc;
+  order by (lower(btrim(sc.bd)) is null), count(*) desc;
 $function$;
 
 comment on function public.bd_report(date, date, text) is
@@ -167,12 +181,14 @@ as $function$
                             and not c2.is_deleted and l.consultancy_id is null
   where not l.is_deleted
     -- null p_bd_manager means the Unattributed bucket, so this must be
-    -- IS NOT DISTINCT FROM rather than =
-    and coalesce(
+    -- IS NOT DISTINCT FROM rather than =. Case is folded the same way as the
+    -- rollup, or clicking the row displayed as "Nitish" would miss the leads
+    -- recorded as "NITISH".
+    and lower(coalesce(
           nullif(btrim(l.bd_name), ''),
           nullif(btrim(c1.bd_manager), ''),
           nullif(btrim(c2.bd_manager), '')
-        ) is not distinct from nullif(btrim(p_bd_manager), '')
+        )) is not distinct from lower(nullif(btrim(p_bd_manager), ''))
     and (p_from is null or
          (case p_date_field
             when 'updated_at'     then l.updated_at::date
