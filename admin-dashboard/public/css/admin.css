@@ -12,9 +12,17 @@ body { margin: 0; font-family: Inter, sans-serif; color: var(--ink-900); backgro
    so it picks up the mark's own `color`: white on the accent tile, navy on the
    light tile in the auth side panel. The literal "Z" still in the markup is
    hidden with font-size:0 -- kept so the 14 templates need no edit. */
+/* flex:none so a long brand name can never squeeze the tile. */
+.brand-mark { position: relative; flex: none; }
 .brand-mark::before {
   content: "";
-  width: 84%; height: 84%;
+  /* Positioned with insets rather than width/height percentages. In
+     admin.css the mark is a GRID with place-items:center, where a percentage
+     height resolves against an auto-sized row and collapses to nothing --
+     the spiral rendered 28.5 x 8.8px there instead of 28.5 x 17.6px. Insets
+     resolve against the definite 34x21 box, so this behaves the same under
+     grid and flex. */
+  position: absolute; inset: 8%;
   background: currentColor;
   -webkit-mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;
           mask: url(../../../shared/img/golden-spiral.svg) center / contain no-repeat;

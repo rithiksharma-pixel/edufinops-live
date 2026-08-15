@@ -22,6 +22,11 @@
 // =========================================================
 
 import { escapeHtml } from './utils.js';
+// The APPS table below duplicates roleRoutes by design, but "where does this
+// role land" must not be guessed twice: deriving it from APPS order gets
+// Consultant wrong (they would land in Lead Management, not the Consultant
+// Portal). So the home route is imported from the one place that owns it.
+import { getHomeRouteForRole } from '../../authentication/public/js/config/roleRoutes.js';
 
 const SUPABASE_REF = 'wgzgqbfankdbqxxcesci';
 const LOGIN_PATH = '/authentication/public/login.html';
@@ -219,6 +224,39 @@ function render() {
   `;
 
   wireEvents(host);
+  wireBrandHome();
+}
+
+/**
+ * Makes the sidebar brand ("Zolve Tangent") a link to the signed-in user's
+ * home app.
+ *
+ * Wired here rather than in the templates because all eight pages that render
+ * a .sidebar-brand also mount this topbar, so one place covers every app and
+ * the markup stays untouched. It is a span, not an <a>, so the keyboard and
+ * ARIA affordances have to be added by hand.
+ *
+ * Guarded with a data flag: mountTopbar is re-run whenever crumbs change, and
+ * without this the handler would stack up on every call.
+ */
+function wireBrandHome() {
+  const brand = document.querySelector('.sidebar-brand');
+  if (!brand || brand.dataset.ztHomeWired) return;
+
+  const home = getHomeRouteForRole(state.user?.role);
+  if (!home) return;
+
+  brand.dataset.ztHomeWired = '1';
+  brand.setAttribute('role', 'link');
+  brand.setAttribute('tabindex', '0');
+  brand.title = 'Go to your home page';
+  brand.style.cursor = 'pointer';
+
+  const go = () => { window.location.href = home; };
+  brand.addEventListener('click', go);
+  brand.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+  });
 }
 
 function wireEvents(host) {
