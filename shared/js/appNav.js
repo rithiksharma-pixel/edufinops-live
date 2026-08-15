@@ -148,6 +148,87 @@ function renderSidebarApps() {
     </div>`);
 }
 
+// Only the Consultant Portal has a profile page today. Roles without one get
+// no Profile item rather than a link that 404s -- same rule as the brand.
+const PROFILE_ROUTES = {
+  Consultant: '/consultant-portal/public/profile.html',
+};
+
+/**
+ * The account menu's contents. Built in one place so the copy in the topbar
+ * and the copy on the sidebar user chip can never drift apart.
+ */
+function userMenuItemsHtml() {
+  const profileHref = PROFILE_ROUTES[state.user?.role];
+  return `
+    <div class="zt-menu-head">
+      <strong>${escapeHtml(state.user?.fullName || '')}</strong>
+      <span>${escapeHtml(state.user?.role || '')}</span>
+    </div>
+    ${profileHref ? `<a class="zt-menu-item" href="${profileHref}" role="menuitem">
+      <i class="fa-solid fa-id-badge"></i><span>Profile</span>
+    </a>` : ''}
+    <button type="button" class="zt-menu-item" data-zt-theme role="menuitem">
+      <i class="fa-solid fa-moon zt-ic-dark"></i><i class="fa-solid fa-sun zt-ic-light"></i>
+      <span class="zt-ic-dark">Switch to dark</span><span class="zt-ic-light">Switch to light</span>
+    </button>
+    <div class="zt-menu-sep"></div>
+    <button type="button" class="zt-menu-item danger" data-zt-signout role="menuitem">
+      <i class="fa-solid fa-arrow-right-from-bracket"></i><span>Sign out</span>
+    </button>`;
+}
+
+/**
+ * Open / close behaviour for a popover menu, plus its item handlers.
+ * `scope` is the element a click must fall outside of to close.
+ */
+function wireMenu(scope, trigger, menu) {
+  const close = () => { menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); };
+  const open = () => { menu.hidden = false; trigger.setAttribute('aria-expanded', 'true'); };
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (menu.hidden) open(); else close();
+  });
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); menu.hidden ? open() : close(); }
+  });
+  document.addEventListener('click', (e) => { if (!scope.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  menu.querySelector('[data-zt-theme]')?.addEventListener('click', toggleTheme);
+  menu.querySelector('[data-zt-signout]')?.addEventListener('click', doSignOut);
+}
+
+/**
+ * The user chip in each sidebar footer becomes the same account menu, opening
+ * upward. The chip markup differs per app but is always .user-chip inside
+ * .sidebar-footer, so it is wrapped here rather than edited in eight files.
+ */
+function wireSidebarUserMenu() {
+  const chip = document.querySelector('.sidebar-footer .user-chip');
+  if (!chip || !state.user || chip.dataset.ztMenuWired) return;
+  chip.dataset.ztMenuWired = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'zt-usermenu zt-usermenu-up';
+  chip.parentNode.insertBefore(wrap, chip);
+  wrap.appendChild(chip);
+
+  chip.setAttribute('role', 'button');
+  chip.setAttribute('tabindex', '0');
+  chip.setAttribute('aria-haspopup', 'true');
+  chip.setAttribute('aria-expanded', 'false');
+  chip.style.cursor = 'pointer';
+
+  const menu = document.createElement('div');
+  menu.className = 'zt-menu';
+  menu.setAttribute('role', 'menu');
+  menu.hidden = true;
+  menu.innerHTML = userMenuItemsHtml();
+  wrap.appendChild(menu);
+
+  wireMenu(wrap, chip, menu);
+}
+
 function render() {
   renderSidebarApps();
 
@@ -208,23 +289,25 @@ function render() {
       <nav class="zt-crumbs" aria-label="Breadcrumb">${crumbHtml}</nav>
     </div>
     <div class="zt-topbar-right">
-      <button type="button" class="zt-theme-toggle" title="Toggle light / dark" aria-label="Toggle light or dark theme">
-        <i class="fa-solid fa-sun zt-ic-light"></i><i class="fa-solid fa-moon zt-ic-dark"></i>
-      </button>
       ${state.user ? `
-        <div class="zt-user">
-          <div class="zt-user-avatar">${escapeHtml(initials(state.user.fullName))}</div>
-          <div class="zt-user-meta">
-            <span class="zt-user-name">${escapeHtml(state.user.fullName || '')}</span>
-            <span class="zt-user-role">${escapeHtml(state.user.role || '')}</span>
-          </div>
-        </div>` : ''}
-      <button type="button" class="zt-signout" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>Sign out</span></button>
+        <div class="zt-usermenu">
+          <button type="button" class="zt-user-btn" aria-haspopup="true" aria-expanded="false" title="Account">
+            <span class="zt-user-avatar">${escapeHtml(initials(state.user.fullName))}</span>
+            <span class="zt-user-meta">
+              <span class="zt-user-name">${escapeHtml(state.user.fullName || '')}</span>
+              <span class="zt-user-role">${escapeHtml(state.user.role || '')}</span>
+            </span>
+            <i class="fa-solid fa-angle-down zt-user-caret"></i>
+          </button>
+          <div class="zt-menu" role="menu" hidden>${userMenuItemsHtml()}</div>
+        </div>`
+      : `<button type="button" class="zt-signout" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>Sign out</span></button>`}
     </div>
   `;
 
   wireEvents(host);
   wireBrandHome();
+  wireSidebarUserMenu();
 }
 
 /**
@@ -292,9 +375,12 @@ function wireEvents(host) {
     });
   }
 
-  const themeBtn = host.querySelector('.zt-theme-toggle');
-  if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+  const userWrap = host.querySelector('.zt-usermenu');
+  const userBtn = host.querySelector('.zt-user-btn');
+  const userMenu = userWrap?.querySelector('.zt-menu');
+  if (userWrap && userBtn && userMenu) wireMenu(userWrap, userBtn, userMenu);
 
+  // Only rendered when there is no signed-in user to build a menu for.
   const signout = host.querySelector('.zt-signout');
   if (signout) signout.addEventListener('click', doSignOut);
 
