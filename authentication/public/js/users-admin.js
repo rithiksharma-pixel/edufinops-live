@@ -7,7 +7,7 @@ import {
   getRoles, getAllUsers, getPossibleManagers, getPendingInvitations,
   inviteUser, revokeInvitation, changeUserRole, changeReportingManager,
   deactivateUser, reactivateUser, getLenders, getLenderBranches,
-  getTeams, changeUserTeam,
+  getTeams, changeUserTeam, removeUser, getRemovalBlockers,
 } from './services/userAdminService.js';
 import { whatsappPortalUrl } from './whatsappLink.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
@@ -56,9 +56,39 @@ const INVITABLE_ROLES_BY_INVITER = {
   'Associate Team Manager': ['Relationship Manager', 'Counselor', 'Business Development'],
 };
 
+/**
+ * Remove button for a roster row.
+ *
+ * Removal is a SOFT delete: 115 foreign keys point at users.id, so the row has
+ * to survive for the audit trail to mean anything. What the button mostly does
+ * is explain when removal is not possible yet -- disabled with the real reason
+ * on hover, rather than letting someone click and get an error.
+ *
+ * Only an Admin sees it, and never on their own row.
+ */
+function removeButton(u, blocker, me) {
+  if (me?.role !== 'Admin' || u.id === me?.id) return '';
+
+  const held = (blocker?.rm_leads ?? 0) + (blocker?.manager_leads ?? 0);
+  const reports = blocker?.direct_reports ?? 0;
+  if (held || reports) {
+    const bits = [];
+    if (blocker.rm_leads) bits.push(`${blocker.rm_leads} lead${blocker.rm_leads === 1 ? '' : 's'}`);
+    if (blocker.manager_leads) bits.push(`${blocker.manager_leads} as manager`);
+    if (reports) bits.push(`${reports} report${reports === 1 ? '' : 's'}`);
+    return `<button class="row-action-btn" disabled title="Reassign first: ${escapeHtml(bits.join(', '))}">Remove</button>`;
+  }
+  return `<button class="row-action-btn danger" data-remove-user="${u.id}" data-remove-name="${escapeHtml(u.full_name)}" title="Remove from the team">Remove</button>`;
+}
+
 async function loadUsers() {
   const tbody = document.getElementById('usersTableBody');
   const users = await getAllUsers();
+  // Fetched alongside the roster so Remove can say WHY it is unavailable.
+  // A failure here must not take the whole table down, so it degrades to an
+  // empty map and the button falls back to letting the RPC refuse.
+  let blockers = new Map();
+  try { blockers = await getRemovalBlockers(); } catch { /* non-fatal */ }
   if (users.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6">${emptyState('fa-users', 'No users yet', 'Invite your first teammate and they will show up here.')}</td></tr>`;
     return;
@@ -80,7 +110,7 @@ async function loadUsers() {
       <td><select class="inline-select" data-manager-for="${u.id}">${managerOptions}</select></td>
       <td>${teamCell}</td>
       <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-neutral'}">${u.is_active ? 'Active' : 'Deactivated'}</span></td>
-      <td class="row-actions">${waButton({ fullName: u.full_name, email: u.email, phone: u.phone, roleName: u.roles?.name, pending: false, active: u.is_active })}<button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button></td>
+      <td class="row-actions">${waButton({ fullName: u.full_name, email: u.email, phone: u.phone, roleName: u.roles?.name, pending: false, active: u.is_active })}<button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button>${removeButton(u, blockers.get(u.id), currentUserProfile)}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -124,6 +154,26 @@ async function loadUsers() {
         console.error('changeReportingManager failed', err);
         showToast(`Could not change reporting manager: ${err.message || err}`, true);
         await loadUsers();
+      }
+    });
+  });
+
+  tbody.querySelectorAll('[data-remove-user]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const userId = e.currentTarget.dataset.removeUser;
+      const name = e.currentTarget.dataset.removeName;
+      // Removal hides them everywhere, so it gets a real confirmation.
+      if (!window.confirm(`Remove ${name} from the team?
+
+They lose access immediately and disappear from every list. Their history stays on the records they touched. This is not reversible from this screen.`)) return;
+      try {
+        await removeUser(userId, 'Removed via Manage Users');
+        showToast(`${name} removed.`);
+        await loadUsers();
+      } catch (err) {
+        // The RPC names the exact counts blocking removal; passing that
+        // straight through is far more useful than a generic failure.
+        showToast(err?.message || 'Could not remove this user.', true);
       }
     });
   });

@@ -174,6 +174,26 @@ export async function deactivateUser(userId, remarks) {
   if (error) throw error;
 }
 
+/**
+ * Soft-removes a user. The RPC refuses while they still hold leads or have
+ * direct reports, and its exception text names the exact counts -- so the
+ * message is worth surfacing verbatim rather than replacing with "failed".
+ */
+export async function removeUser(userId, remarks) {
+  const { error } = await supabase.rpc('remove_user', { p_target_user_id: userId, p_remarks: remarks ?? null });
+  if (error) throw error;
+}
+
+/** Per-user counts of what blocks removal, so the button can explain itself
+ *  before it is clicked instead of failing on click. */
+export async function getRemovalBlockers() {
+  const { data, error } = await supabase.rpc('user_removal_blockers');
+  if (error) throw error;
+  const map = new Map();
+  (data ?? []).forEach((r) => map.set(r.user_id, r));
+  return map;
+}
+
 export async function reactivateUser(userId, remarks) {
   const { error } = await supabase.rpc('reactivate_user', { p_target_user_id: userId, p_remarks: remarks ?? null });
   if (error) throw error;
