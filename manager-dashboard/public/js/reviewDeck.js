@@ -67,18 +67,20 @@ export function buildInsights(d) {
   const gLogins = growth(cw.logins, pw.logins);
   const gPf = growth(cw.pf, pw.pf);
 
-  if (gLeads !== null) {
-    out.push({
-      tone: gLeads >= 0 ? 'good' : 'bad',
-      text: `Lead intake ${gLeads >= 0 ? 'rose' : 'fell'} ${Math.abs(gLeads)}% week on week — `
-        + `${num(cw.leads)} against ${num(pw.leads)}.`,
-    });
-  }
+  const gSanc = growth(cw.sanctions, pw.sanctions);
+
   if (gLogins !== null) {
     out.push({
       tone: gLogins >= 0 ? 'good' : 'bad',
-      text: `Logins ${gLogins >= 0 ? 'rose' : 'fell'} ${Math.abs(gLogins)}% — `
+      text: `Logins ${gLogins >= 0 ? 'rose' : 'fell'} ${Math.abs(gLogins)}% week on week — `
         + `${num(cw.logins)} against ${num(pw.logins)}.`,
+    });
+  }
+  if (gSanc !== null) {
+    out.push({
+      tone: gSanc >= 0 ? 'good' : 'bad',
+      text: `Sanctions ${gSanc >= 0 ? 'rose' : 'fell'} ${Math.abs(gSanc)}% — `
+        + `${num(cw.sanctions)} against ${num(pw.sanctions)}.`,
     });
   }
   // Intake up while conversion falls is the pattern worth naming: it looks
@@ -86,8 +88,8 @@ export function buildInsights(d) {
   if (gLeads !== null && gLogins !== null && gLeads > 5 && gLogins < -5) {
     out.push({
       tone: 'bad',
-      text: `Intake grew while logins dropped. More leads are arriving and fewer are converting, `
-        + `so the top-line increase is not reaching the funnel.`,
+      text: `Lead intake grew ${gLeads}% while logins fell ${Math.abs(gLogins)}%. More is arriving and less `
+        + `is converting, so the top-line increase is not reaching the funnel.`,
     });
   }
   if (gPf !== null) {
@@ -103,13 +105,13 @@ export function buildInsights(d) {
   const elapsed = Math.round((mEnd - mStart) / 86400000) + 1;
   const daysInPrev = new Date(new Date(d.meta.prev_month_start + 'T00:00:00').getFullYear(),
     new Date(d.meta.prev_month_start + 'T00:00:00').getMonth() + 1, 0).getDate();
-  const runRate = elapsed ? (cm.leads / elapsed) * daysInPrev : 0;
-  const pace = growth(runRate, pm.leads);
+  const runRate = elapsed ? (cm.logins / elapsed) * daysInPrev : 0;
+  const pace = growth(runRate, pm.logins);
   if (pace !== null) {
     out.push({
       tone: pace >= 0 ? 'good' : 'warn',
-      text: `Month to date is ${num(cm.leads)} leads over ${elapsed} days. At this rate the month lands `
-        + `near ${num(Math.round(runRate))} against last month's ${num(pm.leads)} (${growthText(pace)}).`,
+      text: `Month to date is ${num(cm.logins)} logins over ${elapsed} days. At this rate the month lands `
+        + `near ${num(Math.round(runRate))} against last month's ${num(pm.logins)} (${growthText(pace)}).`,
     });
   }
 
@@ -154,23 +156,22 @@ export function buildInsights(d) {
 
   // Concentration risk.
   const bd = (d.bd || []).filter((b) => b.bd !== '(no BD)');
-  const bdTotal = bd.reduce((s, b) => s + Number(b.leads_all), 0);
+  const bdTotal = bd.reduce((s, b) => s + Number(b.logins_all), 0);
   if (bd.length && bdTotal) {
-    const top = bd[0];
-    const share = pct(Number(top.leads_all), bdTotal);
+    const top = bd.slice().sort((a, b) => Number(b.logins_all) - Number(a.logins_all))[0];
+    const share = pct(Number(top.logins_all), bdTotal);
     if (share > 25) {
       out.push({
         tone: 'warn',
-        text: `${top.bd} accounts for ${share}% of all BD leads. That is concentration risk in one relationship.`,
+        text: `${top.bd} accounts for ${share}% of all BD logins. That is concentration risk in one relationship.`,
       });
     }
   }
   const noBd = (d.bd || []).find((b) => b.bd === '(no BD)');
-  if (noBd && Number(noBd.leads_all) > 0) {
+  if (noBd && Number(noBd.logins_all) > 0) {
     out.push({
       tone: 'warn',
-      text: `${num(noBd.leads_all)} BD leads carry no BD name, so ${num(noBd.logins_all)} logins are `
-        + `credited to nobody.`,
+      text: `${num(noBd.logins_all)} logins are credited to nobody — the leads behind them carry no BD name.`,
     });
   }
 
@@ -260,8 +261,13 @@ export function buildChartConfigs(d) {
   const cm = d.periods.current_month, pm = d.periods.previous_month;
   const f = d.funnel;
 
-  const owners = (d.owners || []).filter((o) => o.owner !== 'Unassigned').slice(0, 10);
-  const bd = (d.bd || []).filter((b) => b.bd !== '(no BD)').slice(0, 10);
+  // Ranked by logins, not leads. Lead count measures how much was fed in;
+  // logins measure what the person actually converted, which is what a
+  // performance chart should order by.
+  const owners = (d.owners || []).filter((o) => o.owner !== 'Unassigned')
+    .slice().sort((a, b) => Number(b.logins_all) - Number(a.logins_all)).slice(0, 10);
+  const bd = (d.bd || []).filter((b) => b.bd !== '(no BD)')
+    .slice().sort((a, b) => Number(b.logins_all) - Number(a.logins_all)).slice(0, 10);
   const touch = d.touchbase || [];
   const TOUCH_ORDER = ['0-7 days', '8-14 days', '15-30 days', '31-60 days', '60+ days'];
   const touchSorted = TOUCH_ORDER
@@ -272,12 +278,12 @@ export function buildChartConfigs(d) {
     wow: {
       type: 'bar',
       data: {
-        labels: ['Leads', 'Logins', 'Sanctions', 'PF'],
+        labels: ['Logins', 'Sanctions', 'PF paid'],
         datasets: [
           { label: `Previous week (${fmtDate(d.meta.prev_week_start)}–${fmtDate(d.meta.prev_week_end)})`,
-            data: [pw.leads, pw.logins, pw.sanctions, pw.pf], backgroundColor: '#C7D6F5' },
+            data: [pw.logins, pw.sanctions, pw.pf], backgroundColor: '#C7D6F5' },
           { label: `Current week (${fmtDate(d.meta.week_start)}–${fmtDate(d.meta.week_end)})`,
-            data: [cw.leads, cw.logins, cw.sanctions, cw.pf], backgroundColor: '#2563EB' },
+            data: [cw.logins, cw.sanctions, cw.pf], backgroundColor: '#2563EB' },
         ],
       },
       options: CHART_BASE,
@@ -285,10 +291,10 @@ export function buildChartConfigs(d) {
     mom: {
       type: 'bar',
       data: {
-        labels: ['Leads', 'Logins', 'Sanctions', 'PF'],
+        labels: ['Logins', 'Sanctions', 'PF paid'],
         datasets: [
-          { label: 'Previous month', data: [pm.leads, pm.logins, pm.sanctions, pm.pf], backgroundColor: '#C7D6F5' },
-          { label: 'Month to date', data: [cm.leads, cm.logins, cm.sanctions, cm.pf], backgroundColor: '#1D4ED8' },
+          { label: 'Previous month', data: [pm.logins, pm.sanctions, pm.pf], backgroundColor: '#C7D6F5' },
+          { label: 'Month to date', data: [cm.logins, cm.sanctions, cm.pf], backgroundColor: '#1D4ED8' },
         ],
       },
       options: CHART_BASE,
@@ -310,9 +316,8 @@ export function buildChartConfigs(d) {
       data: {
         labels: owners.map((o) => o.owner),
         datasets: [
-          { label: 'Leads', data: owners.map((o) => Number(o.leads_all)), backgroundColor: '#2563EB' },
-          { label: 'Logins', data: owners.map((o) => Number(o.logins_all)), backgroundColor: '#60A5FA' },
-          { label: 'PF', data: owners.map((o) => Number(o.pf_all)), backgroundColor: '#93C5FD' },
+          { label: 'Logins', data: owners.map((o) => Number(o.logins_all)), backgroundColor: '#2563EB' },
+          { label: 'PF paid', data: owners.map((o) => Number(o.pf_all)), backgroundColor: '#60A5FA' },
         ],
       },
       options: CHART_BASE,
@@ -322,8 +327,8 @@ export function buildChartConfigs(d) {
       data: {
         labels: bd.map((b) => b.bd),
         datasets: [
-          { label: 'Leads', data: bd.map((b) => Number(b.leads_all)), backgroundColor: '#1D4ED8' },
-          { label: 'Logins', data: bd.map((b) => Number(b.logins_all)), backgroundColor: '#60A5FA' },
+          { label: 'Logins', data: bd.map((b) => Number(b.logins_all)), backgroundColor: '#1D4ED8' },
+          { label: 'PF paid', data: bd.map((b) => Number(b.pf_all)), backgroundColor: '#60A5FA' },
         ],
       },
       options: CHART_BASE,
@@ -372,10 +377,13 @@ export function buildSections(d, charts) {
     return [label, num(a), num(b), growthText(g), g === null ? 'flat' : (g >= 0 ? 'up' : 'down')];
   };
 
-  const owners = (d.owners || []).filter((o) => o.owner !== 'Unassigned');
-  const ownerLeadTotal = owners.reduce((s, o) => s + Number(o.leads_all), 0);
-  const bd = d.bd || [];
-  const bdLeadTotal = bd.reduce((s, b) => s + Number(b.leads_all), 0);
+  // Ordered and attributed by logins throughout: lead volume says how much
+  // was handed to someone, logins say what they did with it.
+  const owners = (d.owners || []).filter((o) => o.owner !== 'Unassigned')
+    .slice().sort((a, b) => Number(b.logins_all) - Number(a.logins_all));
+  const ownerLoginTotal = owners.reduce((s, o) => s + Number(o.logins_all), 0);
+  const bd = (d.bd || []).slice().sort((a, b) => Number(b.logins_all) - Number(a.logins_all));
+  const bdLoginTotal = bd.reduce((s, b) => s + Number(b.logins_all), 0);
 
   const stagePairs = [
     ['Leads → App Start', f.total_leads, f.app_start],
@@ -391,11 +399,14 @@ export function buildSections(d, charts) {
       id: 'exec',
       title: 'Executive summary',
       subtitle: `Week ${fmtDate(d.meta.week_start)} – ${fmtDate(d.meta.week_end)}`,
+      // Logins and PF lead: they are what the week is judged on. Lead intake
+      // is shown last, as context for the conversion numbers rather than as
+      // the headline.
       kpis: [
-        { label: 'Leads this week', value: num(cw.leads), delta: growthText(growth(cw.leads, pw.leads)) },
-        { label: 'Logins', value: num(cw.logins), delta: growthText(growth(cw.logins, pw.logins)) },
-        { label: 'Sanctions', value: num(cw.sanctions), delta: growthText(growth(cw.sanctions, pw.sanctions)) },
+        { label: 'Logins this week', value: num(cw.logins), delta: growthText(growth(cw.logins, pw.logins)) },
         { label: 'PF paid', value: num(cw.pf), delta: growthText(growth(cw.pf, pw.pf)) },
+        { label: 'Sanctions', value: num(cw.sanctions), delta: growthText(growth(cw.sanctions, pw.sanctions)) },
+        { label: 'Leads in (context)', value: num(cw.leads), delta: growthText(growth(cw.leads, pw.leads)) },
       ],
       lists: [
         { heading: 'Key wins', tone: 'good', items: wins.map((i) => i.text) },
@@ -408,7 +419,7 @@ export function buildSections(d, charts) {
       title: 'Overall numbers',
       table: {
         head: ['Metric', 'This week', 'Last week', 'WoW', 'Month to date', 'Last month', 'MoM'],
-        rows: ['leads', 'logins', 'sanctions', 'pf', 'disbursals'].map((k) => [
+        rows: ['logins', 'sanctions', 'pf', 'disbursals', 'leads'].map((k) => [
           METRIC_LABELS[k], num(cw[k]), num(pw[k]), growthText(growth(cw[k], pw[k])),
           num(cm[k]), num(pm[k]), growthText(growth(cm[k], pm[k])),
         ]),
@@ -426,11 +437,12 @@ export function buildSections(d, charts) {
       title: 'Owner-wise performance',
       chart: charts.owners,
       table: {
-        head: ['Owner', 'Leads', 'Logins', 'PF', 'Lead→PF %', 'Contribution %'],
+        head: ['Owner', 'Logins', 'PF', 'Login→PF %', 'Share of logins', 'Leads (context)'],
         rows: owners.slice(0, 15).map((o) => [
-          o.owner, num(o.leads_all), num(o.logins_all), num(o.pf_all),
-          `${pct(Number(o.pf_all), Number(o.leads_all))}%`,
-          `${pct(Number(o.leads_all), ownerLeadTotal)}%`,
+          o.owner, num(o.logins_all), num(o.pf_all),
+          `${pct(Number(o.pf_all), Number(o.logins_all))}%`,
+          `${pct(Number(o.logins_all), ownerLoginTotal)}%`,
+          num(o.leads_all),
         ]),
       },
     },
@@ -442,11 +454,11 @@ export function buildSections(d, charts) {
       table: {
         head: ['Metric', 'Current', 'Previous', 'Change', 'Direction'],
         rows: [
-          metricRow('Leads (week)', cw.leads, pw.leads),
           metricRow('Logins (week)', cw.logins, pw.logins),
+          metricRow('Sanctions (week)', cw.sanctions, pw.sanctions),
           metricRow('PF (week)', cw.pf, pw.pf),
-          metricRow('Leads (month)', cm.leads, pm.leads),
           metricRow('Logins (month)', cm.logins, pm.logins),
+          metricRow('Sanctions (month)', cm.sanctions, pm.sanctions),
           metricRow('PF (month)', cm.pf, pm.pf),
         ].map((r) => r.slice(0, 5)),
       },
@@ -456,11 +468,12 @@ export function buildSections(d, charts) {
       id: 'owner-periods',
       title: 'Owner-wise weekly and monthly analysis',
       table: {
-        head: ['Owner', 'Leads wk', 'Prev wk', 'WoW', 'Leads mo', 'Prev mo', 'MoM', 'Logins wk', 'Logins mo'],
+        head: ['Owner', 'Logins wk', 'Prev wk', 'WoW', 'Logins mo', 'Prev mo', 'MoM', 'PF wk', 'PF mo'],
         rows: owners.slice(0, 15).map((o) => [
-          o.owner, num(o.leads_wk), num(o.leads_pw), growthText(growth(Number(o.leads_wk), Number(o.leads_pw))),
-          num(o.leads_mo), num(o.leads_pm), growthText(growth(Number(o.leads_mo), Number(o.leads_pm))),
-          num(o.logins_wk), num(o.logins_mo),
+          o.owner,
+          num(o.logins_wk), num(o.logins_pw), growthText(growth(Number(o.logins_wk), Number(o.logins_pw))),
+          num(o.logins_mo), num(o.logins_pm), growthText(growth(Number(o.logins_mo), Number(o.logins_pm))),
+          num(o.pf_wk), num(o.pf_mo),
         ]),
       },
     },
@@ -517,12 +530,13 @@ export function buildSections(d, charts) {
       title: 'BD performance dashboard',
       chart: charts.bd,
       table: {
-        head: ['BD', 'Leads', 'Logins', 'PF', 'Leads wk', 'WoW', 'Leads mo', 'MoM', 'Contribution %'],
+        head: ['BD', 'Logins', 'PF', 'Logins wk', 'WoW', 'Logins mo', 'MoM', 'Share of logins', 'Leads (context)'],
         rows: bd.slice(0, 15).map((b) => [
-          b.bd, num(b.leads_all), num(b.logins_all), num(b.pf_all),
-          num(b.leads_wk), growthText(growth(Number(b.leads_wk), Number(b.leads_pw))),
-          num(b.leads_mo), growthText(growth(Number(b.leads_mo), Number(b.leads_pm))),
-          `${pct(Number(b.leads_all), bdLeadTotal)}%`,
+          b.bd, num(b.logins_all), num(b.pf_all),
+          num(b.logins_wk), growthText(growth(Number(b.logins_wk), Number(b.logins_pw))),
+          num(b.logins_mo), growthText(growth(Number(b.logins_mo), Number(b.logins_pm))),
+          `${pct(Number(b.logins_all), bdLoginTotal)}%`,
+          num(b.leads_all),
         ]),
       },
     },

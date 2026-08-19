@@ -20,6 +20,12 @@ import { mountTopbar } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
+// Charts are rendered at the aspect ratio the slide gives them, so the pptx
+// never has to stretch one to fit. 1280x560 is 2.29:1, which fits a full
+// slide width under the header band with room to spare.
+const CHART_W = 1280;
+const CHART_H = 560;
+
 const STEPS = [
   ['fetch', 'Fetching the latest CRM data'],
   ['compute', 'Computing weekly and monthly movements'],
@@ -83,7 +89,7 @@ async function generate() {
     const charts = {};
     const keys = Object.keys(configs);
     for (let i = 0; i < keys.length; i++) {
-      charts[keys[i]] = await renderChart(configs[keys[i]], 900, 460);
+      charts[keys[i]] = await renderChart(configs[keys[i]], CHART_W, CHART_H);
       setProgress(45 + Math.round((i / keys.length) * 25), `Rendering charts… (${i + 1}/${keys.length})`);
     }
     lastCharts = charts;
@@ -299,19 +305,26 @@ function addSectionSlides(pptx, s, W, H) {
     }
   }
 
-  if (s.chart) {
-    const h = Math.min(3.6, H - y - 0.4);
-    if (h > 1.2) {
-      first.addImage({ data: s.chart.dataUrl, x: 0.45, y, w: W - 0.9, h });
-      y += h + 0.15;
-    }
-  }
-
   if (s.notes?.length && y < H - 0.8) {
     first.addText(s.notes.map((n) => ({ text: n, options: { bullet: true, breakLine: true } })), {
       x: 0.45, y, w: W - 0.9, h: Math.min(s.notes.length * 0.24 + 0.1, H - y - 0.25),
       fontSize: 9, color: BRAND.muted, fontFace: 'Inter', valign: 'top',
     });
+  }
+
+  // Charts get their own slide, scaled from their real pixel dimensions so
+  // the picture keeps its aspect ratio. Fitting a 2.3:1 chart into whatever
+  // vertical gap was left over is what made the earlier deck look stretched.
+  for (const chart of [s.chart, s.chart2]) {
+    if (!chart) continue;
+    const slide = pptx.addSlide();
+    slideHeader(slide, s.title, W);
+    const top = 1.05, bottom = 0.35;
+    const maxW = W - 0.9, maxH = H - top - bottom;
+    const ratio = chart.height / chart.width;
+    let w = maxW, h = w * ratio;
+    if (h > maxH) { h = maxH; w = h / ratio; }
+    slide.addImage({ data: chart.dataUrl, x: (W - w) / 2, y: top + (maxH - h) / 2, w, h });
   }
 
   // Tables get their own slide so they stay legible.
@@ -332,9 +345,11 @@ function addSectionSlides(pptx, s, W, H) {
             : (String(c ?? '').startsWith('-') && String(c).endsWith('%') ? BRAND.bad : BRAND.ink),
         },
       })));
+      // No forced rowH: a fixed height clips long owner or consultancy
+      // names once a table has more than a few columns. Let the rows size
+      // themselves and keep the font small enough that 16 always fit.
       slide.addTable([head, ...body], {
-        ...TABLE_BASE, x: 0.4, y: 1.05, w: W - 0.8,
-        rowH: Math.min(0.34, (H - 1.5) / (body.length + 1)),
+        ...TABLE_BASE, x: 0.4, y: 1.05, w: W - 0.8, valign: 'middle',
       });
     }
   }
@@ -393,7 +408,7 @@ async function openStored(id) {
     lastPayload = row.payload;
     const configs = buildChartConfigs(row.payload);
     const charts = {};
-    for (const k of Object.keys(configs)) charts[k] = await renderChart(configs[k], 900, 460);
+    for (const k of Object.keys(configs)) charts[k] = await renderChart(configs[k], CHART_W, CHART_H);
     lastCharts = charts;
     lastSections = buildSections(row.payload, charts);
     renderDeck(lastSections, row.payload);
