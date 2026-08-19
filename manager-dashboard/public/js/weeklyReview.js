@@ -484,14 +484,23 @@ function setTab(name) {
 }
 
 async function bootstrap() {
+  // getCurrentUser throws when there is no session; guardBootstrap catches it
+  // and shows the banner, which is how every other page in this app behaves.
   currentUser = await getCurrentUser();
-  if (!currentUser) { window.location.href = '../../authentication/public/index.html'; return; }
+
+  $('userName').textContent = currentUser.full_name;
+  $('userRole').textContent = currentUser.role;
+  $('avatar').textContent = (currentUser.full_name || '?').charAt(0).toUpperCase();
+  mountTopbar({ app: 'manager-dashboard', user: currentUser });
+
+  // RLS already refuses the write, but saying so up front beats letting
+  // someone generate a deck and fail at the save step.
   if (!['Admin', 'Manager'].includes(currentUser.role)) {
-    document.querySelector('.main').innerHTML =
+    $('paneGenerate').innerHTML =
       '<p class="empty-state">The Weekly Business Review is available to Admins and Managers.</p>';
+    document.querySelector('.report-tabs').hidden = true;
     return;
   }
-  mountTopbar({ app: 'manager-dashboard', user: currentUser });
 
   $('wrWeekEnd').value = new Date().toISOString().slice(0, 10);
   $('btnGenerate').addEventListener('click', generate);
