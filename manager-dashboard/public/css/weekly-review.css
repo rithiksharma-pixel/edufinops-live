@@ -1,0 +1,171 @@
+/* =========================================================
+   Weekly Business Review
+   Slides render as cards on screen and as pages when printed, so the PDF
+   is the same document rather than a second layout to keep in sync.
+   ========================================================= */
+
+.wr-launch {
+  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.wr-cta {
+  font-size: 15px; padding: 12px 22px; height: auto;
+}
+
+/* ---------- progress ---------- */
+.wr-progress-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 20px;
+}
+.wr-bar-track {
+  height: 6px; background: var(--bg-hover); border-radius: 999px; overflow: hidden;
+}
+.wr-bar {
+  height: 100%; width: 0; background: var(--accent);
+  border-radius: 999px; transition: width .35s ease;
+}
+.wr-progress-label {
+  margin: 10px 0 14px; font-size: 13px; color: var(--ink-500);
+}
+.wr-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wr-step {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--ink-500);
+}
+.wr-step-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--border); flex: none;
+}
+.wr-step.active { color: var(--ink-900); font-weight: 500; }
+.wr-step.active .wr-step-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.wr-step.done { color: var(--ink-900); }
+.wr-step.done .wr-step-dot { background: #15803D; }
+.wr-step.failed { color: #B91C1C; }
+.wr-step.failed .wr-step-dot { background: #B91C1C; }
+
+/* ---------- export bar ---------- */
+.wr-exports {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px;
+  position: sticky; top: 8px; z-index: 20;
+}
+.wr-deck-meta { font-size: 12px; color: var(--ink-500); }
+.wr-export-btns { display: flex; gap: 10px; }
+
+/* ---------- slides ---------- */
+.wr-deck { display: grid; gap: 20px; }
+.wr-slide {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 24px 26px;
+}
+.wr-slide-head {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding-bottom: 14px; margin-bottom: 16px;
+  border-bottom: 2px solid var(--accent);
+}
+.wr-slide-no {
+  font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600;
+  color: var(--accent); padding-top: 4px;
+}
+.wr-slide-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.wr-slide-sub { margin: 2px 0 0; font-size: 13px; color: var(--ink-500); }
+
+.wr-awaiting {
+  background: #FEF3C7; color: #92400E; border-radius: var(--radius-sm);
+  padding: 12px 14px; font-size: 13px; line-height: 1.5; margin-bottom: 16px;
+}
+:root[data-theme="dark"] .wr-awaiting { background: #3B2F0B; color: #FDE68A; }
+
+/* ---------- KPIs ---------- */
+.wr-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 18px;
+}
+.wr-kpi {
+  background: var(--bg-hover); border-radius: var(--radius-md);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 2px;
+}
+.wr-kpi-label { font-size: 12px; color: var(--ink-500); }
+.wr-kpi-value { font-size: 26px; font-weight: 600; line-height: 1.15; }
+.wr-kpi-delta { font-size: 12px; color: var(--ink-500); }
+.wr-kpi-delta.up { color: #15803D; }
+.wr-kpi-delta.down { color: #B91C1C; }
+
+/* ---------- lists ---------- */
+.wr-subhead { margin: 18px 0 8px; font-size: 14px; font-weight: 600; }
+.wr-subhead.tone-good { color: #15803D; }
+.wr-subhead.tone-bad { color: #B91C1C; }
+.wr-subhead.tone-warn { color: #B45309; }
+.wr-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.wr-list li { font-size: 13px; line-height: 1.55; }
+.wr-none { font-size: 13px; color: var(--ink-500); margin: 4px 0; }
+.wr-notes {
+  margin: 14px 0 0; padding-left: 18px; display: grid; gap: 4px;
+  font-size: 12px; color: var(--ink-500);
+}
+
+/* ---------- charts & tables ---------- */
+.wr-chart {
+  display: block; width: 100%; max-width: 100%; height: auto;
+  margin: 16px 0; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: #FFFFFF;
+}
+/* Wide tables scroll inside their own box; the page itself never does. */
+.wr-tablewrap { overflow-x: auto; margin: 12px 0; }
+.wr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.wr-table th {
+  background: var(--accent); color: #FFFFFF; font-weight: 600;
+  text-align: left; padding: 8px 10px; white-space: nowrap;
+}
+.wr-table td {
+  padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.wr-table tbody tr:nth-child(even) { background: var(--bg-hover); }
+.wr-table td.up { color: #15803D; font-weight: 500; }
+.wr-table td.down { color: #B91C1C; font-weight: 500; }
+
+/* ---------- history ---------- */
+.wr-hist-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.wr-hist-row:last-child { border-bottom: none; }
+.wr-hist-meta { display: block; font-size: 12px; color: var(--ink-500); margin-top: 2px; }
+.wr-hist-actions { display: flex; gap: 8px; flex: none; }
+
+/* =========================================================
+   PRINT — this is the PDF. One slide per page, chrome removed.
+   ========================================================= */
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+
+  .sidebar, .zt-topbar, .main-header, .report-tabs,
+  .wr-launch, .wr-progress-card, .wr-exports, .toast,
+  #paneHistory, #paneTargets { display: none !important; }
+
+  html, body { background: #FFFFFF !important; }
+  .app-shell { display: block !important; }
+  .main { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+
+  .wr-deck { gap: 0; display: block; }
+  .wr-slide {
+    break-after: page; page-break-after: always;
+    border: none; border-radius: 0; padding: 0 0 12mm;
+    background: #FFFFFF !important;
+  }
+  .wr-slide:last-child { break-after: auto; page-break-after: auto; }
+
+  /* Keep a heading with the thing it introduces. */
+  .wr-slide-head, .wr-subhead { break-after: avoid; page-break-after: avoid; }
+  .wr-chart, .wr-table { break-inside: avoid; page-break-inside: avoid; }
+  .wr-tablewrap { overflow: visible; }
+
+  /* Backgrounds are the branding — without this most browsers drop them. */
+  .wr-table th, .wr-kpi, .wr-awaiting, .wr-slide-head {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .wr-table { font-size: 10px; }
+  .wr-table td, .wr-table th { padding: 4px 6px; }
+}
