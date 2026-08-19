@@ -448,3 +448,66 @@ export async function getHighestDealStage(leadId) {
   if (stages.length === 0) return null;
   return stages.sort((a, b) => b.sequence_order - a.sequence_order)[0].name;
 }
+
+// ---------------------------------------------------------
+// Lead editing (Admin / Manager)
+// ---------------------------------------------------------
+
+/**
+ * Fields an Admin or Manager may edit from the "Edit lead" form.
+ *
+ * Deliberately a whitelist rather than "whatever the form submits". The
+ * leads table also carries ownership, audit and automation columns
+ * (assigned_rm_id, created_by, is_deleted, lost_reason_id, stage_manually_set
+ * …) that have their own flows — reassignment, Mark as Lost, the stage
+ * ratchet. Letting a generic edit form write those would quietly bypass the
+ * event logging those flows do.
+ *
+ * current_stage_id is NOT here on purpose: stage is Admin-only and goes
+ * through setLeadStage() so the change lands in the timeline.
+ */
+export const EDITABLE_LEAD_FIELDS = [
+  'student_name', 'student_phone', 'student_email', 'student_dob',
+  'alternate_phone', 'parent_alternate_number', 'gender', 'marital_status',
+  'course_name', 'university_name', 'destination_country', 'degree',
+  'intake_month', 'intake_year', 'admission_offer_status',
+  'loan_amount_requested', 'currency', 'loan_type', 'total_study_cost',
+  'self_funds_available', 'savings_amount', 'has_liabilities',
+  'liabilities_amount', 'credit_score', 'employment_status',
+  'lead_source_id', 'consultancy_id', 'consultancy_other_name', 'bd_name',
+  'priority',
+  'login_date', 'sanction_date', 'pf_date', 'disbursed_date',
+  'disbursed_amount',
+];
+
+/**
+ * Update a lead's own columns. Anything outside EDITABLE_LEAD_FIELDS is
+ * dropped before the request rather than sent and rejected, so a stray form
+ * field can't fail the whole save.
+ *
+ * RLS (migration 051) is the real gate — this narrowing is about not sending
+ * nonsense, not about security.
+ */
+export async function updateLead(leadId, fields) {
+  const payload = {};
+  for (const key of EDITABLE_LEAD_FIELDS) {
+    if (key in fields) payload[key] = fields[key];
+  }
+  if (Object.keys(payload).length === 0) return;
+  const { error } = await supabase.from('leads').update(payload).eq('id', leadId);
+  if (error) throw error;
+}
+
+/**
+ * Admin-only manual stage override. The RPC re-checks the role, writes the
+ * lead_events row, and sets stage_manually_set so the activity-driven
+ * recompute stops moving this lead (see migration 055).
+ */
+export async function setLeadStage(leadId, stageId, remarks) {
+  const { error } = await supabase.rpc('set_lead_stage', {
+    p_lead_id: leadId,
+    p_stage_id: stageId,
+    p_remarks: remarks ?? null,
+  });
+  if (error) throw error;
+}

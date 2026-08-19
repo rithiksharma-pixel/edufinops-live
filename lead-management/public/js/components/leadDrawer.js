@@ -27,6 +27,7 @@ import { getAssignableRms } from '../services/lookupService.js';
 import { formatCurrency, formatDateTime, followUpCell } from '../utils/validation.js';
 import { emptyState } from '../../../../shared/js/emptyState.js';
 import { renderLeadSummary } from './leadSummary.js';
+import { initLeadEditModal } from './leadEditModal.js';
 
 let currentLeadId = null;
 
@@ -35,6 +36,18 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
   const btnClose = document.getElementById('btnCloseDrawer');
   const tabs = document.querySelectorAll('.tab-btn');
   const currentUserRole = currentUser.role;
+
+  // Editing a lead's own fields is an Admin/Manager action (migration 051).
+  // Reload the drawer afterwards so the header and Overview show the change
+  // without the user having to close and reopen it.
+  const editModal = initLeadEditModal({
+    showToast,
+    currentUser,
+    onLeadUpdated: () => {
+      if (currentLeadId) open(currentLeadId);
+      onLeadUpdated();
+    },
+  });
 
   btnClose.addEventListener('click', close);
   overlay.addEventListener('click', (e) => {
@@ -89,7 +102,13 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
 
       renderHeader(lead, effectiveStatus);
       if (onOpen) onOpen(lead);
-      renderActionBar(lead, { canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole), activateTab, toggleCallForm });
+      renderActionBar(lead, {
+        canEdit: ['Admin', 'Manager', 'Relationship Manager'].includes(currentUserRole),
+        canEditLead: ['Admin', 'Manager'].includes(currentUserRole),
+        activateTab,
+        toggleCallForm,
+        onEditLead: () => editModal.open(lead.id),
+      });
       renderCallForm(lead, currentUser, showToast, onLeadUpdated);
       renderOverview(lead, effectiveStatus, rms, lostReasons, currentUser, showToast, onLeadUpdated, () => open(leadId), timeline);
       renderTimeline(timeline);
@@ -190,12 +209,15 @@ function renderHeader(lead, effectiveStatus) {
 
 // Quick-action toolbar in the top panel: call the student, log a call,
 // jump to history/docs — all reachable without hunting through tabs.
-function renderActionBar(lead, { canEdit, activateTab, toggleCallForm }) {
+function renderActionBar(lead, { canEdit, canEditLead, activateTab, toggleCallForm, onEditLead }) {
   const bar = document.getElementById('drawerActionBar');
   const phone = (lead.student_phone || '').replace(/[^\d+]/g, '');
   const buttons = [];
   if (phone) {
     buttons.push(`<a class="drawer-action-btn primary" href="tel:${escapeHtml(phone)}"><i class="fa-solid fa-phone"></i> Make a call</a>`);
+  }
+  if (canEditLead) {
+    buttons.push('<button type="button" class="drawer-action-btn" id="btnActionEditLead"><i class="fa-solid fa-pen"></i> Edit lead</button>');
   }
   if (canEdit) {
     buttons.push('<button type="button" class="drawer-action-btn" id="btnActionLogCall"><i class="fa-solid fa-pen-to-square"></i> Log call</button>');
@@ -206,6 +228,8 @@ function renderActionBar(lead, { canEdit, activateTab, toggleCallForm }) {
 
   const logBtn = document.getElementById('btnActionLogCall');
   if (logBtn) logBtn.addEventListener('click', toggleCallForm);
+  const editBtn = document.getElementById('btnActionEditLead');
+  if (editBtn && onEditLead) editBtn.addEventListener('click', onEditLead);
   bar.querySelectorAll('[data-goto]').forEach((btn) => {
     btn.addEventListener('click', () => activateTab(btn.dataset.goto));
   });
