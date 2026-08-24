@@ -28,6 +28,7 @@ import { formatCurrency, formatDateTime, followUpCell } from '../utils/validatio
 import { emptyState } from '../../../../shared/js/emptyState.js';
 import { renderLeadSummary } from './leadSummary.js';
 import { initLeadEditModal } from './leadEditModal.js';
+import { initActivitiesTab } from './activityPanel.js';
 
 let currentLeadId = null;
 
@@ -138,6 +139,18 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       await initAcademicDetailsTab(document.getElementById('panelAcademic'), lead, extended.academic, { currentUser, showToast, onSaved: refreshDetailsTabs });
       await initFamilyTab(document.getElementById('panelFamily'), lead, extended.parents, coApplicants[0], { currentUser, showToast, onSaved: refreshDetailsTabs });
       await initCollateralReferencesTab(document.getElementById('panelCollateral'), lead, extended.collateral, extended.references, { currentUser, showToast, onSaved: refreshDetailsTabs });
+
+      // Activities are custom forms built per campaign (migration 058). The
+      // panel decides for itself which forms apply to this lead, so nothing
+      // is passed in beyond the lead and the usual context.
+      // Not every host page carries the Activities panel yet, so skip
+      // rather than throw and take the rest of the drawer down with it.
+      const activitiesPanel = document.getElementById('panelActivities');
+      if (activitiesPanel) {
+        await initActivitiesTab(activitiesPanel, lead, {
+          currentUser, showToast, onSaved: refreshDetailsTabs,
+        });
+      }
 
       // Consultants/BD never see Deals/Lenders — commercially sensitive,
       // blocked by RLS too, but no point rendering a tab that always comes

@@ -496,3 +496,56 @@
 }
 .ti-error { color: var(--danger, #B3402F); font-size: 13px; margin: 8px 0 0; }
 .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+/* =========================================================
+   ACTIVITIES TAB — custom form capture (migration 058)
+   ========================================================= */
+.act-subhead {
+  font-size: 14px; font-weight: 600; margin: 0 0 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.act-count {
+  font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-soft-ink);
+}
+.act-formpicker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.act-form-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: var(--radius-md);
+  border: 1px solid var(--border); background: var(--bg-surface);
+  font-size: 13px; font-weight: 500; color: inherit; cursor: pointer;
+}
+.act-form-btn:hover { background: var(--bg-hover); }
+.act-form-btn.active {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.act-form {
+  background: var(--bg-hover); border-radius: var(--radius-md);
+  padding: 16px; margin-bottom: 8px;
+}
+.act-formdesc { margin: 0 0 12px; font-size: 13px; color: var(--ink-500); }
+.act-help { font-size: 12px; color: var(--ink-500); margin-top: 4px; display: block; }
+.act-checks { display: flex; flex-wrap: wrap; gap: 10px 16px; padding-top: 4px; }
+.act-check {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 400; flex-direction: row;
+}
+
+/* ---------- history ---------- */
+.act-item {
+  border-left: 2px solid var(--accent);
+  padding: 10px 0 14px 14px; margin-bottom: 12px;
+}
+.act-item-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; font-size: 13px;
+}
+.act-item-meta { font-size: 12px; color: var(--ink-500); }
+.act-item-summary { margin: 6px 0 0; font-size: 13px; }
+.act-answers {
+  margin: 8px 0 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px 18px;
+}
+.act-answers > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.act-answers dt { font-size: 11px; color: var(--ink-500); }
+.act-answers dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
