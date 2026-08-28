@@ -16,6 +16,18 @@ export async function fetchReviewData(weekEnd = null) {
   return data;
 }
 
+/**
+ * Trailing weekly and monthly runs (migration 060). Separate from the main
+ * report so that large RPC stays untouched; the deck needs both.
+ */
+export async function fetchReviewSeries(weekEnd = null, weeks = 12, months = 6) {
+  const { data, error } = await supabase.rpc('weekly_review_series', {
+    p_week_end: weekEnd, p_weeks: weeks, p_months: months,
+  });
+  if (error) throw error;
+  return data;
+}
+
 /** Persist a generated review so it appears in the Weekly Reviews list. */
 export async function saveReview({ weekStart, weekEnd, title, payload, userId }) {
   const { data, error } = await supabase

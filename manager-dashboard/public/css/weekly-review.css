@@ -1,47 +1,53 @@
 /* =========================================================
    Weekly Business Review
+   Palette lifted from the MRM reference deck: warm off-white ground,
+   near-black ink, one red accent used sparingly.
    Slides render as cards on screen and as pages when printed, so the PDF
    is the same document rather than a second layout to keep in sync.
    ========================================================= */
 
-.wr-launch {
-  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 18px;
+.wr {
+  --wr-ink: #1B1B1B;
+  --wr-muted: #5B5B5B;
+  --wr-ground: #F7F5F4;
+  --wr-line: #E7E3E0;
+  --wr-neutral: #B9B4B0;
+  --wr-accent: #E40018;
+  --wr-accent-soft: #FDE9E6;
+  --wr-paper: #FFFFFF;
 }
-.wr-cta {
-  font-size: 15px; padding: 12px 22px; height: auto;
+:root {
+  --wr-ink: #1B1B1B; --wr-muted: #5B5B5B; --wr-ground: #F7F5F4;
+  --wr-line: #E7E3E0; --wr-neutral: #B9B4B0; --wr-accent: #E40018;
+  --wr-accent-soft: #FDE9E6; --wr-paper: #FFFFFF;
 }
+/* The deck keeps its own light palette in dark mode: it is a document that
+   gets printed and exported, not chrome. Only the surrounding page flips. */
+:root[data-theme="dark"] {
+  --wr-ground: #16171A; --wr-paper: #1D1F23; --wr-ink: #F2EFED;
+  --wr-muted: #A8A29E; --wr-line: #33302E; --wr-neutral: #6E6864;
+  --wr-accent: #FF4D5F; --wr-accent-soft: #3A1D22;
+}
+
+.wr-launch { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.wr-cta { font-size: 15px; padding: 12px 22px; height: auto; }
 
 /* ---------- progress ---------- */
 .wr-progress-card {
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 20px;
 }
-.wr-bar-track {
-  height: 6px; background: var(--bg-hover); border-radius: 999px; overflow: hidden;
-}
-.wr-bar {
-  height: 100%; width: 0; background: var(--accent);
-  border-radius: 999px; transition: width .35s ease;
-}
-.wr-progress-label {
-  margin: 10px 0 14px; font-size: 13px; color: var(--ink-500);
-}
+.wr-bar-track { height: 6px; background: var(--bg-hover); border-radius: 999px; overflow: hidden; }
+.wr-bar { height: 100%; width: 0; background: var(--wr-accent); border-radius: 999px; transition: width .35s ease; }
+.wr-progress-label { margin: 10px 0 14px; font-size: 13px; color: var(--ink-500); }
 .wr-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.wr-step {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; color: var(--ink-500);
-}
-.wr-step-dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--border); flex: none;
-}
+.wr-step { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-500); }
+.wr-step-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border); flex: none; }
 .wr-step.active { color: var(--ink-900); font-weight: 500; }
-.wr-step.active .wr-step-dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-.wr-step.done { color: var(--ink-900); }
-.wr-step.done .wr-step-dot { background: #15803D; }
-.wr-step.failed { color: #B91C1C; }
-.wr-step.failed .wr-step-dot { background: #B91C1C; }
+.wr-step.active .wr-step-dot { background: var(--wr-accent); box-shadow: 0 0 0 4px var(--wr-accent-soft); }
+.wr-step.done .wr-step-dot { background: #2E7D32; }
+.wr-step.failed { color: #C62828; }
+.wr-step.failed .wr-step-dot { background: #C62828; }
 
 /* ---------- export bar ---------- */
 .wr-exports {
@@ -57,74 +63,86 @@
 /* ---------- slides ---------- */
 .wr-deck { display: grid; gap: 20px; }
 .wr-slide {
-  background: var(--bg-surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 24px 26px;
+  background: var(--wr-ground); color: var(--wr-ink);
+  border: 1px solid var(--wr-line); border-radius: var(--radius-lg);
+  padding: 28px 30px;
 }
 .wr-slide-head {
-  display: flex; align-items: flex-start; gap: 14px;
-  padding-bottom: 14px; margin-bottom: 16px;
-  border-bottom: 2px solid var(--accent);
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; margin-bottom: 20px;
 }
+.wr-slide-headings { min-width: 0; }
+/* Eyebrow, then headline, then caption. No rule under the title — a coloured
+   line beneath a heading is the tell of a generated deck. */
+.wr-eyebrow {
+  display: block; font-size: 11.5px; font-weight: 700; letter-spacing: .14em;
+  color: var(--wr-accent); text-transform: uppercase; margin-bottom: 6px;
+}
+.wr-slide-head h2 {
+  margin: 0; font-size: 23px; font-weight: 700; line-height: 1.25; color: var(--wr-ink);
+}
+.wr-caption { margin: 7px 0 0; font-size: 13px; color: var(--wr-muted); max-width: 78ch; }
 .wr-slide-no {
-  font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600;
-  color: var(--accent); padding-top: 4px;
+  font-size: 26px; font-weight: 700; color: var(--wr-line); flex: none; line-height: 1;
 }
-.wr-slide-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
-.wr-slide-sub { margin: 2px 0 0; font-size: 13px; color: var(--ink-500); }
 
 .wr-awaiting {
-  background: #FEF3C7; color: #92400E; border-radius: var(--radius-sm);
-  padding: 12px 14px; font-size: 13px; line-height: 1.5; margin-bottom: 16px;
+  background: var(--wr-accent-soft); color: var(--wr-ink);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+  font-size: 13px; line-height: 1.5; margin-bottom: 18px;
 }
-:root[data-theme="dark"] .wr-awaiting { background: #3B2F0B; color: #FDE68A; }
 
-/* ---------- KPIs ---------- */
-.wr-kpis {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px; margin-bottom: 18px;
+/* ---------- big-number callouts ---------- */
+.wr-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px; margin-bottom: 20px;
 }
-.wr-kpi {
-  background: var(--bg-hover); border-radius: var(--radius-md);
-  padding: 14px 16px; display: flex; flex-direction: column; gap: 2px;
+.wr-stat {
+  background: var(--wr-paper); border: 1px solid var(--wr-line);
+  border-radius: var(--radius-md); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 3px;
 }
-.wr-kpi-label { font-size: 12px; color: var(--ink-500); }
-.wr-kpi-value { font-size: 26px; font-weight: 600; line-height: 1.15; }
-.wr-kpi-delta { font-size: 12px; color: var(--ink-500); }
-.wr-kpi-delta.up { color: #15803D; }
-.wr-kpi-delta.down { color: #B91C1C; }
+.wr-stat-value { font-size: 34px; font-weight: 700; line-height: 1.05; color: var(--wr-ink); }
+.wr-stat-label { font-size: 12px; color: var(--wr-muted); }
+.wr-stat-delta { font-size: 12px; font-weight: 600; color: var(--wr-muted); }
+.wr-stat-delta.up { color: #2E7D32; }
+.wr-stat-delta.down { color: #C62828; }
 
 /* ---------- lists ---------- */
-.wr-subhead { margin: 18px 0 8px; font-size: 14px; font-weight: 600; }
-.wr-subhead.tone-good { color: #15803D; }
-.wr-subhead.tone-bad { color: #B91C1C; }
-.wr-subhead.tone-warn { color: #B45309; }
+.wr-subhead { margin: 20px 0 8px; font-size: 13.5px; font-weight: 700; color: var(--wr-ink); }
+.wr-subhead.tone-good { color: #2E7D32; }
+.wr-subhead.tone-bad { color: #C62828; }
+.wr-subhead.tone-warn { color: var(--wr-accent); }
 .wr-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .wr-list li { font-size: 13px; line-height: 1.55; }
-.wr-none { font-size: 13px; color: var(--ink-500); margin: 4px 0; }
+.wr-none { font-size: 13px; color: var(--wr-muted); margin: 4px 0; }
 .wr-notes {
-  margin: 14px 0 0; padding-left: 18px; display: grid; gap: 4px;
-  font-size: 12px; color: var(--ink-500);
+  margin: 16px 0 0; padding-left: 18px; display: grid; gap: 4px;
+  font-size: 12px; color: var(--wr-muted);
 }
 
-/* ---------- charts & tables ---------- */
-.wr-chart {
-  display: block; width: 100%; max-width: 100%; height: auto;
-  margin: 16px 0; border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: #FFFFFF;
+/* ---------- charts ---------- */
+.wr-chartbox {
+  position: relative; height: 340px; margin: 18px 0;
+  background: var(--wr-paper); border: 1px solid var(--wr-line);
+  border-radius: var(--radius-md); padding: 16px;
 }
-/* Wide tables scroll inside their own box; the page itself never does. */
-.wr-tablewrap { overflow-x: auto; margin: 12px 0; }
+.wr-chartbox canvas { width: 100% !important; height: 100% !important; }
+
+/* ---------- tables ---------- */
+.wr-tablewrap { overflow-x: auto; margin: 14px 0; }
 .wr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .wr-table th {
-  background: var(--accent); color: #FFFFFF; font-weight: 600;
-  text-align: left; padding: 8px 10px; white-space: nowrap;
+  background: var(--wr-ink); color: var(--wr-ground); font-weight: 600;
+  text-align: left; padding: 9px 11px; white-space: nowrap;
 }
 .wr-table td {
-  padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  padding: 8px 11px; border-bottom: 1px solid var(--wr-line);
+  white-space: nowrap; background: var(--wr-paper);
 }
-.wr-table tbody tr:nth-child(even) { background: var(--bg-hover); }
-.wr-table td.up { color: #15803D; font-weight: 500; }
-.wr-table td.down { color: #B91C1C; font-weight: 500; }
+.wr-table tbody tr:nth-child(even) td { background: var(--wr-ground); }
+.wr-table td.up { color: #2E7D32; font-weight: 600; }
+.wr-table td.down { color: #C62828; font-weight: 600; }
 
 /* ---------- history ---------- */
 .wr-hist-row {
@@ -136,10 +154,10 @@
 .wr-hist-actions { display: flex; gap: 8px; flex: none; }
 
 /* =========================================================
-   PRINT — this is the PDF. One slide per page, chrome removed.
+   PRINT — this is the PDF. One slide per page.
    ========================================================= */
 @media print {
-  @page { size: A4 landscape; margin: 12mm; }
+  @page { size: A4 landscape; margin: 11mm; }
 
   .sidebar, .zt-topbar, .main-header, .report-tabs,
   .wr-launch, .wr-progress-card, .wr-exports, .toast,
@@ -152,18 +170,18 @@
   .wr-deck { gap: 0; display: block; }
   .wr-slide {
     break-after: page; page-break-after: always;
-    border: none; border-radius: 0; padding: 0 0 12mm;
+    border: none; border-radius: 0; padding: 0 0 10mm;
     background: #FFFFFF !important;
   }
   .wr-slide:last-child { break-after: auto; page-break-after: auto; }
 
-  /* Keep a heading with the thing it introduces. */
   .wr-slide-head, .wr-subhead { break-after: avoid; page-break-after: avoid; }
-  .wr-chart, .wr-table { break-inside: avoid; page-break-inside: avoid; }
+  .wr-chartbox, .wr-table, .wr-stats { break-inside: avoid; page-break-inside: avoid; }
+  .wr-chartbox { height: 300px; }
   .wr-tablewrap { overflow: visible; }
 
-  /* Backgrounds are the branding — without this most browsers drop them. */
-  .wr-table th, .wr-kpi, .wr-awaiting, .wr-slide-head {
+  /* Backgrounds carry the branding — most browsers drop them without this. */
+  .wr-table th, .wr-stat, .wr-awaiting, .wr-slide, .wr-chartbox {
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   .wr-table { font-size: 10px; }
