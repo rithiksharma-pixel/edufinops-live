@@ -22,31 +22,24 @@
 // =========================================================
 
 import { escapeHtml } from './utils.js';
-// The APPS table below duplicates roleRoutes by design, but "where does this
-// role land" must not be guessed twice: deriving it from APPS order gets
-// Consultant wrong (they would land in Lead Management, not the Consultant
-// Portal). So the home route is imported from the one place that owns it.
+// "Where does this role land" must not be guessed twice: deriving it from
+// catalog order gets Consultant wrong (they would land in Lead Management,
+// not the Consultant Portal). So the home route is imported from the one
+// place that owns it.
 import { getHomeRouteForRole } from '../../authentication/public/js/config/roleRoutes.js';
+// The destination catalog and its role rules live in one place now, so the
+// switcher, each app's own sidebar, and the page guards cannot disagree.
+import { navDestinations, destination } from './roleAccess.js';
 
 const SUPABASE_REF = 'wgzgqbfankdbqxxcesci';
 const LOGIN_PATH = '/authentication/public/login.html';
 
-// The full portal catalog. `roles` = which role names may navigate to
-// this destination. Keep in sync with authentication/js/config/roleRoutes.js.
-const APPS = [
-  { key: 'admin-dashboard',   label: 'Admin Dashboard',   icon: 'fa-gauge-high',       path: '/admin-dashboard/public/index.html',        roles: ['Admin'] },
-  { key: 'manager-dashboard', label: 'Manager Dashboard', icon: 'fa-chart-line',       path: '/manager-dashboard/public/index.html',      roles: ['Admin', 'Manager', 'Associate Team Manager'] },
-  { key: 'rm-workspace',      label: 'RM Workspace',      icon: 'fa-user-tie',         path: '/rm-workspace/public/index.html',           roles: ['Admin', 'Relationship Manager'] },
-  { key: 'lead-management',   label: 'Lead Management',   icon: 'fa-diagram-project',  path: '/lead-management/public/index.html',        roles: ['Admin', 'Manager', 'Associate Team Manager', 'Relationship Manager', 'Counselor', 'Business Development', 'Consultant'] },
-  { key: 'consultant-portal', label: 'Consultant Portal', icon: 'fa-handshake',        path: '/consultant-portal/public/index.html',      roles: ['Admin', 'Consultant'] },
-  { key: 'lender-pipeline',   label: 'Lender Pipeline',   icon: 'fa-building-columns', path: '/lender-pipeline/public/index.html',        roles: ['Admin', 'Lender'] },
-  { key: 'user-management',   label: 'User Management',   icon: 'fa-users',            path: '/authentication/public/users-admin.html',   roles: ['Admin', 'Manager', 'Associate Team Manager'] },
-];
-
 const state = { app: null, user: null, crumbs: [] };
 
+// Kept as a named function so the call sites below read unchanged; the
+// catalog itself now lives in roleAccess.js.
 function accessibleApps(role) {
-  return APPS.filter((a) => a.roles.includes(role));
+  return navDestinations(role);
 }
 
 function initials(name) {
@@ -235,7 +228,7 @@ function render() {
   const host = document.getElementById('ztTopbar');
   if (!host) return;
 
-  const current = APPS.find((a) => a.key === state.app);
+  const current = destination(state.app);
   const currentLabel = current ? current.label : 'Zolve Tangent';
   const currentIcon = current ? current.icon : 'fa-layer-group';
   const apps = state.user ? accessibleApps(state.user.role) : [];
@@ -392,4 +385,4 @@ function wireEvents(host) {
   });
 }
 
-export { APPS };
+export { DESTINATIONS as APPS } from './roleAccess.js';

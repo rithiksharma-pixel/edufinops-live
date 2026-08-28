@@ -1,5 +1,6 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { getAssignedLeads, getTodaysFollowUps, getNewLeads, getDocumentsPending, getMyTatBreachedDeals } from './services/dashboardService.js';
 import { getMyTasks, createTask, toggleTaskComplete, getMyOpenLeadsForTaskLink } from './services/taskService.js';
 import { getLeadSources, getConsultancies, createLead } from './services/leadService.js';
@@ -402,6 +403,11 @@ async function bootstrap() {
   }
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  // Send anyone whose role has no business on this screen to their own
+  // home. RLS still decides what data they could read; this decides
+  // which surface they are looking at.
+  if (!guardDestination(currentUser, 'rm-workspace')) return;
+  applyNavPermissions(currentUser.role);
   mountTopbar({ app: 'rm-workspace', user: currentUser });
 
   leadDrawer = initLeadDrawer({

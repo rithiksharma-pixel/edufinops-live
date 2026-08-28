@@ -1,5 +1,6 @@
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
@@ -433,6 +434,11 @@ async function bootstrap() {
   document.getElementById('userName').textContent = currentUser.fullName;
   document.getElementById('orgName').textContent = currentUser.lenderOrgName;
   document.getElementById('avatar').textContent = currentUser.fullName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+  // Send anyone whose role has no business on this screen to their own
+  // home. RLS still decides what data they could read; this decides
+  // which surface they are looking at.
+  if (!guardDestination(currentUser, 'lender-pipeline')) return;
+  applyNavPermissions(currentUser.role);
   mountTopbar({ app: 'lender-pipeline', user: currentUser });
 
   initDrawerChrome();

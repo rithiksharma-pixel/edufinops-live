@@ -17,6 +17,7 @@ import {
   buildSections, buildChartConfigs, renderChart,
 } from './reviewDeck.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
@@ -506,6 +507,8 @@ async function bootstrap() {
   $('userName').textContent = currentUser.full_name;
   $('userRole').textContent = currentUser.role;
   $('avatar').textContent = (currentUser.full_name || '?').charAt(0).toUpperCase();
+  if (!guardDestination(currentUser, 'weekly-review')) return;
+  applyNavPermissions(currentUser.role);
   mountTopbar({ app: 'manager-dashboard', user: currentUser });
 
   // RLS already refuses the write, but saying so up front beats letting

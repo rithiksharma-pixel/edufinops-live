@@ -8,6 +8,7 @@
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
@@ -605,6 +606,8 @@ async function bootstrap() {
   document.getElementById('userName').textContent = user.full_name;
   document.getElementById('userRole').textContent = user.role;
   document.getElementById('avatar').textContent = (user.full_name || '?').charAt(0).toUpperCase();
+  if (!guardDestination(user, 'partner-reports')) return;
+  applyNavPermissions(user.role);
   mountTopbar({ app: 'manager-dashboard', user });
 
   // Said plainly rather than buried: disbursed value is near-zero across the

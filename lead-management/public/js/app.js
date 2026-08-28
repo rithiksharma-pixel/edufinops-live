@@ -5,6 +5,7 @@
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { listLeads, getStageCounts, LEAD_PAGE_SIZE, DATE_FIELD_LABELS } from './services/leadService.js';
@@ -281,6 +282,11 @@ async function bootstrap() {
   }
 
   renderCurrentUserChip();
+  // Send anyone whose role has no business on this screen to their own
+  // home. RLS still decides what data they could read; this decides
+  // which surface they are looking at.
+  if (!guardDestination(state.currentUser, 'lead-management')) return;
+  applyNavPermissions(state.currentUser.role);
   mountTopbar({ app: 'lead-management', user: state.currentUser });
 
   const [stages, sources, rms] = await Promise.all([

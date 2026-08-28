@@ -8,6 +8,7 @@
 // =========================================================
 import { supabase } from './config/supabaseClient.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
+import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
@@ -454,6 +455,8 @@ async function bootstrap() {
   $('userName').textContent = me.full_name;
   $('userRole').textContent = me.role ?? '–';
   $('avatar').textContent = (me.full_name || '?').charAt(0).toUpperCase();
+  if (!guardDestination(me, 'activity-forms')) return;
+  applyNavPermissions(me.role);
   mountTopbar({ app: 'admin-dashboard', user: { ...me, fullName: me.full_name } });
 
   if (!['Admin', 'Manager'].includes(me.role)) {
