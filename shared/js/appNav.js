@@ -109,37 +109,22 @@ function toggleTheme() {
 }
 
 /**
- * Puts every app this user can reach into the LEFT SIDEBAR, under the current
- * app's own sections.
+ * Cross-app navigation lives in the TOPBAR switcher, not the sidebar.
  *
- * Navigation used to live in two places: the sidebar listed only the sections
- * of whatever app you were already in, and getting to another app meant
- * finding a dropdown in the topbar. Lead Management — the screen most people
- * spend their day in — was therefore invisible from every other app, which
- * reads as a broken system rather than as a deliberate split.
+ * It used to be the other way round: every app this user could reach was
+ * appended to the sidebar, so that Lead Management — the screen most people
+ * live in — was reachable from everywhere rather than hidden behind a
+ * dropdown. That fixed the discoverability problem and created a worse one.
+ * An Admin's sidebar became fifteen undifferentiated links: seven sections
+ * of the app they were in, then eight other apps, with nothing marking where
+ * one ended and the next began.
  *
- * Driven by the same role-filtered APPS list as the switcher, so a Consultant
- * still never sees a link to the Admin console.
+ * So the sidebar is the current app's own sections, full stop, and the
+ * switcher in the topbar is how you leave. The switcher is now shown
+ * whenever there is more than one destination — previously it was
+ * suppressed on any page that had a sidebar, which is why removing the
+ * injected links would otherwise have left no way out at all.
  */
-function renderSidebarApps() {
-  const nav = document.querySelector('.sidebar-nav');
-  if (!nav || !state.user) return;
-
-  nav.querySelector('.zt-sidebar-apps')?.remove();   // idempotent across re-renders
-  const others = accessibleApps(state.user.role).filter((a) => a.key !== state.app);
-  if (!others.length) return;
-
-  // Plain nav items, continuous with the ones already there. No "Go to"
-  // heading and no divider: grouping them under a label still reads as "these
-  // live somewhere else", which is the thing being fixed.
-  nav.insertAdjacentHTML('beforeend', `
-    <div class="zt-sidebar-apps">
-      ${others.map((a) => `
-        <a class="nav-item" href="${a.path}">
-          <i class="fa-solid ${a.icon}"></i> ${escapeHtml(a.label)}
-        </a>`).join('')}
-    </div>`);
-}
 
 // Only the Consultant Portal has a profile page today. Roles without one get
 // no Profile item rather than a link that 404s -- same rule as the brand.
@@ -223,7 +208,6 @@ function wireSidebarUserMenu() {
 }
 
 function render() {
-  renderSidebarApps();
 
   const host = document.getElementById('ztTopbar');
   if (!host) return;
@@ -232,12 +216,10 @@ function render() {
   const currentLabel = current ? current.label : 'Zolve Tangent';
   const currentIcon = current ? current.icon : 'fa-layer-group';
   const apps = state.user ? accessibleApps(state.user.role) : [];
-  // The dropdown is a fallback, not a second navigation system. Where the
-  // sidebar already lists every app, it would be the same links twice and the
-  // topbar just shows WHERE YOU ARE. Pages with no sidebar (the data tools and
-  // user admin under /authentication) still need it as their only way out.
-  const hasSidebarNav = !!document.querySelector('.sidebar-nav');
-  const showSwitcher = apps.length > 1 && !hasSidebarNav;
+  // Shown wherever there is somewhere else to go. This is the ONLY route
+  // between apps now that the sidebar no longer lists them, so it must not
+  // be conditional on the page lacking a sidebar the way it once was.
+  const showSwitcher = apps.length > 1;
 
   const menuItems = apps.map((a) => `
     <a class="zt-switch-item ${a.key === state.app ? 'current' : ''}" href="${a.path}" role="menuitem">
