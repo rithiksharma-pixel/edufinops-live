@@ -379,3 +379,32 @@ button, input, select { font-family: inherit; font-size: inherit; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* =========================================================
+   LIST-LEVEL EDIT / DELETE (migration 061)
+   ========================================================= */
+.lt-check { width: 34px; text-align: center; }
+.lt-check input { cursor: pointer; }
+.lt-actions { width: 84px; white-space: nowrap; text-align: right; }
+.lt-actions .icon-btn { width: 28px; height: 28px; }
+.lt-danger { color: #B91C1C; }
+.lt-danger:hover { background: #FBEAEA; color: #B91C1C; }
+:root[data-theme="dark"] .lt-danger:hover { background: #3A1D22; }
+
+tr.row-selected > td { background: var(--accent-soft); }
+
+/* Floating bar, so the actions stay reachable however far the list is
+   scrolled — a toolbar pinned to the top of the table is off-screen by the
+   time you have finished ticking rows. */
+.lt-bulkbar {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  z-index: 60; display: flex; align-items: center; gap: 12px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 999px; padding: 10px 16px;
+  box-shadow: 0 8px 28px rgba(16, 27, 48, 0.18);
+  font-size: 13px;
+}
+.lt-bulkbar .btn { height: 32px; padding: 0 14px; }
+@media (max-width: 620px) {
+  .lt-bulkbar { left: 12px; right: 12px; transform: none; border-radius: var(--radius-lg); flex-wrap: wrap; }
+}

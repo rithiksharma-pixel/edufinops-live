@@ -168,6 +168,11 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
           course_name: payload.course_name?.trim() || null,
           university_name: payload.university_name?.trim() || null,
           destination_country: payload.destination_country?.trim() || null,
+          // Intake drives every "which season is this for" cut. Empty stays
+          // null rather than 0, so an unanswered question is not reported as
+          // January of year zero.
+          intake_month: payload.intake_month ? Number(payload.intake_month) : null,
+          intake_year: payload.intake_year ? Number(payload.intake_year) : null,
           loan_amount_requested: Number(payload.loan_amount_requested),
           lead_source_id: payload.lead_source_id,
           consultancy_id: consultancyId,

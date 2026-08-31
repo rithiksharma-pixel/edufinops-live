@@ -14,6 +14,9 @@ import { renderLeadTable } from './components/leadTable.js';
 import { renderFunnelCards } from './components/funnelCards.js';
 import { initLeadFormModal } from './components/leadFormModal.js';
 import { initLeadDrawer } from './components/leadDrawer.js';
+import { initLeadEditModal } from './components/leadEditModal.js';
+import { initBulkEditModal } from './components/bulkEditModal.js';
+import { deleteLead, deleteLeadsBulk } from './services/leadService.js';
 import { initSmartViewTabs } from './components/smartViewTabs.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
@@ -21,6 +24,11 @@ const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', ove
 
 /** Roles whose default view is their own book rather than the whole pipeline. */
 const OWN_BOOK_ROLES = ['Relationship Manager'];
+
+// Ids ticked in the list. Kept across a re-render of the same page, and
+// cleared whenever the filters or page change — a selection that survived a
+// filter change would delete rows the user can no longer see.
+const selectedLeads = new Set();
 
 const state = {
   currentUser: null,
@@ -72,7 +80,17 @@ async function refreshLeadsAndFunnel() {
       state.page = 0;
       return refreshLeadsAndFunnel();
     }
-    renderLeadTable(tbody, page.rows, (leadId) => drawer.open(leadId));
+    const role = state.currentUser?.role;
+    const canEdit = ['Admin', 'Manager'].includes(role);
+    const canDelete = role === 'Admin';
+    renderLeadTable(tbody, page.rows, (leadId) => drawer.open(leadId), {
+      canSelect: canEdit, canEdit, canDelete, selected: selectedLeads,
+      onToggle: (id, on) => { on ? selectedLeads.add(id) : selectedLeads.delete(id); renderBulkBar(); },
+      onEdit: (id) => editModal.open(id),
+      onDelete: (lead) => removeLead(lead),
+    });
+    syncTableChrome(canEdit, canDelete);
+    renderBulkBar();
     renderResultCount(page.total, page.rows.length);
     renderPager(page.total);
     renderFunnelCards(document.getElementById('funnelRow'), state.stages, counts, state.filters.stageId, (stageId) => {
@@ -267,6 +285,8 @@ function renderCurrentUserChip() {
 }
 
 let drawer;
+let editModal;
+let bulkModal;
 
 async function bootstrap() {
   try {
@@ -335,6 +355,15 @@ async function bootstrap() {
     onClose: () => setBreadcrumb([]),
   });
 
+  // Reachable from a row's pencil without opening the drawer first.
+  editModal = initLeadEditModal({
+    showToast, currentUser: state.currentUser, onLeadUpdated: refreshLeadsAndFunnel,
+  });
+  bulkModal = initBulkEditModal({
+    showToast,
+    onDone: () => { selectedLeads.clear(); refreshLeadsAndFunnel(); },
+  });
+
   initLeadFormModal({
     onLeadCreated: refreshLeadsAndFunnel,
     showToast,
@@ -392,6 +421,110 @@ async function bootstrap() {
   const openLeadId = params.get('openLead');
   if (openLeadId) {
     drawer.open(openLeadId);
+  }
+}
+
+
+// ---------------------------------------------------------
+// List-level edit / delete (migration 061)
+// ---------------------------------------------------------
+
+/** Adds or removes the select-all and actions header cells to match the row shape. */
+function syncTableChrome(canEdit, canDelete) {
+  const headRow = document.querySelector('#leadTable thead tr');
+  if (!headRow) return;
+
+  const wantSelect = canEdit;
+  const wantActions = canEdit || canDelete;
+
+  let selectTh = headRow.querySelector('th[data-select-all-cell]');
+  if (wantSelect && !selectTh) {
+    selectTh = document.createElement('th');
+    selectTh.dataset.selectAllCell = '';
+    selectTh.className = 'lt-check';
+    selectTh.innerHTML = '<input type="checkbox" id="selectAllLeads" aria-label="Select all on this page" />';
+    headRow.insertBefore(selectTh, headRow.firstChild);
+    selectTh.querySelector('input').addEventListener('change', (e) => {
+      // Only the rows actually on screen — "select all" across pages would
+      // hand a delete far more than the user can see.
+      document.querySelectorAll('#leadTableBody tr[data-lead-id]').forEach((tr) => {
+        const box = tr.querySelector('[data-select]');
+        if (!box) return;
+        box.checked = e.target.checked;
+        tr.classList.toggle('row-selected', e.target.checked);
+        e.target.checked ? selectedLeads.add(tr.dataset.leadId) : selectedLeads.delete(tr.dataset.leadId);
+      });
+      renderBulkBar();
+    });
+  } else if (!wantSelect && selectTh) {
+    selectTh.remove();
+  }
+
+  const lastTh = headRow.lastElementChild;
+  if (wantActions && lastTh && lastTh.textContent.trim() === '') {
+    lastTh.textContent = 'Actions';
+    lastTh.className = 'lt-actions';
+  }
+}
+
+/** The bar that appears once anything is ticked. */
+function renderBulkBar() {
+  let bar = document.getElementById('leadBulkBar');
+  const n = selectedLeads.size;
+  if (!n) { bar?.remove(); return; }
+
+  const role = state.currentUser?.role;
+  const canDelete = role === 'Admin';
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'leadBulkBar';
+    bar.className = 'lt-bulkbar';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `
+    <span><strong>${n}</strong> selected</span>
+    <button type="button" class="btn btn-secondary" id="bulkEditBtn">
+      <i class="fa-solid fa-pen"></i> Edit all</button>
+    ${canDelete ? `<button type="button" class="btn btn-ghost lt-danger" id="bulkDeleteBtn">
+      <i class="fa-solid fa-trash"></i> Delete all</button>` : ''}
+    <button type="button" class="btn btn-ghost" id="bulkClearBtn">Clear</button>`;
+
+  bar.querySelector('#bulkEditBtn').addEventListener('click', () => bulkModal.open(selectedLeads));
+  bar.querySelector('#bulkClearBtn').addEventListener('click', () => {
+    selectedLeads.clear();
+    refreshLeadsAndFunnel();
+  });
+  const del = bar.querySelector('#bulkDeleteBtn');
+  if (del) del.addEventListener('click', removeSelected);
+}
+
+async function removeLead(lead) {
+  if (!confirm(`Delete ${lead.student_name}? The record is hidden everywhere, `
+    + 'but its history is kept and an Admin can restore it.')) return;
+  try {
+    await deleteLead(lead.id, null);
+    selectedLeads.delete(lead.id);
+    showToast('Lead deleted.');
+    refreshLeadsAndFunnel();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || 'Could not delete the lead.', true);
+  }
+}
+
+async function removeSelected() {
+  const n = selectedLeads.size;
+  if (!confirm(`Delete ${n} lead${n === 1 ? '' : 's'}? They are hidden everywhere, `
+    + 'but their history is kept and an Admin can restore them.')) return;
+  try {
+    const done = await deleteLeadsBulk([...selectedLeads], null);
+    selectedLeads.clear();
+    // done can be lower than n if some were already gone — report the truth.
+    showToast(`Deleted ${done} lead${done === 1 ? '' : 's'}.`);
+    refreshLeadsAndFunnel();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || 'Could not delete the leads.', true);
   }
 }
 

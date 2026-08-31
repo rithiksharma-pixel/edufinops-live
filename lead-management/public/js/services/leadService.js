@@ -511,3 +511,58 @@ export async function setLeadStage(leadId, stageId, remarks) {
   });
   if (error) throw error;
 }
+
+// ---------------------------------------------------------
+// Delete and bulk operations (migration 061)
+//
+// All soft deletes. leads is referenced by deals, documents, events and
+// activities, so a hard delete would either cascade real history away or
+// fail on a foreign key. Every read path already filters is_deleted.
+// ---------------------------------------------------------
+
+/** Admin only. Writes a timeline row naming who removed it and why. */
+export async function deleteLead(leadId, reason) {
+  const { error } = await supabase.rpc('delete_lead', {
+    p_lead_id: leadId, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function restoreLead(leadId) {
+  const { error } = await supabase.rpc('restore_lead', { p_lead_id: leadId });
+  if (error) throw error;
+}
+
+/** Returns how many were actually deleted, which can be fewer than asked. */
+export async function deleteLeadsBulk(leadIds, reason) {
+  const { data, error } = await supabase.rpc('delete_leads_bulk', {
+    p_lead_ids: leadIds, p_reason: reason ?? null,
+  });
+  if (error) throw error;
+  return data ?? 0;
+}
+
+/**
+ * Set the same fields across many leads. The RPC enforces its own whitelist
+ * — ownership, audit and automation columns are refused by name rather than
+ * silently ignored.
+ */
+export async function updateLeadsBulk(leadIds, patch) {
+  const { data, error } = await supabase.rpc('update_leads_bulk', {
+    p_lead_ids: leadIds, p_patch: patch,
+  });
+  if (error) throw error;
+  return data ?? 0;
+}
+
+/** Fields the bulk editor offers, matching the RPC's whitelist. */
+export const BULK_EDITABLE = [
+  { key: 'priority', label: 'Priority', type: 'select', options: ['Urgent', 'High', 'Normal', 'Low'] },
+  { key: 'bd_name', label: 'BD name', type: 'text' },
+  { key: 'destination_country', label: 'Destination country', type: 'text' },
+  { key: 'intake_month', label: 'Intake month', type: 'select',
+    options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] },
+  { key: 'intake_year', label: 'Intake year', type: 'number' },
+  { key: 'loan_type', label: 'Loan type', type: 'select', options: ['Collateral', 'Non Collateral'] },
+  { key: 'currency', label: 'Currency', type: 'select', options: ['INR', 'USD', 'GBP', 'EUR', 'CAD', 'AUD'] },
+];
