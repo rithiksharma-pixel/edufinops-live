@@ -5,7 +5,8 @@ import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 import {
   getRoles, getAllUsers, getPossibleManagers, getPendingInvitations,
-  inviteUser, revokeInvitation, changeUserRole, changeReportingManager,
+  inviteUser, revokeInvitation, resendInvitation, pendingInvitationFor,
+  changeUserRole, changeReportingManager,
   deactivateUser, reactivateUser, getLenders, getLenderBranches,
   getTeams, changeUserTeam, removeUser, getRemovalBlockers,
 } from './services/userAdminService.js';
@@ -208,9 +209,26 @@ async function loadInvitations() {
       <td><span class="badge badge-accent">${escapeHtml(inv.roles?.name || '–')}</span></td>
       <td>${new Date(inv.invited_at).toLocaleDateString()}</td>
       <td>${new Date(inv.expires_at).toLocaleDateString()}</td>
-      <td class="row-actions">${waButton({ fullName: inv.full_name, email: inv.email, phone: inv.phone, roleName: inv.roles?.name, pending: true, active: true })}<button class="row-action-btn danger" data-revoke="${inv.id}">Revoke</button></td>
+      <td class="row-actions">${waButton({ fullName: inv.full_name, email: inv.email, phone: inv.phone, roleName: inv.roles?.name, pending: true, active: true })}<button class="row-action-btn" data-resend="${inv.id}">Resend</button><button class="row-action-btn danger" data-revoke="${inv.id}">Revoke</button></td>
     </tr>
   `).join('');
+
+  tbody.querySelectorAll('[data-resend]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const el = e.currentTarget;
+      el.disabled = true;
+      try {
+        await resendInvitation(el.dataset.resend);
+        showToast('Invitation sent again.');
+        await loadInvitations();
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Could not resend this invitation.', true);
+      } finally {
+        el.disabled = false;
+      }
+    });
+  });
 
   tbody.querySelectorAll('[data-revoke]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
@@ -340,6 +358,34 @@ function initInviteModal() {
       form.reset();
       await loadInvitations();
     } catch (err) {
+      console.error(err);
+      // A duplicate is not a dead end. Offer to resend the invitation that
+      // is already waiting, rather than making someone close this dialog,
+      // hunt down the row, revoke it, and re-key every field.
+      const dup = /already has an invitation waiting/i.test(err.message || '');
+      if (dup) {
+        const email = payload.email.trim();
+        const existingId = await pendingInvitationFor(email).catch(() => null);
+        if (existingId && confirm(
+          `${email} already has an invitation waiting.
+
+`
+          + 'Send it again now? The role, manager and team on the existing '
+          + 'invitation are kept.')) {
+          try {
+            await resendInvitation(existingId);
+            showToast('Invitation sent again.');
+            overlay.hidden = true;
+            form.reset();
+            await loadInvitations();
+            return;
+          } catch (resendErr) {
+            console.error(resendErr);
+            showToast(resendErr.message || 'Could not resend that invitation.', true);
+            return;
+          }
+        }
+      }
       showToast(err.message || 'Could not send this invite.', true);
     } finally {
       btn.disabled = false; btn.textContent = 'Send invite';

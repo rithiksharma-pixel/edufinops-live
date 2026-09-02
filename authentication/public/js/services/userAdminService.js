@@ -146,6 +146,27 @@ export async function revokeInvitation(invitationId) {
   if (error) throw error;
 }
 
+/**
+ * Revoke and reissue in one call, carrying the role, manager, team and phone
+ * forward. Before this the only route was revoke, reopen the dialog, and
+ * re-key every field — which is why the invitations table held more revoked
+ * rows than accepted ones.
+ */
+export async function resendInvitation(invitationId) {
+  const { data, error } = await supabase.rpc('resend_invitation', {
+    p_invitation_id: invitationId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** The live invitation for an email, if any — so a duplicate can offer Resend. */
+export async function pendingInvitationFor(email) {
+  const { data, error } = await supabase.rpc('pending_invitation_for', { p_email: email });
+  if (error) throw error;
+  return data ?? null;
+}
+
 export async function changeUserRole(userId, newRoleId, remarks) {
   const { error } = await supabase.rpc('change_user_role', {
     p_target_user_id: userId,
