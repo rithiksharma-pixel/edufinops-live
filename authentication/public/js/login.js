@@ -31,6 +31,12 @@ form.addEventListener('submit', async (e) => {
   } catch (err) {
     if (err.message === 'DEACTIVATED') {
       showError('This account has been deactivated. Contact your admin if this seems wrong.');
+    } else if (err.message === 'NO_PROFILE') {
+      // The password was right — the account just has no profile yet. Saying
+      // "incorrect password" here sent people round a loop of retrying a
+      // correct password and then requesting resets that never arrived.
+      showError('Your sign-in worked, but your account setup was never completed. '
+        + 'Ask an admin to finish it from User management — you will not need a new password.');
     } else {
       showError('Incorrect email or password.');
     }

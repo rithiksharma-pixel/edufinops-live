@@ -52,8 +52,23 @@ export function createAuthService(supabase) {
       .from('users')
       .select('id, full_name, email, is_active, roles ( name )')
       .eq('id', authData.user.id)
-      .single();
+      .maybeSingle();
     if (error) throw error;
+
+    // Authenticating and having a profile are two different things. The auth
+    // account is created when the invitation is sent; the profile only when
+    // the invitation is ACCEPTED. Revoke the invitation in between — which
+    // admins did to work around the old "already pending" dead end — and the
+    // person can sign in perfectly well and land nowhere.
+    //
+    // This used to be .single(), so that case surfaced as a raw PostgREST
+    // "cannot coerce the result to a single JSON object", which reads as a
+    // broken login rather than an unfinished setup. An Admin can fix it from
+    // User management (repair_orphaned_profile).
+    if (!data) {
+      await supabase.auth.signOut();
+      throw new Error('NO_PROFILE');
+    }
 
     if (!data.is_active) {
       await supabase.auth.signOut();
