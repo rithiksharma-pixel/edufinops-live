@@ -160,14 +160,21 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
       const dealsPanel = document.getElementById('panelLenders');
       const documentsPanel = document.getElementById('panelDocuments');
       const intelligencePanel = document.getElementById('panelIntelligence');
+
+      // Four apps host this drawer and they do not all carry every panel —
+      // only Lead Management has #panelIntelligence. A page that omits one
+      // should lose that panel, not the whole drawer, so nothing here
+      // dereferences a lookup without checking it first.
+      const fill = (el, html) => { if (el) el.innerHTML = html; };
+
       if (currentUserRole === 'Consultant' || currentUserRole === 'Business Development') {
-        lenderMatrixPanel.innerHTML = '';
-        dealTreePanel.innerHTML = '';
-        dealsPanel.innerHTML = '<p class="empty-state">Deal information isn\'t visible from this role.</p>';
-        documentsPanel.innerHTML = '<p class="empty-state">Document management isn\'t visible from this role.</p>';
+        fill(lenderMatrixPanel, '');
+        fill(dealTreePanel, '');
+        fill(dealsPanel, '<p class="empty-state">Deal information isn\'t visible from this role.</p>');
+        fill(documentsPanel, '<p class="empty-state">Document management isn\'t visible from this role.</p>');
         // Recordings carry the borrower's own voice. Outside partners have no
         // business hearing them, so this stays closed to those roles.
-        intelligencePanel.innerHTML = '<p class="empty-state">Call recordings aren\'t visible from this role.</p>';
+        fill(intelligencePanel, '<p class="empty-state">Call recordings aren\'t visible from this role.</p>');
       } else {
         const dealTree = await initDealTimelineTree(dealTreePanel, leadId);
         const dealsTab = await initDealsTab(dealsPanel, leadId, {
@@ -183,13 +190,21 @@ export function initLeadDrawer({ showToast, onLeadUpdated, currentUser, onOpen, 
         await initDocumentsTab(documentsPanel, leadId, { currentUser, showToast, coApplicants });
         // Not awaited: transcription can take a minute and the drawer must not
         // wait on it. The tab fills itself in and polls while work is pending.
-        initCallIntelligenceTab(intelligencePanel, leadId, {
-          showToast,
-          onLeadUpdated: () => { onLeadUpdated(); },
-        }).catch((err) => {
-          console.error('Tangent Intelligence failed to start', err);
-          intelligencePanel.innerHTML = '<p class="empty-state">Could not load call intelligence.</p>';
-        });
+        //
+        // Skipped entirely where the host page has no intelligence panel.
+        // Passing null here used to fail inside the tab, and then fail AGAIN
+        // in the catch below while trying to write the error message onto the
+        // panel that was never there — an unhandled rejection on every lead
+        // opened from the Admin, Manager and RM apps.
+        if (intelligencePanel) {
+          initCallIntelligenceTab(intelligencePanel, leadId, {
+            showToast,
+            onLeadUpdated: () => { onLeadUpdated(); },
+          }).catch((err) => {
+            console.error('Tangent Intelligence failed to start', err);
+            fill(intelligencePanel, '<p class="empty-state">Could not load call intelligence.</p>');
+          });
+        }
       }
     } catch (err) {
       console.error(err);
