@@ -408,3 +408,31 @@ tr.row-selected > td { background: var(--accent-soft); }
 @media (max-width: 620px) {
   .lt-bulkbar { left: 12px; right: 12px; transform: none; border-radius: var(--radius-lg); flex-wrap: wrap; }
 }
+
+/* ---------- column-driven lead table ---------- */
+.lt-primary { font-weight: 500; }
+.lt-num { text-align: right; font-variant-numeric: tabular-nums; }
+.lt-blank { color: var(--ink-300); }
+
+/* Sortable headers. The arrow only appears on the active column, so the
+   header row does not turn into a wall of chevrons. */
+.lt-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.lt-sortable:hover { color: var(--accent); }
+.lt-sortable.active { color: var(--accent); }
+.lt-arrow { margin-left: 4px; font-size: 11px; }
+
+/* ---------- column picker ---------- */
+.cp-group {
+  margin: 16px 0 8px; font-size: 12px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-500);
+}
+.cp-group:first-of-type { margin-top: 0; }
+.cp-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 14px;
+}
+.cp-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 400; cursor: pointer;
+}
+.cp-item.locked { color: var(--ink-500); cursor: default; }
+.cp-lock { font-size: 11px; color: var(--ink-300); }

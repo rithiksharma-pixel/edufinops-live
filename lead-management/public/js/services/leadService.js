@@ -5,13 +5,23 @@
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
 
+// Every column the list can OFFER, not just the ones shown by default. The
+// user picks which are visible (see LEAD_COLUMNS); fetching them all costs
+// one wider row rather than a second round trip when someone turns a column
+// on, and the list was previously unable to show the milestone dates it let
+// you filter by — you could filter to "logins this week" and not see the
+// login date.
 const LEAD_LIST_SELECT = `
   id, student_name, student_phone, student_email,
-  course_name, university_name, loan_amount_requested, currency,
-  next_follow_up_at, last_activity_at,
+  course_name, university_name, destination_country,
+  loan_amount_requested, currency, priority,
+  intake_month, intake_year,
+  created_at, next_follow_up_at, last_activity_at,
+  login_date, sanction_date, pf_date, disbursed_date, disbursed_amount,
   current_stage_id, assigned_rm_id,
   consultancy_other_name, bd_name,
   lead_stages ( name, color ),
+  lead_sources ( name ),
   consultancies ( name ),
   assigned_rm:users!leads_assigned_rm_id_fkey ( full_name )
 `;
@@ -99,13 +109,25 @@ export const LEAD_PAGE_SIZE = 100;
  *
  * @returns {Promise<{rows: Array, total: number}>}
  */
-export async function listLeads(filters = {}, { limit = LEAD_PAGE_SIZE, offset = 0 } = {}) {
+/** Columns the list may be ordered by. A whitelist: the value reaches
+ *  PostgREST's order clause, so it must never be free-form user input. */
+export const LEAD_SORTABLE = new Set([
+  'student_name', 'created_at', 'login_date', 'sanction_date', 'pf_date',
+  'disbursed_date', 'next_follow_up_at', 'last_activity_at',
+  'loan_amount_requested', 'priority', 'bd_name', 'consultancy_other_name',
+]);
+
+export async function listLeads(filters = {}, { limit = LEAD_PAGE_SIZE, offset = 0, sort } = {}) {
+  const key = sort && LEAD_SORTABLE.has(sort.key) ? sort.key : 'created_at';
+  const ascending = sort ? sort.dir === 'asc' : false;
   const { data, error, count } = await applyLeadFilters(
     supabase
       .from('leads')
       .select(LEAD_LIST_SELECT, { count: 'exact' })
       .eq('is_deleted', false)
-      .order('created_at', { ascending: false })
+      // nullsFirst:false keeps rows with no date at the bottom either way —
+      // sorting by login date should surface leads that HAVE one.
+      .order(key, { ascending, nullsFirst: false })
       .order('id', { ascending: false }),
     filters
   ).range(offset, offset + limit - 1);

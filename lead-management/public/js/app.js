@@ -16,6 +16,9 @@ import { initLeadFormModal } from './components/leadFormModal.js';
 import { initLeadDrawer } from './components/leadDrawer.js';
 import { initLeadEditModal } from './components/leadEditModal.js';
 import { initBulkEditModal } from './components/bulkEditModal.js';
+import { renderLeadHeader } from './components/leadTable.js';
+import { loadColumns, saveColumns } from './components/leadColumns.js';
+import { initColumnPicker } from './components/columnPicker.js';
 import { deleteLead, deleteLeadsBulk } from './services/leadService.js';
 import { initSmartViewTabs } from './components/smartViewTabs.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
@@ -29,6 +32,12 @@ const OWN_BOOK_ROLES = ['Relationship Manager'];
 // cleared whenever the filters or page change — a selection that survived a
 // filter change would delete rows the user can no longer see.
 const selectedLeads = new Set();
+// Which columns this user chose, and how the list is ordered. Both are view
+// state, not filters — changing either must not reset the page to zero
+// results, only re-fetch in the new order.
+let leadColumns = loadColumns();
+let leadSort = { key: 'created_at', dir: 'desc' };
+let columnPicker;
 
 const state = {
   currentUser: null,
@@ -71,7 +80,7 @@ async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
   try {
     const [page, counts] = await Promise.all([
-      listLeads(state.filters, { limit: LEAD_PAGE_SIZE, offset: state.page * LEAD_PAGE_SIZE }),
+      listLeads(state.filters, { limit: LEAD_PAGE_SIZE, offset: state.page * LEAD_PAGE_SIZE, sort: leadSort }),
       getStageCounts(state.filters),
     ]);
     // A filter change can leave you past the end of a now-shorter result set.
@@ -83,13 +92,37 @@ async function refreshLeadsAndFunnel() {
     const role = state.currentUser?.role;
     const canEdit = ['Admin', 'Manager'].includes(role);
     const canDelete = role === 'Admin';
+    const chrome = { columns: leadColumns, canSelect: canEdit, canEdit, canDelete };
+
+    renderLeadHeader(document.querySelector('#leadTable thead tr'), {
+      ...chrome, sort: leadSort,
+      onSort: (key) => {
+        leadSort = (leadSort.key === key)
+          ? { key, dir: leadSort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key, dir: 'desc' };
+        state.page = 0;
+        refreshLeadsAndFunnel();
+      },
+      onToggleAll: (on) => {
+        // Only the rows on screen: "select all" across 132 pages would hand
+        // a delete far more than anyone can see.
+        document.querySelectorAll('#leadTableBody tr[data-lead-id]').forEach((tr) => {
+          const box = tr.querySelector('[data-select]');
+          if (!box) return;
+          box.checked = on;
+          tr.classList.toggle('row-selected', on);
+          on ? selectedLeads.add(tr.dataset.leadId) : selectedLeads.delete(tr.dataset.leadId);
+        });
+        renderBulkBar();
+      },
+    });
+
     renderLeadTable(tbody, page.rows, (leadId) => drawer.open(leadId), {
-      canSelect: canEdit, canEdit, canDelete, selected: selectedLeads,
+      ...chrome, selected: selectedLeads,
       onToggle: (id, on) => { on ? selectedLeads.add(id) : selectedLeads.delete(id); renderBulkBar(); },
       onEdit: (id) => editModal.open(id),
       onDelete: (lead) => removeLead(lead),
     });
-    syncTableChrome(canEdit, canDelete);
     renderBulkBar();
     renderResultCount(page.total, page.rows.length);
     renderPager(page.total);
@@ -364,6 +397,12 @@ async function bootstrap() {
     onDone: () => { selectedLeads.clear(); refreshLeadsAndFunnel(); },
   });
 
+  columnPicker = initColumnPicker({
+    getColumns: () => leadColumns,
+    onApply: (cols) => { leadColumns = cols; saveColumns(cols); refreshLeadsAndFunnel(); },
+  });
+  document.getElementById('btnColumns')?.addEventListener('click', () => columnPicker.open());
+
   initLeadFormModal({
     onLeadCreated: refreshLeadsAndFunnel,
     showToast,
@@ -428,44 +467,6 @@ async function bootstrap() {
 // ---------------------------------------------------------
 // List-level edit / delete (migration 061)
 // ---------------------------------------------------------
-
-/** Adds or removes the select-all and actions header cells to match the row shape. */
-function syncTableChrome(canEdit, canDelete) {
-  const headRow = document.querySelector('#leadTable thead tr');
-  if (!headRow) return;
-
-  const wantSelect = canEdit;
-  const wantActions = canEdit || canDelete;
-
-  let selectTh = headRow.querySelector('th[data-select-all-cell]');
-  if (wantSelect && !selectTh) {
-    selectTh = document.createElement('th');
-    selectTh.dataset.selectAllCell = '';
-    selectTh.className = 'lt-check';
-    selectTh.innerHTML = '<input type="checkbox" id="selectAllLeads" aria-label="Select all on this page" />';
-    headRow.insertBefore(selectTh, headRow.firstChild);
-    selectTh.querySelector('input').addEventListener('change', (e) => {
-      // Only the rows actually on screen — "select all" across pages would
-      // hand a delete far more than the user can see.
-      document.querySelectorAll('#leadTableBody tr[data-lead-id]').forEach((tr) => {
-        const box = tr.querySelector('[data-select]');
-        if (!box) return;
-        box.checked = e.target.checked;
-        tr.classList.toggle('row-selected', e.target.checked);
-        e.target.checked ? selectedLeads.add(tr.dataset.leadId) : selectedLeads.delete(tr.dataset.leadId);
-      });
-      renderBulkBar();
-    });
-  } else if (!wantSelect && selectTh) {
-    selectTh.remove();
-  }
-
-  const lastTh = headRow.lastElementChild;
-  if (wantActions && lastTh && lastTh.textContent.trim() === '') {
-    lastTh.textContent = 'Actions';
-    lastTh.className = 'lt-actions';
-  }
-}
 
 /** The bar that appears once anything is ticked. */
 function renderBulkBar() {
