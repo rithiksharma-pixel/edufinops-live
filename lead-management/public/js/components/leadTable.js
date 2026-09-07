@@ -89,6 +89,16 @@ export function renderLeadTable(tbody, leads, onRowClick, opts = {}) {
  * the current direction; the rest are plain.
  */
 export function renderLeadHeader(headRow, opts = {}) {
+  // A missing header must never take the list down with it. This threw on
+  // null once already: the selector looked for #leadTable, the markup had
+  // only class="lead-table", and the resulting TypeError was swallowed by
+  // the load's catch and surfaced as "Could not load leads" — an error that
+  // pointed at the query, which was fine.
+  if (!headRow) {
+    console.warn('renderLeadHeader: no header row found; leaving the existing header in place.');
+    return;
+  }
+
   const {
     columns = [], canSelect = false, canEdit = false, canDelete = false,
     sort = {}, onSort, onToggleAll,
