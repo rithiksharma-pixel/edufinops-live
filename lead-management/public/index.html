@@ -51,9 +51,6 @@
           <h1>Lead management</h1>
           <p class="subtitle" id="leadPageSubtitle">Every student loan lead, from first contact to disbursement.</p>
         </div>
-        <button class="btn btn-ghost" id="btnColumns" title="Choose which columns to show">
-          <i class="fa-solid fa-table-columns"></i> Columns
-        </button>
         <button class="btn btn-primary" id="btnNewLead">
           <i class="fa-solid fa-plus"></i> New lead
         </button>
@@ -68,64 +65,96 @@
       </section>
 
       <!-- Filters -->
-      <section class="filter-bar">
-        <div class="filter-field">
-          <label for="filterStage">Stage</label>
-          <select id="filterStage"><option value="">All stages</option></select>
+      <!-- Toolbar: the two controls used constantly (search, columns) stay
+           out front. The other eight filters live behind one button that
+           reports how many are active, so the page opens on the LIST rather
+           than on a wall of empty dropdowns. -->
+      <section class="lead-toolbar">
+        <div class="lt-search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="filterSearch" type="text" placeholder="Search student name or phone" aria-label="Search leads" />
         </div>
-        <div class="filter-field">
-          <label for="filterSource">Source</label>
-          <select id="filterSource"><option value="">All sources</option></select>
+
+        <button type="button" class="btn btn-ghost" id="btnFilters" aria-expanded="false" aria-controls="filterPanel">
+          <i class="fa-solid fa-filter"></i> Filters
+          <span class="lt-filter-count" id="filterCount" hidden></span>
+        </button>
+
+        <button class="btn btn-ghost" id="btnColumns" title="Choose which columns to show">
+          <i class="fa-solid fa-table-columns"></i> Columns
+        </button>
+
+        <span class="lt-toolbar-spacer"></span>
+        <div class="lead-count" id="leadCount" aria-live="polite"></div>
+      </section>
+
+      <!-- Collapsed by default; opens in place, grouped rather than in one
+           flat row of nine controls. -->
+      <section class="filter-panel" id="filterPanel" hidden>
+        <div class="fp-group">
+          <h4>Narrow by</h4>
+          <div class="fp-fields">
+            <div class="filter-field">
+              <label for="filterStage">Stage</label>
+              <select id="filterStage"><option value="">All stages</option></select>
+            </div>
+            <div class="filter-field">
+              <label for="filterSource">Source</label>
+              <select id="filterSource"><option value="">All sources</option></select>
+            </div>
+            <div class="filter-field">
+              <label for="filterRm">Assigned RM</label>
+              <select id="filterRm"><option value="">All RMs</option></select>
+            </div>
+            <div class="filter-field">
+              <label for="filterPriority">Priority</label>
+              <select id="filterPriority">
+                <option value="">All priorities</option>
+                <option value="Urgent">Urgent</option>
+                <option value="High">High</option>
+                <option value="Normal">Normal</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="filter-field">
-          <label for="filterRm">Assigned RM</label>
-          <select id="filterRm"><option value="">All RMs</option></select>
+
+        <div class="fp-group">
+          <h4>Date range</h4>
+          <div class="fp-fields">
+            <div class="filter-field">
+              <label for="filterDateField">Date basis</label>
+              <select id="filterDateField">
+                <option value="created_at">Created date</option>
+                <option value="updated_at">Last modified</option>
+                <option value="login_date">Login date</option>
+                <option value="sanction_date">Sanction date</option>
+                <option value="pf_date">PF date</option>
+                <option value="disbursed_date">Disbursement date</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="filterDateFrom">From</label>
+              <input id="filterDateFrom" type="date" />
+            </div>
+            <div class="filter-field">
+              <label for="filterDateTo">To</label>
+              <input id="filterDateTo" type="date" />
+            </div>
+          </div>
         </div>
-        <div class="filter-field">
-          <label for="filterPriority">Priority</label>
-          <select id="filterPriority">
-            <option value="">All priorities</option>
-            <option value="Urgent">Urgent</option>
-            <option value="High">High</option>
-            <option value="Normal">Normal</option>
-            <option value="Low">Low</option>
-          </select>
+
+        <div class="fp-footer">
+          <label class="fp-check">
+            <input id="filterOverdueOnly" type="checkbox" />
+            <span>Overdue follow-ups only</span>
+          </label>
+          <button type="button" id="btnClearFilters" class="btn btn-ghost">Clear all</button>
         </div>
-        <div class="filter-field">
-          <label for="filterDateField">Date basis</label>
-          <select id="filterDateField">
-            <option value="created_at">Created date</option>
-            <option value="updated_at">Last modified</option>
-            <option value="login_date">Login date</option>
-            <option value="sanction_date">Sanction date</option>
-            <option value="pf_date">PF date</option>
-            <option value="disbursed_date">Disbursement date</option>
-          </select>
-        </div>
-        <div class="filter-field">
-          <label for="filterDateFrom">From</label>
-          <input id="filterDateFrom" type="date" />
-        </div>
-        <div class="filter-field">
-          <label for="filterDateTo">To</label>
-          <input id="filterDateTo" type="date" />
-        </div>
-        <div class="filter-field filter-search">
-          <label for="filterSearch">Search</label>
-          <input id="filterSearch" type="text" placeholder="Student name or phone" />
-        </div>
-        <label class="filter-field" style="flex-direction:row;align-items:center;gap:6px;">
-          <input id="filterOverdueOnly" type="checkbox" style="width:auto;" />
-          <span>Overdue follow-ups only</span>
-        </label>
-        <button type="button" id="btnClearFilters" class="btn btn-ghost filter-clear">Clear</button>
       </section>
 
       <!-- Lead table -->
       <section class="table-card">
-        <!-- Live count of what the table below is actually showing, plus the
-             filters producing it — so a small number is never a mystery. -->
-        <div class="lead-count" id="leadCount" aria-live="polite"></div>
         <table class="lead-table" id="leadTable">
           <thead>
             <tr>

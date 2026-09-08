@@ -211,7 +211,30 @@ function applyFilters(filters) {
   document.getElementById('filterDateFrom').value = state.filters.dateFrom;
   document.getElementById('filterDateTo').value = state.filters.dateTo;
   document.getElementById('filterSearch').value = state.filters.search;
+  syncFilterChrome();
   resetAndRefresh();
+}
+
+/**
+ * Show how many filters are actually narrowing the list.
+ *
+ * The panel is collapsed by default, so without this an active filter is
+ * invisible: you would see a short list and no reason for it. Search is
+ * excluded because it has its own always-visible box, and dateField is
+ * excluded because it only says WHICH date a range applies to — on its own
+ * it filters nothing.
+ */
+function syncFilterChrome() {
+  const f = state.filters || {};
+  const active = [
+    f.stageId, f.sourceId, f.rmId, f.priority, f.dateFrom, f.dateTo,
+    f.overdueOnly ? 'y' : '',
+  ].filter(Boolean).length;
+
+  const badge = document.getElementById('filterCount');
+  const btn = document.getElementById('btnFilters');
+  if (badge) { badge.textContent = String(active); badge.hidden = active === 0; }
+  if (btn) btn.classList.toggle('has-filters', active > 0);
 }
 
 function populateFilterDropdowns() {
@@ -303,6 +326,23 @@ function populateFilterDropdowns() {
     smartViewTabs?.clearActive();
     applyFilters({});
   });
+
+  const filterBtn = document.getElementById('btnFilters');
+  const filterPanel = document.getElementById('filterPanel');
+  filterBtn.addEventListener('click', () => {
+    const open = filterPanel.hidden;
+    filterPanel.hidden = !open;
+    filterBtn.setAttribute('aria-expanded', String(open));
+  });
+
+  // A deep link or Smart View can arrive with filters already applied. Open
+  // the panel in that case, so the controls doing the narrowing are visible
+  // rather than hidden behind a button.
+  syncFilterChrome();
+  if (!document.getElementById('filterCount')?.hidden) {
+    filterPanel.hidden = false;
+    filterBtn.setAttribute('aria-expanded', 'true');
+  }
 }
 
 function renderCurrentUserChip() {

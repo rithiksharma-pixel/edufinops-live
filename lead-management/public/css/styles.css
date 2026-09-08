@@ -436,3 +436,70 @@ tr.row-selected > td { background: var(--accent-soft); }
 }
 .cp-item.locked { color: var(--ink-500); cursor: default; }
 .cp-lock { font-size: 11px; color: var(--ink-300); }
+
+/* =========================================================
+   LEAD PAGE STRUCTURE
+   The page was five full-width bands stacked as peers — header, view tabs,
+   funnel cards, a flat row of nine filter controls, then the table. Nothing
+   was subordinate to anything, and the list you came for sat below a wall of
+   mostly-empty dropdowns. Search and Columns now stay out front; the rest
+   collapse behind one button that reports how many are active.
+   ========================================================= */
+.lead-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.lt-toolbar-spacer { flex: 1 1 auto; }
+
+.lt-search {
+  position: relative; flex: 0 1 340px; min-width: 200px;
+}
+.lt-search i {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-300); font-size: 13px; pointer-events: none;
+}
+.lt-search input {
+  width: 100%; padding-left: 34px;
+}
+
+/* Count of active filters, so a filtered list is never mistaken for an empty
+   one — the single most common "where did my leads go" moment. */
+.lt-filter-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  border-radius: 999px; background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 600;
+}
+#btnFilters.has-filters { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- collapsible filter panel ---------- */
+.filter-panel {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 16px;
+  display: grid; gap: 18px;
+}
+.fp-group h4 {
+  margin: 0 0 10px; font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em; color: var(--ink-500);
+}
+.fp-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px 14px;
+}
+.fp-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.fp-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 400; cursor: pointer;
+}
+.fp-check input { width: auto; }
+
+/* The count sits in the toolbar now, not stranded above the table. */
+.lead-toolbar .lead-count { margin: 0; font-size: 13px; color: var(--ink-500); }
+
+@media (max-width: 700px) {
+  .lt-toolbar-spacer { display: none; }
+  .lead-toolbar .lead-count { width: 100%; }
+}
