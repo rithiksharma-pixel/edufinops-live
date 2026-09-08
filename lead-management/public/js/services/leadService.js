@@ -52,8 +52,24 @@ export const DATE_FIELD_LABELS = {
  * so a Smart View's tab count always matches what the list actually
  * shows once you click it) to a `leads` query builder in place.
  */
-function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, dateFrom, dateTo, priority, overdueOnly } = {}) {
+function applyLeadFilters(query, { stageId, sourceId, rmId, search, dateField, dateFrom, dateTo, priority, overdueOnly, notContactedDays, openOnly, lostStageId } = {}) {
   if (stageId) query = query.eq('current_stage_id', stageId);
+
+  // Contact recency. last_activity_at is maintained by trigger from
+  // lead_events (064), so this is an indexed compare rather than a scan of
+  // every event per lead — which is what made it unofferable before.
+  if (notContactedDays) {
+    const cutoff = new Date(Date.now() - Number(notContactedDays) * 86400000);
+    query = query.lt('last_activity_at', cutoff.toISOString());
+  }
+
+  // The open book. Without this, "untouched for 30 days" returns 11,960 rows
+  // of which 5,317 are dead leads — a number that looks alarming and means
+  // nothing. Lost is both a stage and a reason, so both are excluded.
+  if (openOnly) {
+    query = query.is('lost_reason_id', null);
+    if (lostStageId) query = query.neq('current_stage_id', lostStageId);
+  }
   if (sourceId) query = query.eq('lead_source_id', sourceId);
   if (rmId) query = query.eq('assigned_rm_id', rmId);
   if (priority) query = query.eq('priority', priority);

@@ -22,7 +22,7 @@ import { deleteLead, deleteLeadsBulk } from './services/leadService.js';
 import { initSmartViewTabs } from './components/smartViewTabs.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 
-const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', overdueOnly: false, search: '', dateField: 'created_at', dateFrom: '', dateTo: '' };
+const DEFAULT_FILTERS = { stageId: '', sourceId: '', rmId: '', priority: '', overdueOnly: false, search: '', dateField: 'created_at', dateFrom: '', dateTo: '', notContactedDays: 0, openOnly: false };
 
 /** Roles whose default view is their own book rather than the whole pipeline. */
 const OWN_BOOK_ROLES = ['Relationship Manager'];
@@ -63,6 +63,11 @@ function defaultFilters() {
   return { ...DEFAULT_FILTERS, rmId: state.scopeRmId };
 }
 
+/** Every request carries it, so `openOnly` can exclude the Lost stage. */
+function withLostStage(filters) {
+  return { ...filters, lostStageId: state.stages?.find((s) => s.name === 'Lead Lost')?.id || '' };
+}
+
 let smartViewTabs;
 
 /**
@@ -79,8 +84,8 @@ async function refreshLeadsAndFunnel() {
   const tbody = document.getElementById('leadTableBody');
   try {
     const [page, counts] = await Promise.all([
-      listLeads(state.filters, { limit: LEAD_PAGE_SIZE, offset: state.page * LEAD_PAGE_SIZE, sort: leadSort }),
-      getStageCounts(state.filters),
+      listLeads(withLostStage(state.filters), { limit: LEAD_PAGE_SIZE, offset: state.page * LEAD_PAGE_SIZE, sort: leadSort }),
+      getStageCounts(withLostStage(state.filters)),
     ]);
     // A filter change can leave you past the end of a now-shorter result set.
     // Snap back to page 0 and refetch rather than showing an empty table.
@@ -463,8 +468,9 @@ async function bootstrap() {
     showToast,
     getCurrentFilters: () => ({ ...state.filters }),
     applyFilters,
-    baseFilters: defaultFilters,
+    baseFilters: () => withLostStage(defaultFilters()),
     baseLabel: state.scopeRmId ? 'My Leads' : 'All Leads',
+    stages: () => state.stages || [],
   })
     .then((tabs) => { smartViewTabs = tabs; })
     .catch((err) => {

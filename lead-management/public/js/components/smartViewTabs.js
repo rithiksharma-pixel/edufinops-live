@@ -6,6 +6,7 @@
 // The "+" saves the CURRENTLY active filter-bar state as a new view.
 // =========================================================
 import { getSavedViews, createSavedView, deleteSavedView } from '../services/savedViewsService.js';
+import { resolveStandardViews, isStandardView } from './leadViews.js';
 import { countLeads } from '../services/leadService.js';
 
 export async function initSmartViewTabs(containerEl, ctx) {
@@ -16,6 +17,8 @@ export async function initSmartViewTabs(containerEl, ctx) {
     // of it, or the first tab reads "All Leads 11,951" above a list of 588.
     baseFilters = () => ({}),
     baseLabel = 'All Leads',
+    // Live stage list, so a standard view can resolve "Login" to its id.
+    stages = () => [],
   } = ctx;
   let views = [];
   let activeViewId = null; // null = the base view
@@ -26,9 +29,11 @@ export async function initSmartViewTabs(containerEl, ctx) {
     return div.innerHTML;
   }
 
-  function tabHtml(id, name, count, isActive, deletable) {
+  function tabHtml(id, name, count, isActive, deletable, opts = {}) {
+    const { hint = '', alert = false } = opts;
     return `
-      <button class="smart-view-tab ${isActive ? 'active' : ''}" data-view-tab="${id ?? ''}">
+      <button class="smart-view-tab ${isActive ? 'active' : ''} ${alert && count > 0 ? 'alert' : ''}"
+              data-view-tab="${id ?? ''}"${hint ? ` title="${escapeHtml(hint)}"` : ''}>
         <span>${escapeHtml(name)}</span>
         <span class="smart-view-tab-count">${count}</span>
         ${deletable ? `<span class="smart-view-tab-delete" data-delete-view="${id}" title="Delete view">&times;</span>` : ''}
@@ -40,13 +45,17 @@ export async function initSmartViewTabs(containerEl, ctx) {
     // Each saved view is applied ON TOP of the base, so its count is too —
     // otherwise a tab's badge disagrees with the list it produces.
     const base = baseFilters();
-    const [allCount, viewCounts] = await Promise.all([
+    const std = resolveStandardViews(stages());
+    const [allCount, stdCounts, viewCounts] = await Promise.all([
       countLeads(base),
+      Promise.all(std.map((v) => countLeads({ ...base, ...v.filters }))),
       Promise.all(views.map((v) => countLeads({ ...base, ...v.filters }))),
     ]);
 
     containerEl.innerHTML = [
       tabHtml(null, baseLabel, allCount, activeViewId === null, false),
+      ...std.map((v, i) => tabHtml(v.id, v.name, stdCounts[i], activeViewId === v.id, false,
+        { hint: v.hint, alert: v.alert })),
       ...views.map((v, i) => tabHtml(v.id, v.name, viewCounts[i], activeViewId === v.id, true)),
       `<button class="smart-view-tab smart-view-tab-add" data-action="add-view" title="Save the current filters as a view"><i class="fa-solid fa-plus"></i></button>`,
     ].join('');
@@ -56,7 +65,11 @@ export async function initSmartViewTabs(containerEl, ctx) {
         if (e.target.closest('[data-delete-view]')) return;
         const id = btn.dataset.viewTab || null;
         activeViewId = id;
-        const view = id ? views.find((v) => v.id === id) : null;
+        const view = id
+          ? (isStandardView(id)
+              ? resolveStandardViews(stages()).find((v) => v.id === id)
+              : views.find((v) => v.id === id))
+          : null;
         applyFilters(view ? view.filters : {});
         render();
       });

@@ -503,3 +503,15 @@ tr.row-selected > td { background: var(--accent-soft); }
   .lt-toolbar-spacer { display: none; }
   .lead-toolbar .lead-count { width: 100%; }
 }
+
+/* A standard view whose count is a problem rather than a fact. Only the
+   count is tinted — a fully red tab would compete with the active state. */
+.smart-view-tab.alert .smart-view-tab-count {
+  background: #FBE7E7;
+  color: #B4232A;
+  font-weight: 600;
+}
+:root[data-theme="dark"] .smart-view-tab.alert .smart-view-tab-count {
+  background: #331A1B;
+  color: #F2888C;
+}
