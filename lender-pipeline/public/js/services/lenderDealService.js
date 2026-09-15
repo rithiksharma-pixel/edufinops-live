@@ -6,7 +6,7 @@
 // different bank's officer sees zero rows on all of these).
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
-import { fetchAllResult } from '../../../../shared/js/fetchAll.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
 
 export const STAGE_TABLE_MAP = {
   'Bank Prospect': {
@@ -52,19 +52,15 @@ export const STAGE_TABLE_MAP = {
   },
 };
 
-export async function getMyBankDeals() {
-  const { data, error } = await fetchAllResult(() => supabase
-    .from('deals')
-    .select(`
-      id, is_on_hold, is_rejected, total_disbursed_amount,
-      leads ( student_name, loan_amount_requested ),
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name, sequence_order ),
-      current_stage_status:deal_stage_statuses ( name )
-    `)
-    .eq('is_deleted', false)
-    .order('created_at', { ascending: false }));
-  if (error) throw error;
-  return data;
+/**
+ * The pipeline list, via lender_pipeline() (deployment/065). Not a PostgREST
+ * embed of leads: a Lender has no SELECT on leads, so the embed came back
+ * null and every student rendered as "-". The RPC returns only what a bank
+ * needs to work the case, already scoped to this user's institution, with
+ * days-at-stage measured against the Admin-set stage TAT.
+ */
+export async function getPipeline() {
+  return fetchAll(() => supabase.rpc('lender_pipeline'), { tiebreak: 'deal_id' });
 }
 
 export async function getDealDetail(dealId) {
@@ -104,7 +100,7 @@ export async function getDealDetail(dealId) {
 }
 
 export async function getDealStages() {
-  const { data, error } = await supabase.from('deal_stages').select('id, name, sequence_order').eq('is_deleted', false).order('sequence_order');
+  const { data, error } = await supabase.from('deal_stages').select('id, name, sequence_order, is_terminal').eq('is_deleted', false).order('sequence_order');
   if (error) throw error;
   return data;
 }
@@ -164,37 +160,6 @@ export async function getMyLenderProfile(lenderOrgId) {
 export async function updateMyLenderProfile(lenderOrgId, fields) {
   const { error } = await supabase.from('lenders').update(fields).eq('id', lenderOrgId);
   if (error) throw error;
-}
-
-/**
- * "Needs attention" = deal is on hold, rejected, or has had no stage
- * movement in 7+ days (a proxy for "stuck" since we don't want a second
- * round trip through deal_events just for a dashboard heuristic).
- * Everything else is "on track."
- */
-export async function getDashboardSummary() {
-  const { data, error } = await fetchAllResult(() => supabase
-    .from('deals')
-    .select(`
-      id, is_on_hold, is_rejected, updated_at, total_disbursed_amount,
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name, sequence_order )
-    `)
-    .eq('is_deleted', false));
-  if (error) throw error;
-
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const stageCounts = {};
-  let needsAttention = 0, onTrack = 0, closedWon = 0;
-  data.forEach((d) => {
-    const stageName = d.current_deal_stage?.name || 'Unknown';
-    stageCounts[stageName] = (stageCounts[stageName] || 0) + 1;
-    if (stageName === 'Closed Won') closedWon += 1;
-    const stuck = new Date(d.updated_at) < sevenDaysAgo && stageName !== 'Closed Won';
-    if (d.is_on_hold || d.is_rejected || stuck) needsAttention += 1;
-    else onTrack += 1;
-  });
-
-  return { totalDeals: data.length, needsAttention, onTrack, closedWon, stageCounts };
 }
 
 export async function getMessages(dealId) {

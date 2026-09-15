@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
+<link rel="stylesheet" href="../../shared/css/partner-portal.css" />
 <link rel="stylesheet" href="css/portal.css" />
 <script>try{var t=localStorage.getItem('zt-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../../shared/img/favicon.svg" />
@@ -29,20 +30,37 @@
 
     <main class="main">
       <div id="ztTopbar" class="zt-topbar"></div>
-      <header class="main-header">
-        <div><h1>My students</h1><p class="subtitle">Every lead you've submitted, and where it stands.</p></div>
-        <button class="btn btn-primary" id="btnAddLead"><i class="fa-solid fa-plus"></i> Add lead</button>
+      <header class="pp-head">
+        <div>
+          <p class="pp-eyebrow">Consultant portal</p>
+          <h1 class="pp-title" id="cpTitle">My students</h1>
+          <p class="pp-blurb" id="cpBlurb">Students you referred, and where each one has reached.</p>
+        </div>
+        <div class="pp-actions"><button class="btn btn-primary" id="btnAddLead"><i class="fa-solid fa-plus"></i> Add student</button></div>
       </header>
 
-      <section class="stat-cards" id="cpDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+      <section class="pp-stats" id="cpDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
 
-      <input type="text" id="searchInput" class="search-input" placeholder="Search by name or phone" />
+      <div class="pp-grid">
+        <section class="pp-panel">
+          <div class="pp-toolbar">
+            <div class="pp-tabs" id="cpTabs" role="tablist"></div>
+            <input type="search" id="searchInput" class="pp-search" placeholder="Search by name or phone" />
+          </div>
+          <div class="pp-hint" id="cpHint"></div>
+          <div class="pp-table-wrap">
+            <table class="pp-table">
+              <thead><tr><th>Student</th><th>Course / University</th><th>Stage</th><th>Referred</th><th>Last update</th></tr></thead>
+              <tbody id="leadsBody"><tr><td colspan="5"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
+            </table>
+          </div>
+          <div class="pp-more" id="cpMore" hidden></div>
+        </section>
 
-      <div class="table-card">
-        <table class="data-table">
-          <thead><tr><th>Student</th><th>Course / University</th><th>Loan amount</th><th>Status</th><th>Submitted</th></tr></thead>
-          <tbody id="leadsBody"><tr><td colspan="5"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
-        </table>
+        <section class="pp-panel">
+          <div class="pp-card-title"><h3>Where your students are</h3><p>Open students by current stage</p></div>
+          <div class="pp-funnel" id="cpFunnel"></div>
+        </section>
       </div>
     </main>
   </div>
@@ -70,7 +88,7 @@
     <aside class="drawer">
       <div class="drawer-header"><div><h2 id="drawerName">–</h2><span class="drawer-subtitle" id="drawerSubtitle">–</span></div><button class="icon-btn" id="btnCloseDrawer"><i class="fa-solid fa-xmark"></i></button></div>
       <nav class="drawer-tabs">
-        <button class="tab-btn active" data-tab="status">Lead status</button>
+        <button class="tab-btn active" data-tab="status">Progress</button>
         <button class="tab-btn" data-tab="messages">Messages</button>
       </nav>
       <div class="drawer-body">

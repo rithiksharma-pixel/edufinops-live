@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="../../shared/design-tokens.css" />
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
+<link rel="stylesheet" href="../../shared/css/partner-portal.css" />
 <link rel="stylesheet" href="css/pipeline.css" />
 <script>try{var t=localStorage.getItem('zt-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../../shared/img/favicon.svg" />
@@ -19,8 +20,7 @@
     <aside class="sidebar">
       <div class="sidebar-brand"><span class="brand-mark">Z</span><span class="brand-name">Zolve <span class="brand-accent">Tangent</span></span></div>
       <nav class="sidebar-nav">
-        <a class="nav-item active" data-view="dashboard" href="#"><i class="fa-solid fa-chart-line"></i> Dashboard</a>
-        <a class="nav-item" data-view="pipeline" href="#"><i class="fa-solid fa-building-columns"></i> Our Pipeline</a>
+        <a class="nav-item active" data-view="pipeline" href="#"><i class="fa-solid fa-building-columns"></i> Pipeline</a>
         <a class="nav-item" data-view="profile" href="#"><i class="fa-solid fa-id-card"></i> Bank Details</a>
       </nav>
       <div class="sidebar-footer">
@@ -30,29 +30,32 @@
 
     <main class="main">
       <div id="ztTopbar" class="zt-topbar"></div>
-      <div id="dashboardPanel">
-        <header class="main-header"><div><h1>Dashboard</h1><p class="subtitle">Your institution's pipeline at a glance.</p></div></header>
-        <section class="stat-cards" id="dashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
-        <div class="grid-two">
-          <section class="table-card" style="padding:18px;">
-            <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">By stage</h3>
-            <div id="dashStageBreakdown"></div>
-          </section>
-          <section class="table-card" style="padding:18px;">
-            <h3 style="font-size:14px;font-weight:500;margin:0 0 4px;">Needs attention</h3>
-            <p class="subtitle" style="margin-bottom:12px;">On hold, rejected, or no movement in 7+ days.</p>
-            <div id="dashAttentionList"></div>
-          </section>
-        </div>
-      </div>
+      <div id="pipelinePanel">
+        <header class="pp-head">
+          <div>
+            <p class="pp-eyebrow">Lender pipeline</p>
+            <h1 class="pp-title" id="lpTitle">Your cases</h1>
+            <p class="pp-blurb" id="lpBlurb">Only cases Zolve Tangent has shared with your institution.</p>
+          </div>
+          <div class="pp-actions"><button class="btn btn-ghost" id="btnExport"><i class="fa-solid fa-download"></i> Export view</button></div>
+        </header>
 
-      <div id="pipelinePanel" hidden>
-        <header class="main-header"><div><h1>Our pipeline</h1><p class="subtitle">Every case shared with your institution.</p></div></header>
-        <section class="table-card">
-          <table class="data-table">
-            <thead><tr><th>Student</th><th>Requested amount</th><th>Stage</th><th>Status</th></tr></thead>
-            <tbody id="dealsBody"><tr><td colspan="4"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
-          </table>
+        <section class="pp-stats" id="lpStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+        <nav class="pp-stages" id="lpStages" aria-label="Filter by stage"></nav>
+
+        <section class="pp-panel">
+          <div class="pp-toolbar">
+            <div class="pp-tabs" id="lpTabs" role="tablist"></div>
+            <input type="search" class="pp-search" id="lpSearch" placeholder="Search student, course or university" />
+          </div>
+          <div class="pp-hint" id="lpHint"></div>
+          <div class="pp-table-wrap">
+            <table class="pp-table">
+              <thead><tr><th>Student</th><th>Stage</th><th>Time at stage</th><th class="r">Requested</th><th class="r">Sanctioned</th><th class="r">Queries</th></tr></thead>
+              <tbody id="dealsBody"><tr><td colspan="6"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
+            </table>
+          </div>
+          <div class="pp-more" id="lpMore" hidden></div>
         </section>
       </div>
 

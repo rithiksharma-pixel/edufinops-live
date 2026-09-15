@@ -5,10 +5,10 @@ import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 import {
-  getMyBankDeals, getDealDetail, getDealStages, getDealHoldReasons, getDealRejectionReasons,
+  getPipeline, getDealDetail, getDealStages, getDealHoldReasons, getDealRejectionReasons,
   updateStageDetails, changeDealStage, putDealOnHold, releaseDealHold, rejectDeal, reinstateDeal,
   recordDisbursement, getMessages, sendMessage, STAGE_TABLE_MAP,
-  getMyLenderProfile, updateMyLenderProfile, getDashboardSummary,
+  getMyLenderProfile, updateMyLenderProfile,
   getLeadProfileForLender, getDocumentDownloadUrl,
 } from './services/lenderDealService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
@@ -22,25 +22,184 @@ function formatCurrency(amount) {
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '–'; }
 function formatDateTime(d) { return d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–'; }
 
-async function refreshDealsList() {
+/** ₹ in lakh / crore, the way the team and the banks talk about it. */
+function compactInr(n) {
+  if (!n) return '–';
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+const fmtInt = (n) => Number(n || 0).toLocaleString('en-IN');
+
+// =========================================================
+// Pipeline view state. The institution's whole list is loaded once (a bank
+// sees at most a few hundred cases) and every tab, stage chip and search is
+// a filter over it — instant, and the counts on the tabs always agree with
+// the rows underneath them.
+// =========================================================
+const OPEN_STAGE_ORDER = ['Bank Prospect', 'Login', 'Sanction', 'PF Paid', 'Disbursement'];
+const PAGE = 100;
+
+const pipe = { rows: [], tab: 'action', stage: '', search: '', shown: PAGE };
+
+const isClosed = (r) => r.is_terminal || r.is_rejected;
+const isPastTat = (r) => !isClosed(r) && r.tat_days != null && r.days_at_stage > r.tat_days;
+const needsAction = (r) => !isClosed(r) && (isPastTat(r) || r.open_queries > 0 || r.is_on_hold);
+
+const TABS = [
+  { id: 'action', label: 'Needs action', alert: true, test: needsAction,
+    hint: 'Past the turnaround time for their stage, on hold, or carrying an open query. Longest overdue first.' },
+  { id: 'live', label: 'All live', test: (r) => !isClosed(r),
+    hint: 'Every open case, longest at its current stage first.' },
+  { id: 'mine', label: 'Assigned to me', test: (r) => r.assigned_to_me && !isClosed(r),
+    hint: 'Open cases assigned to you personally.' },
+  { id: 'closed', label: 'Closed', test: isClosed,
+    hint: 'Closed won, declined or rejected. Most recent first.' },
+];
+
+/** How overdue a case is, relative to its own stage's TAT. */
+const overdueRatio = (r) => (r.tat_days ? r.days_at_stage / r.tat_days : r.days_at_stage / 30);
+
+function currentTab() { return TABS.find((t) => t.id === pipe.tab) || TABS[0]; }
+
+function visibleRows() {
+  const q = pipe.search.toLowerCase();
+  return pipe.rows
+    .filter(currentTab().test)
+    .filter((r) => !pipe.stage || r.stage_name === pipe.stage)
+    .filter((r) => !q || [r.student_name, r.course_name, r.university_name].some((v) => (v || '').toLowerCase().includes(q)))
+    .sort((a, b) => (pipe.tab === 'closed'
+      ? new Date(b.stage_since) - new Date(a.stage_since)
+      : overdueRatio(b) - overdueRatio(a)));
+}
+
+function stageChip(r) {
+  let tone = 'accent';
+  if (r.stage_name === 'Closed Won') tone = 'good';
+  else if (r.is_terminal) tone = 'bad';
+  let html = `<span class="pp-chip ${tone}">${escapeHtml(r.stage_name)}</span>`;
+  if (r.is_rejected) html += '<span class="pp-chip bad">Rejected</span>';
+  else if (r.is_on_hold) html += '<span class="pp-chip warn">On hold</span>';
+  return html;
+}
+
+function stageMeter(r) {
+  if (isClosed(r)) return '<span class="pp-muted">–</span>';
+  const tat = r.tat_days;
+  const tone = tat == null ? '' : r.days_at_stage > tat ? 'bad' : r.days_at_stage > tat * 0.7 ? 'warn' : '';
+  const width = Math.min(100, (r.days_at_stage / Math.max(tat || 30, 1)) * 100);
+  const title = tat == null ? 'No turnaround time set for this stage' : `Turnaround time for ${r.stage_name}: ${tat} days`;
+  return `<span class="pp-meter ${tone}" title="${escapeHtml(title)}">
+    <span class="pp-meter-track"><span class="pp-meter-fill" style="width:${Math.max(4, width)}%"></span></span>
+    <span class="pp-meter-text">${r.days_at_stage}d${tat != null ? ` <span class="pp-muted">/ ${tat}</span>` : ''}</span>
+  </span>`;
+}
+
+function renderStats() {
+  const live = pipe.rows.filter((r) => !isClosed(r));
+  const past = live.filter(isPastTat);
+  const oldest = past.reduce((m, r) => Math.max(m, r.days_at_stage), 0);
+  const sanctioned = pipe.rows.filter((r) => Number(r.sanction_amount) > 0 && !r.is_rejected);
+  const sanctionValue = sanctioned.reduce((s, r) => s + Number(r.sanction_amount), 0);
+  const disbursed = pipe.rows.reduce((s, r) => s + Number(r.total_disbursed_amount || 0), 0);
+  const disbursedCount = pipe.rows.filter((r) => Number(r.total_disbursed_amount) > 0).length;
+
+  const stat = (label, value, sub, tone = '') => `<div class="pp-stat ${tone}"><div class="pp-stat-label">${label}</div><div class="pp-stat-value">${value}</div>${sub ? `<div class="pp-stat-sub">${sub}</div>` : ''}</div>`;
+  document.getElementById('lpStats').innerHTML = [
+    stat('Live cases', fmtInt(live.length), `${fmtInt(pipe.rows.length - live.length)} closed`),
+    stat('Past turnaround time', fmtInt(past.length), past.length ? `Longest ${oldest} days at one stage` : 'Nothing overdue', past.length ? 'warn' : 'good'),
+    stat('Sanctioned', compactInr(sanctionValue), `${fmtInt(sanctioned.length)} cases`),
+    stat('Disbursed', compactInr(disbursed), `${fmtInt(disbursedCount)} cases`, disbursed ? 'good' : ''),
+  ].join('');
+}
+
+function renderStages() {
+  const base = pipe.rows.filter(currentTab().test);
+  const counts = {};
+  base.forEach((r) => { counts[r.stage_name] = (counts[r.stage_name] || 0) + 1; });
+  const names = [...OPEN_STAGE_ORDER, ...Object.keys(counts).filter((n) => !OPEN_STAGE_ORDER.includes(n))]
+    .filter((n) => counts[n]);
+  if (pipe.stage && !counts[pipe.stage]) pipe.stage = '';
+  const el = document.getElementById('lpStages');
+  el.innerHTML = `<button class="pp-stage ${pipe.stage ? '' : 'on'}" data-stage="">All stages <b>${fmtInt(base.length)}</b></button>` +
+    names.map((n) => `<button class="pp-stage ${pipe.stage === n ? 'on' : ''}" data-stage="${escapeHtml(n)}">${escapeHtml(n)} <b>${fmtInt(counts[n])}</b></button>`).join('');
+  el.querySelectorAll('[data-stage]').forEach((b) => b.addEventListener('click', () => {
+    pipe.stage = b.dataset.stage; pipe.shown = PAGE; renderPipeline();
+  }));
+}
+
+function renderTabs() {
+  const el = document.getElementById('lpTabs');
+  el.innerHTML = TABS.map((t) => {
+    const n = pipe.rows.filter(t.test).length;
+    return `<button class="pp-tab ${t.id === pipe.tab ? 'on' : ''} ${t.alert && n ? 'alert' : ''}" role="tab" aria-selected="${t.id === pipe.tab}" data-tab-id="${t.id}">${t.label} <span class="n">${fmtInt(n)}</span></button>`;
+  }).join('');
+  el.querySelectorAll('[data-tab-id]').forEach((b) => b.addEventListener('click', () => {
+    pipe.tab = b.dataset.tabId; pipe.shown = PAGE; renderPipeline();
+  }));
+  document.getElementById('lpHint').textContent = currentTab().hint;
+}
+
+function renderRows() {
   const tbody = document.getElementById('dealsBody');
-  const deals = await getMyBankDeals();
-  if (deals.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4">${emptyState('fa-building-columns', 'No cases yet', 'Cases your team shares with this institution will show up here.')}</td></tr>`;
+  const more = document.getElementById('lpMore');
+  const rows = visibleRows();
+  if (rows.length === 0) {
+    const empty = pipe.rows.length === 0
+      ? emptyState('fa-building-columns', 'No cases yet', 'Cases Zolve Tangent shares with your institution will show up here.')
+      : emptyState('fa-circle-check', 'Nothing here', pipe.search || pipe.stage ? 'Try clearing the search or stage filter.' : 'No cases match this view right now.');
+    tbody.innerHTML = `<tr><td colspan="6">${empty}</td></tr>`;
+    more.hidden = true;
     return;
   }
-  tbody.innerHTML = deals.map((d) => {
-    let banner = '';
-    if (d.is_rejected) banner = '<span class="badge badge-danger">Rejected</span>';
-    else if (d.is_on_hold) banner = '<span class="badge badge-warning">On hold</span>';
-    return `<tr data-id="${d.id}">
-      <td><strong>${escapeHtml(d.leads?.student_name || '–')}</strong></td>
-      <td>${formatCurrency(d.leads?.loan_amount_requested)}</td>
-      <td><span class="badge badge-accent">${escapeHtml(d.current_deal_stage?.name || '–')}${d.current_stage_status ? ' · ' + escapeHtml(d.current_stage_status.name) : ''}</span></td>
-      <td>${banner || '–'}</td>
-    </tr>`;
-  }).join('');
+  tbody.innerHTML = rows.slice(0, pipe.shown).map((r) => `
+    <tr data-id="${r.deal_id}">
+      <td><div class="pp-name">${escapeHtml(r.student_name || '–')}</div><div class="pp-sub">${escapeHtml([r.course_name, r.university_name].filter(Boolean).join(' · ') || 'No course recorded')}</div></td>
+      <td>${stageChip(r)}</td>
+      <td>${stageMeter(r)}</td>
+      <td class="r pp-num">${compactInr(r.loan_amount_requested)}</td>
+      <td class="r pp-num">${compactInr(r.sanction_amount)}</td>
+      <td class="r">${r.open_queries ? `<span class="pp-chip warn">${r.open_queries} open</span>` : '<span class="pp-muted">–</span>'}</td>
+    </tr>`).join('');
   tbody.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openDrawer(tr.dataset.id)));
+
+  more.hidden = false;
+  more.innerHTML = rows.length > pipe.shown
+    ? `<span>Showing ${fmtInt(pipe.shown)} of ${fmtInt(rows.length)}</span><button class="btn btn-ghost" id="btnShowMore">Show ${fmtInt(Math.min(PAGE, rows.length - pipe.shown))} more</button>`
+    : `<span>${fmtInt(rows.length)} case${rows.length === 1 ? '' : 's'}</span><span></span>`;
+  document.getElementById('btnShowMore')?.addEventListener('click', () => { pipe.shown += PAGE; renderRows(); });
+}
+
+function renderPipeline() {
+  renderTabs();
+  renderStages();
+  renderRows();
+}
+
+async function refreshDealsList() {
+  pipe.rows = await getPipeline();
+  renderStats();
+  renderPipeline();
+}
+
+function exportView() {
+  const rows = visibleRows();
+  const cols = [
+    ['Student', (r) => r.student_name], ['Course', (r) => r.course_name], ['University', (r) => r.university_name],
+    ['Country', (r) => r.destination_country], ['Stage', (r) => r.stage_name],
+    ['Status', (r) => (r.is_rejected ? 'Rejected' : r.is_on_hold ? 'On hold' : '')],
+    ['Days at stage', (r) => r.days_at_stage], ['Stage TAT (days)', (r) => r.tat_days],
+    ['Requested', (r) => r.loan_amount_requested], ['Sanctioned', (r) => r.sanction_amount],
+    ['Disbursed', (r) => r.total_disbursed_amount], ['Open queries', (r) => r.open_queries],
+  ];
+  const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csv = [cols.map((c) => c[0]).join(','), ...rows.map((r) => cols.map((c) => cell(c[1](r))).join(','))].join('\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pipeline-${currentTab().id}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function openDrawer(dealId) {
@@ -279,7 +438,7 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
     panel.innerHTML = `
       <div class="detail-row"><span class="k">Rejected at stage</span><span class="v">${escapeHtml(stageName || '–')}</span></div>
       <div class="detail-row"><span class="k">Remarks</span><span class="v">${escapeHtml(deal.rejection_remarks || '–')}</span></div>
-      <button class="btn btn-primary" id="btnReinstate" style="width:100%;margin-top:10px;">Ask to reinstate</button>
+      <button class="btn btn-primary" id="btnReinstate" style="width:100%;margin-top:10px;">Reinstate this case</button>
     `;
     document.getElementById('btnReinstate').addEventListener('click', async () => {
       try { await reinstateDeal(dealId, 'Reinstated by lender'); showToast('Deal reinstated.'); await loadManagePanel(dealId, stages, holdReasons, rejectionReasons); await refreshDealsList(); }
@@ -295,8 +454,17 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
     return `<div class="form-field"><label>${f.label}</label><input data-field="${f.key}" type="${f.type}" value="${escapeHtml(val)}" /></div>`;
   }).join('') : '';
 
-  const nextStages = stages.filter((s) => s.id !== deal.current_deal_stage_id);
-  const stageOptions = nextStages.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+  // Offer the one real next step plus the exits, not every stage in the
+  // table: a bank moving a Login case "back" to Bank Prospect, or skipping to
+  // PF Paid, is never what was meant, and the server refuses skips anyway.
+  const currentOrder = deal.current_deal_stage?.sequence_order ?? 0;
+  const nextStage = stages
+    .filter((s) => !s.is_terminal && s.sequence_order > currentOrder)
+    .sort((a, b) => a.sequence_order - b.sequence_order)[0];
+  const exits = stages.filter((s) => s.is_terminal && s.id !== deal.current_deal_stage_id);
+  const stageOptions =
+    (nextStage ? `<optgroup label="Next step"><option value="${nextStage.id}">${escapeHtml(nextStage.name)}</option></optgroup>` : '') +
+    (exits.length ? `<optgroup label="Close the case">${exits.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</optgroup>` : '');
   const holdOptions = holdReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
   const rejectOptions = rejectionReasons.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
 
@@ -321,7 +489,7 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
     ${stageConfig ? `<h4 style="font-size:13px;font-weight:500;margin:0 0 8px;">${escapeHtml(stageName)} details</h4><div class="form-grid">${stageFormHtml}</div><button class="btn btn-ghost" style="margin-top:8px;" id="btnSaveStageFields">Save details</button>` : ''}
     ${disbursementHtml}
     <h4 style="font-size:13px;font-weight:500;margin:18px 0 8px;">Actions</h4>
-    <div class="form-field"><label>Advance to stage</label><select id="nextStageSelect"><option value="">Select…</option>${stageOptions}</select></div>
+    <div class="form-field"><label>Move this case to</label><select id="nextStageSelect"><option value="">Select…</option>${stageOptions}</select></div>
     <button class="btn btn-ghost" id="btnAdvance">Move stage</button>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn btn-ghost" style="flex:1;" id="btnToggleHold">${deal.is_on_hold ? 'Release hold' : 'Put on hold'}</button>
@@ -359,7 +527,7 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
       showToast('Stage updated.');
       await loadManagePanel(dealId, stages, holdReasons, rejectionReasons);
       await refreshDealsList();
-    } catch (err) { showToast('Could not change stage.', true); }
+    } catch (err) { showToast(err.message || 'Could not change stage.', true); }
   });
 
   document.getElementById('btnToggleHold').addEventListener('click', async () => {
@@ -376,14 +544,14 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
       await putDealOnHold(dealId, document.getElementById('holdReasonSelect').value, document.getElementById('holdRemarks').value);
       showToast('Put on hold.');
       await loadManagePanel(dealId, stages, holdReasons, rejectionReasons); await refreshDealsList();
-    } catch (err) { showToast('Could not put on hold.', true); }
+    } catch (err) { showToast(err.message || 'Could not put on hold.', true); }
   });
   document.getElementById('btnConfirmReject').addEventListener('click', async () => {
     try {
       await rejectDeal(dealId, document.getElementById('rejectReasonSelect').value, document.getElementById('rejectRemarks').value);
       showToast('Deal rejected.');
       await loadManagePanel(dealId, stages, holdReasons, rejectionReasons); await refreshDealsList();
-    } catch (err) { showToast('Could not reject.', true); }
+    } catch (err) { showToast(err.message || 'Could not reject.', true); }
   });
   const addTrancheBtn = document.getElementById('btnAddTranche');
   if (addTrancheBtn) addTrancheBtn.addEventListener('click', async () => {
@@ -393,7 +561,7 @@ async function loadManagePanel(dealId, stages, holdReasons, rejectionReasons) {
     const term = panel.querySelector('[data-tranche="academic_term"]').value;
     if (!amount || !date) { showToast('Enter amount and date.', true); return; }
     try { await recordDisbursement(dealId, num, amount, date, term); showToast('Tranche recorded.'); await loadManagePanel(dealId, stages, holdReasons, rejectionReasons); }
-    catch (err) { showToast('Could not record tranche.', true); }
+    catch (err) { showToast(err.message || 'Could not record tranche.', true); }
   });
 }
 
@@ -441,10 +609,24 @@ async function bootstrap() {
   applyNavPermissions(currentUser.role);
   mountTopbar({ app: 'lender-pipeline', user: currentUser });
 
+  document.getElementById('lpTitle').textContent = currentUser.lenderOrgName;
+  document.getElementById('lpBlurb').textContent =
+    `Only cases Zolve Tangent has shared with ${currentUser.lenderOrgName}. Open a case to update its stage, answer queries or record a disbursement.`;
+
   initDrawerChrome();
   initViewSwitching();
   initProfileForm();
-  await showView('dashboard');
+  initPipelineControls();
+  await showView('pipeline');
+}
+
+function initPipelineControls() {
+  let debounce;
+  document.getElementById('lpSearch').addEventListener('input', (e) => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => { pipe.search = e.target.value.trim(); pipe.shown = PAGE; renderRows(); }, 150);
+  });
+  document.getElementById('btnExport').addEventListener('click', exportView);
 }
 
 function initViewSwitching() {
@@ -458,41 +640,14 @@ function initViewSwitching() {
   });
 }
 
-const LENDER_VIEW_CRUMBS = { dashboard: '', pipeline: 'Our Pipeline', profile: 'Bank Details' };
+const LENDER_VIEW_CRUMBS = { pipeline: '', profile: 'Bank Details' };
 
 async function showView(view) {
-  document.getElementById('dashboardPanel').hidden = view !== 'dashboard';
   document.getElementById('pipelinePanel').hidden = view !== 'pipeline';
   document.getElementById('profilePanel').hidden = view !== 'profile';
   setBreadcrumb(LENDER_VIEW_CRUMBS[view] ? [LENDER_VIEW_CRUMBS[view]] : []);
-  if (view === 'dashboard') await renderDashboard();
-  else if (view === 'pipeline') await refreshDealsList();
+  if (view === 'pipeline') await refreshDealsList();
   else if (view === 'profile') await loadProfileForm();
-}
-
-async function renderDashboard() {
-  const summary = await getDashboardSummary();
-  document.getElementById('dashStats').innerHTML = [
-    [summary.totalDeals, 'Total cases', 'fa-building-columns', 'var(--accent)'],
-    [summary.needsAttention, 'Need attention', 'fa-triangle-exclamation', 'var(--danger)'],
-    [summary.onTrack, 'On track', 'fa-circle-check', 'var(--success)'],
-    [summary.closedWon, 'Closed won', 'fa-flag-checkered', 'var(--accent)'],
-  ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div style="font-size:12px;color:var(--ink-500);margin-top:4px;">${label}</div></div>`).join('');
-
-  const maxCount = Math.max(...Object.values(summary.stageCounts), 1);
-  document.getElementById('dashStageBreakdown').innerHTML = Object.entries(summary.stageCounts).map(([name, count]) => `
-    <div style="margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(name)}</span><span class="amount">${count}</span></div>
-      <div style="background:var(--bg-hover);border-radius:4px;height:8px;"><div style="background:var(--accent);width:${(count / maxCount) * 100}%;height:100%;border-radius:4px;"></div></div>
-    </div>
-  `).join('') || emptyState('fa-diagram-project', 'No cases yet', 'Stage breakdown will show up here once cases are shared with you.');
-
-  const deals = await getMyBankDeals();
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const flagged = deals.filter((d) => d.is_on_hold || d.is_rejected);
-  document.getElementById('dashAttentionList').innerHTML = flagged.length
-    ? flagged.map((d) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.leads?.student_name || '–')}</span><span class="badge ${d.is_rejected ? 'badge-danger' : 'badge-warning'}">${d.is_rejected ? 'Rejected' : 'On hold'}</span></div>`).join('')
-    : emptyState('fa-circle-check', 'Nothing needs attention', 'No cases are on hold or rejected right now.');
 }
 
 function initProfileForm() {

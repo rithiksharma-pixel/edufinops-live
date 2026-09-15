@@ -1,0 +1,128 @@
+/* =========================================================
+   PARTNER PORTALS — the structure shared by the Lender Pipeline and the
+   Consultant Portal. Both are outside-facing and narrow: one heading that
+   names the institution, four figures, a stage strip, view tabs, one table.
+   Same edges and baselines on both, so a partner who uses one can read the
+   other, and so training material covers both at once.
+   Colours come from design-tokens.css only.
+   ========================================================= */
+
+/* A grid track sizes to its content's min-content by default, so a wide
+   table would push the whole page sideways on a phone instead of scrolling
+   inside .pp-table-wrap. */
+.app-shell > .main { min-width: 0; }
+
+.pp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+.pp-eyebrow { font: 600 11px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+.pp-title { font-size: 24px; font-weight: 600; letter-spacing: -.01em; margin: 0; color: var(--ink-900); }
+.pp-blurb { font-size: 13.5px; color: var(--ink-500); margin: 5px 0 0; max-width: 64ch; }
+.pp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Figures ---------- */
+.pp-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.pp-stat { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; min-width: 0; }
+.pp-stat-label { font-size: 12px; color: var(--ink-500); }
+.pp-stat-value { font: 600 24px/1.15 var(--font-mono); font-variant-numeric: tabular-nums; margin-top: 4px; color: var(--ink-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-stat-sub { font-size: 11.5px; color: var(--ink-500); margin-top: 3px; }
+.pp-stat.warn .pp-stat-value { color: var(--warning); }
+.pp-stat.good .pp-stat-value { color: var(--success); }
+.pp-stat.bad  .pp-stat-value { color: var(--danger); }
+
+/* ---------- Stage strip: counts that double as a filter ---------- */
+.pp-stages { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.pp-stage {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  background: var(--bg-surface); border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 12px; font: 500 12.5px/1.2 var(--font-ui); color: var(--ink-700); cursor: pointer;
+}
+.pp-stage b { font: 600 12px/1 var(--font-mono); color: var(--ink-900); }
+.pp-stage:hover { background: var(--bg-hover); }
+.pp-stage.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-soft-ink); }
+.pp-stage.on b { color: var(--accent-soft-ink); }
+
+/* ---------- Panel with tabs + search ---------- */
+.pp-panel { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.pp-toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.pp-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.pp-tab {
+  background: none; border: 0; cursor: pointer; border-radius: var(--radius-sm);
+  padding: 7px 11px; font: 500 13px/1 var(--font-ui); color: var(--ink-500);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.pp-tab:hover { background: var(--bg-hover); color: var(--ink-700); }
+.pp-tab.on { background: var(--bg-hover); color: var(--ink-900); }
+.pp-tab .n { font: 600 11px/1 var(--font-mono); padding: 3px 6px; border-radius: 999px; background: var(--paper-sunken); color: var(--ink-700); }
+.pp-tab.alert .n { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.pp-search { margin-left: auto; min-width: 220px; flex: 0 1 280px; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--ink-900); font: inherit; font-size: 13px; }
+.pp-hint { font-size: 12px; color: var(--ink-500); padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--paper-sunken); }
+
+.pp-table-wrap { overflow-x: auto; }
+.pp-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.pp-table th {
+  text-align: left; white-space: nowrap; padding: 10px 16px;
+  font: 600 10.5px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-500);
+  border-bottom: 1px solid var(--border);
+}
+.pp-table th.r, .pp-table td.r { text-align: right; }
+.pp-table td { padding: 11px 16px; border-bottom: 1px solid var(--border); color: var(--ink-700); vertical-align: middle; }
+.pp-table tbody tr { cursor: pointer; }
+.pp-table tbody tr:hover { background: var(--bg-hover); }
+.pp-table tbody tr:last-child td { border-bottom: 0; }
+.pp-name { font-weight: 600; color: var(--ink-900); }
+.pp-sub { font-size: 12px; color: var(--ink-500); margin-top: 2px; }
+.pp-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
+.pp-muted { color: var(--ink-300); }
+.pp-more { padding: 10px 16px; font-size: 12.5px; color: var(--ink-500); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+
+/* ---------- Chips ---------- */
+.pp-chip { display: inline-block; border-radius: 6px; padding: 3px 8px; font: 500 11.5px/1.3 var(--font-ui); white-space: nowrap; background: var(--paper-sunken); color: var(--ink-700); }
+.pp-chip + .pp-chip { margin-left: 4px; }
+.pp-chip.accent { background: var(--accent-soft); color: var(--accent-soft-ink); }
+.pp-chip.good   { background: var(--success-soft); color: var(--success-soft-ink); }
+.pp-chip.warn   { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.pp-chip.bad    { background: var(--danger-soft); color: var(--danger-soft-ink); }
+
+/* ---------- Meter: days as length, coloured against a threshold ---------- */
+.pp-meter { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.pp-meter-track { width: 48px; height: 6px; border-radius: 999px; background: var(--paper-sunken); overflow: hidden; flex: none; }
+.pp-meter-fill { display: block; height: 100%; border-radius: 999px; background: var(--success); }
+.pp-meter.warn .pp-meter-fill { background: var(--warning); }
+.pp-meter.bad  .pp-meter-fill { background: var(--danger); }
+.pp-meter-text { font: 500 12px/1 var(--font-mono); color: var(--ink-700); }
+.pp-meter.warn .pp-meter-text { color: var(--warning-soft-ink); }
+.pp-meter.bad  .pp-meter-text { color: var(--danger-soft-ink); }
+
+/* ---------- Funnel (consultant) ---------- */
+.pp-funnel { display: grid; gap: 8px; padding: 14px 16px; }
+.pp-funnel-row { display: grid; grid-template-columns: 120px 1fr 64px; gap: 12px; align-items: center; font-size: 13px; }
+.pp-funnel-track { height: 8px; background: var(--paper-sunken); border-radius: 999px; overflow: hidden; }
+.pp-funnel-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.pp-funnel-row .pp-num { text-align: right; }
+
+.pp-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.pp-grid > * { min-width: 0; }
+.pp-card-title { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.pp-card-title h3 { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ink-900); }
+.pp-card-title p { margin: 3px 0 0; font-size: 12px; color: var(--ink-500); }
+
+/* ---------- Drawer milestones ---------- */
+.pp-steps { list-style: none; margin: 0 0 18px; padding: 0; }
+.pp-step { display: grid; grid-template-columns: 14px 1fr; gap: 10px; padding-bottom: 14px; position: relative; }
+.pp-step:not(:last-child)::before { content: ''; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: var(--border); }
+.pp-step-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 2px; background: var(--border); }
+.pp-step.done .pp-step-dot { background: var(--accent); }
+.pp-step.lost .pp-step-dot { background: var(--danger); }
+.pp-step-label { font-size: 13px; font-weight: 500; color: var(--ink-900); }
+.pp-step:not(.done):not(.lost) .pp-step-label { color: var(--ink-500); font-weight: 400; }
+.pp-step-date { font: 500 11.5px/1.4 var(--font-mono); color: var(--ink-500); }
+.pp-note { border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12.5px; line-height: 1.5; background: var(--warning-soft); color: var(--warning-soft-ink); margin-bottom: 16px; }
+.pp-note.bad { background: var(--danger-soft); color: var(--danger-soft-ink); }
+
+@media (max-width: 960px) {
+  .pp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .pp-search { margin-left: 0; flex: 1 1 100%; min-width: 0; }
+  .pp-funnel-row { grid-template-columns: 96px 1fr 52px; }
+}
