@@ -4,7 +4,7 @@ import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAc
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
-import { getTeamFunnel, getRmPerformance, getRmCallStats, getDailyBusiness, getLenderBreakdown, getTatAnalysis, PERF_GROUPS, periodRange } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getRmCallStats, getLenderBreakdown, getTatAnalysis, PERF_GROUPS, periodRange, startOfWeek } from './services/analyticsService.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
@@ -30,21 +30,70 @@ function formatCurrency(amount) {
   if (!amount) return '₹0';
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 }
+// =========================================================
+// Week figures. "Disbursements today" told a manager almost nothing: on a
+// normal day it is 0, and a 0 with no comparison is not a signal. These are
+// the four milestones counted this week against the same span last week, so
+// the number arrives with the only context that makes it readable —
+// direction. Counts come from milestone_counts(), which is RLS-scoped: a
+// Manager's figures cover their team, an Admin's the whole company.
+// =========================================================
+const MILESTONE_FIGURES = [
+  { name: 'Login', label: 'Logins' },
+  { name: 'Sanction', label: 'Sanctions' },
+  { name: 'PF Paid', label: 'PF paid' },
+  { name: 'Disbursement', label: 'Disbursements' },
+];
+
+function weekRanges() {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = new Date();
+  const thisFrom = startOfWeek();
+  // Same number of days last week, so a Tuesday is never compared against a
+  // whole seven-day week and read as a collapse.
+  const daysIn = Math.round((today - thisFrom) / 86400000);
+  const lastFrom = new Date(thisFrom); lastFrom.setDate(lastFrom.getDate() - 7);
+  const lastTo = new Date(lastFrom); lastTo.setDate(lastTo.getDate() + daysIn);
+  return { thisWeek: { from: iso(thisFrom), to: iso(today) }, lastWeek: { from: iso(lastFrom), to: iso(lastTo) }, daysIn: daysIn + 1 };
+}
+
+function deltaText(now, before) {
+  if (!before) return now ? 'None in the same span last week' : 'Nothing last week either';
+  const pct = Math.round(((now - before) / before) * 100);
+  if (pct === 0) return `Level with last week (${before})`;
+  return `${pct > 0 ? '+' : ''}${pct}% on last week (${before})`;
+}
+
 async function renderDailyStats() {
-  const stats = await getDailyBusiness();
-  // Only "New leads today" has an honest drill-down target — the other
-  // two are deal-level counts, and Lead Management's list is leads-only.
-  document.getElementById('dailyStats').innerHTML = [
-    [stats.newLeadsToday, 'New leads today', 'fa-diagram-project', 'var(--accent)', true],
-    [stats.disbursementsToday, 'Disbursements today', 'fa-building-columns', 'var(--accent)', false],
-    [formatCurrency(stats.disbursedAmountToday), 'Disbursed today', 'fa-sack-dollar', 'var(--success)', false],
-  ].map(([value, label, icon, accent, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads-today' : ''} style="--stat-accent:${accent};${clickable ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="value">${value}</div><div class="label">${label}</div></div>`).join('');
-  document.querySelectorAll('#dailyStats [data-goto-leads-today]').forEach((card) => {
-    card.addEventListener('click', () => {
-      const today = new Date().toISOString().slice(0, 10);
-      window.open(`../../lead-management/public/index.html?dateField=created_at&dateFrom=${today}&dateTo=${today}`, '_blank');
-    });
-  });
+  const host = document.getElementById('dailyStats');
+  const { thisWeek, lastWeek, daysIn } = weekRanges();
+  let now; let before;
+  try {
+    [now, before] = await Promise.all([
+      getMilestoneCounts(thisWeek.from, thisWeek.to),
+      getMilestoneCounts(lastWeek.from, lastWeek.to),
+    ]);
+  } catch (err) {
+    console.error('week figures failed', err);
+    host.innerHTML = `<p class="empty-state">Could not load this week's figures: ${escapeHtml(err.message || String(err))}</p>`;
+    return;
+  }
+
+  const count = (rows, name) => Number(rows.find((r) => r.milestone === name)?.deal_count || 0);
+  const amount = (rows, name) => Number(rows.find((r) => r.milestone === name)?.total_amount || 0);
+
+  host.innerHTML = MILESTONE_FIGURES.map(({ name, label }) => {
+    const n = count(now, name);
+    const p = count(before, name);
+    const tone = !p ? '' : n > p ? 'good' : n < p ? 'bad' : '';
+    const sub = name === 'Disbursement' && amount(now, name) > 0
+      ? `${formatCurrency(amount(now, name))} · ${deltaText(n, p)}`
+      : deltaText(n, p);
+    return `<div class="pp-stat ${tone}"><div class="pp-stat-label">${label} this week</div><div class="pp-stat-value">${n.toLocaleString('en-IN')}</div><div class="pp-stat-sub">${escapeHtml(sub)}</div></div>`;
+  }).join('');
+
+  document.getElementById('mgrBlurb').textContent =
+    `Week so far (${daysIn} day${daysIn === 1 ? '' : 's'}), against the same span last week. Ranked below by what converts, not by how many leads were handed out.`;
 }
 
 async function renderFunnelChart() {
@@ -81,7 +130,7 @@ async function renderRmPerformance() {
     ]);
   } catch (err) {
     console.error('performance failed', err);
-    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">Could not load performance.<br>
+    tbody.innerHTML = `<tr><td colspan="15" class="empty-state">Could not load performance.<br>
       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
@@ -90,19 +139,42 @@ async function renderRmPerformance() {
   document.getElementById('perfGroupHeader').textContent = PERF_GROUPS[perfState.groupBy];
 
   if (perf.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="12">${emptyState('fa-people-group', 'Nothing in this period', 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15">${emptyState('fa-people-group', 'Nothing in this period', 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
     return;
   }
 
   const n = (v) => Number(v || 0).toLocaleString('en-IN');
-  tbody.innerHTML = perf.map((r) => {
+
+  // Ranked by logins, not by leads. Whoever was handed the most leads tops a
+  // volume sort by definition, which is how a big feeder with an 8% rate ends
+  // up looking like the best performer.
+  const ranked = [...perf].sort((a, b) => b.logins - a.logins || b.pf - a.pf);
+  const totalLogins = ranked.reduce((sum, r) => sum + r.logins, 0);
+
+  /** A rate reads as good or bad only against the team's own average. */
+  const rateCell = (num, den, avg) => {
+    if (!den) return '<td class="num pp-muted">–</td>';
+    const pct = (num / den) * 100;
+    const tone = avg && pct >= avg * 1.15 ? 'var(--success)' : avg && pct <= avg * 0.7 ? 'var(--danger)' : 'inherit';
+    return `<td class="num" style="color:${tone}">${pct.toFixed(1)}%</td>`;
+  };
+  const teamLeads = ranked.reduce((sum, r) => sum + r.leadCount, 0);
+  const teamPf = ranked.reduce((sum, r) => sum + r.pf, 0);
+  const avgLeadToLogin = teamLeads ? (totalLogins / teamLeads) * 100 : 0;
+  const avgLoginToPf = totalLogins ? (teamPf / totalLogins) * 100 : 0;
+
+  tbody.innerHTML = ranked.map((r) => {
     const calls = callStats[r.id] || { callCount: 0, connectedCount: 0 };
     const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
+    const share = totalLogins ? (r.logins / totalLogins) * 100 : 0;
     return `
     <tr ${byOwner ? `data-rm-id="${r.id}" style="cursor:pointer;" title="Open ${escapeHtml(r.name)}'s leads in Lead Management"` : ''}>
       <td><strong>${escapeHtml(r.name)}</strong></td>
-      <td class="num">${n(r.leadCount)}</td>
       <td class="num">${n(r.logins)}</td>
+      <td><span class="pp-meter"><span class="pp-meter-track"><span class="pp-meter-fill" style="width:${Math.max(2, share)}%;background:var(--accent);"></span></span><span class="pp-meter-text">${share.toFixed(0)}%</span></span></td>
+      ${rateCell(r.logins, r.leadCount, avgLeadToLogin)}
+      ${rateCell(r.pf, r.logins, avgLoginToPf)}
+      <td class="num">${n(r.leadCount)}</td>
       <td class="num">${n(r.sanctions)}</td>
       <td class="num">${n(r.pf)}</td>
       <td class="num">${n(r.disbursed)}</td>
@@ -141,9 +213,15 @@ function wirePerformanceControls() {
   });
 
   document.getElementById('btnPerfCsv')?.addEventListener('click', () => {
+    // Same columns and same order as the table on screen, conversion
+    // included, so an exported sheet cannot disagree with what was read.
+    const rate = (num, den) => (den ? `${((num / den) * 100).toFixed(1)}%` : '');
     const cols = [
       [PERF_GROUPS[perfState.groupBy], (r) => r.name],
-      ['Leads', (r) => r.leadCount], ['Logins', (r) => r.logins],
+      ['Logins', (r) => r.logins],
+      ['Lead to Login', (r) => rate(r.logins, r.leadCount)],
+      ['Login to PF', (r) => rate(r.pf, r.logins)],
+      ['Leads', (r) => r.leadCount],
       ['Sanctions', (r) => r.sanctions], ['PF', (r) => r.pf],
       ['Disbursed', (r) => r.disbursed], ['Disbursed value', (r) => r.disbursedAmount],
       ['Referrals', (r) => r.referrals], ['PF from referrals', (r) => r.pfFromReferrals],
@@ -151,7 +229,8 @@ function wirePerformanceControls() {
     ];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.map((c) => esc(c[0])).join(',')]
-      .concat(perfState.rows.map((r) => cols.map((c) => esc(c[1](r))).join(',')))
+      .concat([...perfState.rows].sort((a, b) => b.logins - a.logins || b.pf - a.pf)
+        .map((r) => cols.map((c) => esc(c[1](r))).join(',')))
       .join('\n');
     downloadCsv(csv, `performance-${perfState.groupBy}-${perfState.period}.csv`);
     showToast(`Exported ${perfState.rows.length} rows`);

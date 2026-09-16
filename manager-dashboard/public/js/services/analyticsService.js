@@ -105,7 +105,7 @@ export function periodRange(period) {
 // Calendar week starting Monday 00:00 local time — duplicated per app
 // rather than shared, matching this codebase's existing pattern of each
 // app owning its own copy of small date-window helpers.
-function startOfWeek() {
+export function startOfWeek() {
   const d = new Date();
   const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
   const diffToMonday = day === 0 ? -6 : 1 - day;
@@ -291,29 +291,3 @@ export async function getTatAnalysis() {
   return { averages, worstOffenders };
 }
 
-export async function getDailyBusiness() {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const leadsToday = await fetchAll(
-    () => supabase
-      .from('leads')
-      .select('id')
-      .eq('is_deleted', false)
-      .gte('created_at', startOfToday.toISOString())
-  );
-
-  const disbursementsToday = await fetchAll(
-    () => supabase
-      .from('disbursements')
-      .select('id, amount')
-      .eq('is_deleted', false)
-      .gte('created_at', startOfToday.toISOString())
-  );
-
-  return {
-    newLeadsToday: leadsToday.length,
-    disbursementsToday: disbursementsToday.length,
-    disbursedAmountToday: disbursementsToday.reduce((sum, d) => sum + Number(d.amount), 0),
-  };
-}

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="../../shared/css/lead-drawer.css" />
+<link rel="stylesheet" href="../../shared/css/page-kit.css" />
 <link rel="stylesheet" href="css/dashboard.css" />
 <script>try{var t=localStorage.getItem('zt-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../../shared/img/favicon.svg" />
@@ -31,9 +32,15 @@
 
     <main class="main" style="max-width:1100px;">
       <div id="ztTopbar" class="zt-topbar"></div>
-      <header class="main-header"><div><h1>Team dashboard</h1><p class="subtitle">Your team's pipeline, performance, and today's business.</p></div></header>
+      <header class="pp-head">
+        <div>
+          <p class="pp-eyebrow">Manager dashboard</p>
+          <h1 class="pp-title">Team performance</h1>
+          <p class="pp-blurb" id="mgrBlurb">Ranked by what converts, not by how many leads were handed out.</p>
+        </div>
+      </header>
 
-      <section class="stat-cards" id="dailyStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+      <section class="pp-stats" id="dailyStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
 
       <!-- Milestone counts for a date window. Numbers come from the
            milestone_counts() RPC, which is RLS-scoped: a Manager sees their
@@ -102,7 +109,7 @@
 
       <section class="table-card">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px 0;">
-          <h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Performance</h3>
+          <div><h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Performance</h3><p class="subtitle" style="margin:3px 0 0;font-size:12px;">Login → PF is the efficiency measure. Leads is context: volume handed out is not volume converted.</p></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <div class="period-toggle" id="perfPeriod">
               <button data-period="day">Day</button>
@@ -122,12 +129,14 @@
           <table class="data-table">
             <thead><tr>
               <th id="perfGroupHeader">RM</th>
-              <th class="num">Leads</th><th class="num">Logins</th><th class="num">Sanctions</th>
+              <th class="num">Logins</th><th>Share of logins</th>
+              <th class="num">Lead→Login</th><th class="num">Login→PF</th>
+              <th class="num">Leads</th><th class="num">Sanctions</th>
               <th class="num">PF</th><th class="num">Disbursed</th><th class="num">Disbursed value</th>
               <th class="num">Referrals</th><th class="num">PF from referrals</th>
               <th class="num">Overdue</th><th class="num">Calls (wk)</th><th class="num">Connect</th>
             </tr></thead>
-            <tbody id="rmPerformanceBody"><tr><td colspan="12" class="empty-state">Loading…</td></tr></tbody>
+            <tbody id="rmPerformanceBody"><tr><td colspan="15" class="empty-state">Loading…</td></tr></tbody>
           </table>
         </div>
       </section>
