@@ -25,7 +25,9 @@ const state = {
   from: '', to: '', consultancy: '', bd: '', min: 0, dateField: 'created_at',
   // Independent per tab: sorting by "Consultancies" makes no sense on the
   // consultancy table, so the two must not share a key.
-  sort: { consultancy: { key: 'total_leads', dir: 'desc' }, bd: { key: 'total_leads', dir: 'desc' } },
+  // Ranked by logins, not by leads handed over: a partner that sends 1,200
+  // leads and converts 8% should not outrank one sending 280 at 32%.
+  sort: { consultancy: { key: 'login', dir: 'desc' }, bd: { key: 'login', dir: 'desc' } },
 };
 
 /** Label for the Unattributed bucket, which the RPC returns as a null name. */
@@ -49,6 +51,8 @@ function money(v) {
  */
 function sortValue(row, key) {
   if (key === 'leadToLogin' || key === 'leadToDisbursement') return conversionRates(row)[key];
+  // Share of logins is login count rescaled, so it sorts on the same value.
+  if (key === 'loginShare') return Number(row.login || 0);
   if (key === 'bd_manager') return bdLabel(row);
   return row[key];
 }
@@ -154,6 +158,13 @@ function populateConsultancyDropdown() {
  * consultancy's percentage. Averaging percentages would let a consultancy
  * with 2 leads weigh as heavily as one with 200.
  */
+/** Share of the logins currently on screen, as bar and figure. Concentration
+ *  is the thing a partner report is actually for: who we depend on. */
+function shareCell(logins, totalLogins) {
+  const share = totalLogins ? (Number(logins) / totalLogins) * 100 : 0;
+  return `<td><span class="pp-meter"><span class="pp-meter-track"><span class="pp-meter-fill" style="width:${Math.max(2, share)}%;background:var(--accent);"></span></span><span class="pp-meter-text">${share.toFixed(0)}%</span></span></td>`;
+}
+
 function renderTotals(rows) {
   const el = document.getElementById('repTotals');
   if (!el) return;
@@ -204,10 +215,11 @@ function render() {
     + '</span>';
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="11">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the consultancy, the date range, or the minimum-leads filter.')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="12">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the consultancy, the date range, or the minimum-leads filter.')}</td></tr>`;
     return;
   }
 
+  const totalLogins = rows.reduce((sum, r) => sum + Number(r.login || 0), 0);
   body.innerHTML = rows.map((r, i) => {
     const c = conversionRates(r);
     // A consultancy that only ever appeared as free text has no record to
@@ -218,6 +230,7 @@ function render() {
         <td><div class="student-name">${escapeHtml(r.consultancy_name)}${freetext}</div></td>
         <td class="num">${n(r.total_leads)}</td>
         <td class="num">${n(r.login)}</td>
+        ${shareCell(r.login, totalLogins)}
         <td class="num">${n(r.sanction)}</td>
         <td class="num">${n(r.pf_paid)}</td>
         <td class="num">${n(r.disbursement)}</td>
@@ -264,10 +277,11 @@ function renderBd() {
     + '</span>';
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="12">${emptyState('fa-user-tie', 'No BD managers match', 'Try clearing the BD, the date range, or the minimum-leads filter.')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="13">${emptyState('fa-user-tie', 'No BD managers match', 'Try clearing the BD, the date range, or the minimum-leads filter.')}</td></tr>`;
     return;
   }
 
+  const totalLogins = rows.reduce((sum, r) => sum + Number(r.login || 0), 0);
   body.innerHTML = rows.map((r, i) => {
     const c = conversionRates(r);
     // The unattributed bucket is a data gap, not a person. Marked so nobody
@@ -281,6 +295,7 @@ function renderBd() {
         <td class="num muted">${n(r.consultancies)}</td>
         <td class="num">${n(r.total_leads)}</td>
         <td class="num">${n(r.login)}</td>
+        ${shareCell(r.login, totalLogins)}
         <td class="num">${n(r.sanction)}</td>
         <td class="num">${n(r.pf_paid)}</td>
         <td class="num">${n(r.disbursement)}</td>

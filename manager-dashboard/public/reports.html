@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="../../shared/css/lead-drawer.css" />
+<link rel="stylesheet" href="../../shared/css/page-kit.css" />
 <link rel="stylesheet" href="css/dashboard.css" />
 <script>try{var t=localStorage.getItem('zt-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../../shared/img/favicon.svg" />
@@ -31,10 +32,11 @@
 
     <main class="main" style="max-width:1180px;">
       <div id="ztTopbar" class="zt-topbar"></div>
-      <header class="main-header">
+      <header class="pp-head">
         <div>
-          <h1>Partner reports</h1>
-          <p class="subtitle" id="repSubtitle">Per-consultancy funnel, conversion and ageing — ready to share.</p>
+          <p class="pp-eyebrow">Partner reports</p>
+          <h1 class="pp-title">Where the volume comes from</h1>
+          <p class="pp-blurb" id="repSubtitle">Same leads, two cuts. One BD owns many consultancies, so the two tabs never sum the same way.</p>
         </div>
       </header>
 
@@ -112,6 +114,7 @@
                 <th data-sort="consultancy_name">Consultancy</th>
                 <th class="num" data-sort="total_leads">Leads</th>
                 <th class="num" data-sort="login">Login</th>
+                <th data-sort="loginShare">Share of logins</th>
                 <th class="num" data-sort="sanction">Sanction</th>
                 <th class="num" data-sort="pf_paid">PF Paid</th>
                 <th class="num" data-sort="disbursement">Disb.</th>
@@ -123,7 +126,7 @@
               </tr>
             </thead>
             <tbody id="repBody">
-              <tr><td colspan="11"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
+              <tr><td colspan="12"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -139,6 +142,7 @@
                 <th class="num" data-sort="consultancies">Consultancies</th>
                 <th class="num" data-sort="total_leads">Leads</th>
                 <th class="num" data-sort="login">Login</th>
+                <th data-sort="loginShare">Share of logins</th>
                 <th class="num" data-sort="sanction">Sanction</th>
                 <th class="num" data-sort="pf_paid">PF Paid</th>
                 <th class="num" data-sort="disbursement">Disb.</th>
@@ -150,7 +154,7 @@
               </tr>
             </thead>
             <tbody id="bdBody">
-              <tr><td colspan="12"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
+              <tr><td colspan="13"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
             </tbody>
           </table>
         </div>

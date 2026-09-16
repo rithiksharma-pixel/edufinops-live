@@ -66,6 +66,103 @@ async function loadOverview() {
   $('attentionList').innerHTML = attention.length
     ? attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('')
     : emptyState('fa-circle-check', 'Everything is on track', 'No overdue items right now — nice work.');
+
+  await loadAdminChecks();
+}
+
+/**
+ * Conditions only an Administrator can clear. Every one is a live query, not
+ * a hardcoded list: an item that no longer holds disappears on the next load,
+ * so the panel can never tell an Admin to fix something already fixed.
+ *
+ * Each check returns null when it is clean, so "nothing here" is the same
+ * shape as "nothing to do".
+ */
+async function loadAdminChecks() {
+  const host = $('adminChecks');
+  const USERS_PAGE = '../../authentication/public/users-admin.html';
+
+  const checks = await Promise.allSettled([
+    // A login with no profile row authenticates and then fails on every
+    // screen. repair_orphaned_profile() (063) is the fix.
+    (async () => {
+      const { data, error } = await supabase.rpc('orphaned_logins');
+      if (error) throw error;
+      const n = (data || []).length;
+      return n && { tone: 'bad', title: `${n} sign-in${n === 1 ? '' : 's'} with no profile`,
+        body: 'These accounts can authenticate but every screen fails for them. Repair them from User management.',
+        href: USERS_PAGE, action: 'Open User management' };
+    })(),
+
+    // A Consultant login with no firm sees only the students they typed in
+    // themselves, not their consultancy's book (065).
+    (async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, roles!inner(name)')
+        .eq('is_active', true).eq('is_deleted', false)
+        .is('consultancy_id', null).eq('roles.name', 'Consultant');
+      if (error) throw error;
+      const n = (data || []).length;
+      return n && { tone: 'warn', title: `${n} consultant login${n === 1 ? '' : 's'} not linked to a firm`,
+        body: 'Until a login is linked to its consultancy it sees only the students that person entered, not the firm’s whole book.',
+        href: USERS_PAGE, action: 'Open User management' };
+    })(),
+
+    // Teams drive the manager roll-ups; unassigned people fall out of them.
+    (async () => {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, roles!inner(name)')
+        .eq('is_active', true).eq('is_deleted', false)
+        .is('team_id', null).in('roles.name', ['Relationship Manager', 'Manager', 'Associate Team Manager']);
+      if (error) throw error;
+      const n = (data || []).length;
+      return n && { tone: 'warn', title: `${n} team member${n === 1 ? '' : 's'} with no team`,
+        body: 'Performance grouped by team leaves these people out, so regional splits read low.',
+        href: USERS_PAGE, action: 'Assign teams' };
+    })(),
+
+    // An unassigned lead belongs to nobody's day.
+    (async () => {
+      const { count, error } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_deleted', false).is('assigned_rm_id', null).is('lost_reason_id', null);
+      if (error) throw error;
+      return count && { tone: count > 50 ? 'bad' : 'warn', title: `${count.toLocaleString('en-IN')} open lead${count === 1 ? '' : 's'} with no RM`,
+        body: 'Nobody sees these on their own workspace. Assign them in bulk from the Manager dashboard.',
+        href: '../../manager-dashboard/public/index.html', action: 'Open unassigned queue' };
+    })(),
+
+    // A document sitting in review is a student waiting.
+    (async () => {
+      const { count, error } = await supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_deleted', false).eq('verification_status', 'Pending Review');
+      if (error) throw error;
+      return count > 25 && { tone: 'warn', title: `${count.toLocaleString('en-IN')} documents waiting on review`,
+        body: 'Verification is the step before a bank login, so this queue sets the pace of the pipeline.',
+        href: '#documents', action: 'Open document centre' };
+    })(),
+  ]);
+
+  const items = checks
+    .filter((c) => c.status === 'fulfilled' && c.value)
+    .map((c) => c.value);
+  const failed = checks.filter((c) => c.status === 'rejected');
+
+  $('adminCheckCount').textContent = items.length ? items.length : 'All clear';
+  host.innerHTML = items.length === 0 && failed.length === 0
+    ? emptyState('fa-circle-check', 'Nothing needs an administrator', 'No orphaned logins, unlinked partners, or unassigned people right now.')
+    : items.map((i) => `
+      <div class="pp-line">
+        <span class="pp-line-main"><span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--${i.tone === 'bad' ? 'danger' : 'warning'});"></span>${esc(i.title)}</span>
+          <span>${esc(i.body)}</span></span>
+        <a class="btn btn-ghost" href="${i.href}">${esc(i.action)}</a>
+      </div>`).join('')
+      + (failed.length ? `<p class="subtitle" style="margin:10px 0 0;font-size:12px;">${failed.length} check${failed.length === 1 ? '' : 's'} could not run.</p>` : '');
 }
 
 async function loadDocuments() { const status = $('documentStatus').value; const data = await fetchAll(() => { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if (status) request = request.eq('verification_status', status); return request; }, { tiebreak: 'id', ascending: false }); $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
