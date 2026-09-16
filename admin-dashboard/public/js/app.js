@@ -135,17 +135,6 @@ async function loadAdminChecks() {
         href: '../../manager-dashboard/public/index.html', action: 'Open unassigned queue' };
     })(),
 
-    // A document sitting in review is a student waiting.
-    (async () => {
-      const { count, error } = await supabase
-        .from('documents')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_deleted', false).eq('verification_status', 'Pending Review');
-      if (error) throw error;
-      return count > 25 && { tone: 'warn', title: `${count.toLocaleString('en-IN')} documents waiting on review`,
-        body: 'Verification is the step before a bank login, so this queue sets the pace of the pipeline.',
-        href: '#documents', action: 'Open document centre' };
-    })(),
   ]);
 
   const items = checks
@@ -165,7 +154,6 @@ async function loadAdminChecks() {
       + (failed.length ? `<p class="subtitle" style="margin:10px 0 0;font-size:12px;">${failed.length} check${failed.length === 1 ? '' : 's'} could not run.</p>` : '');
 }
 
-async function loadDocuments() { const status = $('documentStatus').value; const data = await fetchAll(() => { let request = supabase.from('documents').select('id,file_name,uploaded_at,verification_status,leads(student_name),document_types(name),uploaded_by_user:users!documents_uploaded_by_fkey(full_name)').eq('is_deleted', false).order('uploaded_at', { ascending: false }); if (status) request = request.eq('verification_status', status); return request; }, { tiebreak: 'id', ascending: false }); $('documentsBody').innerHTML = data.length ? data.map((doc) => `<tr><td><strong>${esc(doc.document_types?.name || 'Document')}</strong><div class="muted">${esc(doc.file_name)}</div></td><td>${esc(doc.leads?.student_name || '–')}</td><td>${esc(doc.uploaded_by_user?.full_name || '–')}<div class="muted">${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}</div></td><td><span class="badge ${doc.verification_status === 'Verified' ? 'verified' : doc.verification_status === 'Rejected' ? 'rejected' : ''}">${esc(doc.verification_status)}</span></td><td>${doc.verification_status === 'Pending Review' ? `<button class="btn btn-secondary" data-verify="${doc.id}">Verify</button>` : '—'}</td></tr>`).join('') : `<tr><td colspan="5">${emptyState('fa-folder-open', 'No matching documents', 'Documents appear here once RMs upload them on a lead.')}</td></tr>`; document.querySelectorAll('[data-verify]').forEach((button) => button.addEventListener('click', async () => { const { error: rpcError } = await supabase.rpc('verify_document', { p_document_id: button.dataset.verify, p_remarks: null }); if (rpcError) return showToast(rpcError.message, true); showToast('Document verified.'); loadDocuments(); })); }
 // ---------- Stage movement trends (lead + bank-wise deal) ----------
 const trends = createTrendsService(supabase);
 const trendState = { lead: 'day', deal: 'day', lenderId: '', wired: false, lendersLoaded: false };
@@ -692,9 +680,9 @@ async function loadSettings() {
     });
   });
 }
-async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'documents') await loadDocuments(); if (activeView === 'analytics') await loadAnalytics(); if (activeView === 'smart-views') await loadSmartViews(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
+async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'analytics') await loadAnalytics(); if (activeView === 'smart-views') await loadSmartViews(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
 function changeView(view) { activeView = view; if (view === 'analytics') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], analytics: ['Analytics', 'Reports, trends and team performance in one place.'], 'smart-views': ['Smart views', 'Saved filter presets, shared with the team.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
-document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'analytics') teamPerfData = null; loadActive(); }); $('documentStatus').addEventListener('change', loadDocuments); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
+document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'analytics') teamPerfData = null; loadActive(); }); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
 $('lenderBranchForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('lender_branches').insert({ lender_id: form.get('lender_id'), name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Branch added.'); loadSettings(); });
