@@ -1,9 +1,12 @@
 /* =========================================================
-   PARTNER PORTALS — the structure shared by the Lender Pipeline and the
-   Consultant Portal. Both are outside-facing and narrow: one heading that
-   names the institution, four figures, a stage strip, view tabs, one table.
-   Same edges and baselines on both, so a partner who uses one can read the
-   other, and so training material covers both at once.
+   PAGE KIT — the shared structure behind every list-and-figures screen:
+   the partner portals (Lender Pipeline, Consultant Portal) and the internal
+   workspaces. One heading that names who you are looking at, a row of
+   figures, a strip of counts that double as filters, view tabs, one table.
+
+   The `pp-` prefix reads as "page primitive". Same edges and baselines
+   everywhere, so someone trained on one screen can read the next one, and
+   so training material covers them together.
    Colours come from design-tokens.css only.
    ========================================================= */
 
@@ -126,3 +129,23 @@
   .pp-search { margin-left: 0; flex: 1 1 100%; min-width: 0; }
   .pp-funnel-row { grid-template-columns: 96px 1fr 52px; }
 }
+
+/* ---------- Stacked panels inside a pp-grid column ---------- */
+.pp-stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.pp-card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- Compact list used inside side panels ---------- */
+.pp-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pp-line:last-child { border-bottom: 0; }
+.pp-line-main { min-width: 0; color: var(--ink-900); }
+.pp-line-main span { display: block; font-size: 11.5px; color: var(--ink-500); }
+.pp-line.click { cursor: pointer; }
+.pp-line.click:hover .pp-line-main { color: var(--accent); }
+
+/* ---------- Task rows ---------- */
+.pp-task { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pp-task:last-child { border-bottom: 0; }
+.pp-task input { margin-top: 2px; }
+.pp-task.done .pp-task-title { text-decoration: line-through; color: var(--ink-500); }
+.pp-task-meta { font-size: 11.5px; color: var(--ink-500); margin-top: 2px; }
+.pp-task-meta.late { color: var(--danger); }

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="../../shared/css/app-nav.css" />
 <link rel="stylesheet" href="../../shared/css/components.css" />
 <link rel="stylesheet" href="../../shared/css/lead-drawer.css" />
+<link rel="stylesheet" href="../../shared/css/page-kit.css" />
 <link rel="stylesheet" href="css/workspace.css" />
 <script>try{var t=localStorage.getItem('zt-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../../shared/img/favicon.svg" />
@@ -35,23 +36,68 @@
 
     <main class="main">
       <div id="ztTopbar" class="zt-topbar"></div>
-      <header class="main-header">
+      <header class="main-header" id="listHeader" hidden>
         <div><h1 id="viewTitle">Assigned leads</h1><p class="subtitle" id="viewSubtitle">Every lead currently assigned to you.</p></div>
-        <button class="btn btn-primary" id="btnNewLead"><i class="fa-solid fa-plus"></i> New lead</button>
+        <button class="btn btn-primary" id="btnNewLeadList"><i class="fa-solid fa-plus"></i> New lead</button>
       </header>
 
       <div id="dashboardView">
-        <section class="stat-cards" id="rmDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
-        <div class="grid-two">
-          <section class="table-card" style="padding:18px;">
-            <h3 style="font-size:14px;font-weight:500;margin:0 0 12px;">My leads by stage</h3>
-            <div id="rmDashStageBreakdown"></div>
-          </section>
-          <section class="table-card" style="padding:18px;">
-            <h3 style="font-size:14px;font-weight:500;margin:0 0 4px;">Needs attention</h3>
-            <p class="subtitle" style="margin-bottom:12px;">Overdue follow-ups on your leads.</p>
-            <div id="rmDashAttention"></div>
-          </section>
+        <header class="pp-head">
+          <div>
+            <p class="pp-eyebrow">RM workspace</p>
+            <h1 class="pp-title" id="rmGreeting">Your day</h1>
+            <p class="pp-blurb" id="rmBlurb">Loading your book…</p>
+          </div>
+          <div class="pp-actions"><button class="btn btn-primary" id="btnNewLead"><i class="fa-solid fa-plus"></i> New lead</button></div>
+        </header>
+
+        <section class="pp-stats" id="rmDashStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
+
+        <div class="pp-grid">
+          <div class="pp-stack">
+            <section class="pp-panel">
+              <div class="pp-card-title pp-card-title-row">
+                <div><h3>Call these today</h3><p>What you promised first, then whoever has waited longest</p></div>
+                <button class="btn btn-ghost" id="btnOpenFollowUps">Open as list</button>
+              </div>
+              <div class="pp-table-wrap">
+                <table class="pp-table">
+                  <thead><tr><th>Student</th><th>Stage</th><th>Last contact</th><th>Promised</th></tr></thead>
+                  <tbody id="rmDueBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="pp-panel">
+              <div class="pp-card-title pp-card-title-row">
+                <div><h3>Gone quiet</h3><p>Open leads with no contact recorded in over a month</p></div>
+                <button class="btn btn-ghost" id="btnOpenQuiet">See all in Leads</button>
+              </div>
+              <div class="pp-table-wrap">
+                <table class="pp-table">
+                  <thead><tr><th>Student</th><th>Stage</th><th>Last contact</th><th class="r">Requested</th></tr></thead>
+                  <tbody id="rmQuietBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <div class="pp-stack">
+            <section class="pp-panel">
+              <div class="pp-card-title"><h3>My leads by stage</h3><p id="rmStageSub">Your open book</p></div>
+              <div class="pp-funnel" id="rmDashStageBreakdown"></div>
+            </section>
+
+            <section class="pp-panel">
+              <div class="pp-card-title"><h3>Needs attention</h3><p>Overdue tasks and cases sitting past their turnaround time</p></div>
+              <div id="rmDashAttention" style="padding:6px 16px 14px;"></div>
+            </section>
+
+            <section class="pp-panel">
+              <div class="pp-card-title pp-card-title-row"><div><h3>Tasks</h3><p id="rmTaskSub">Your to-do list</p></div><button class="btn btn-ghost" id="btnOpenTasks">Open</button></div>
+              <div id="rmDashTasks" style="padding:6px 16px 14px;"></div>
+            </section>
+          </div>
         </div>
       </div>
 

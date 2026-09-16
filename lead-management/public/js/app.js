@@ -495,6 +495,8 @@ async function bootstrap() {
     if (params.has(key)) paramFilters[key] = params.get(key);
   });
   if (params.get('overdueOnly') === 'true') paramFilters.overdueOnly = true;
+  if (params.get('openOnly') === 'true') paramFilters.openOnly = true;
+  if (params.has('notContactedDays')) paramFilters.notContactedDays = Number(params.get('notContactedDays')) || 0;
 
   if (Object.keys(paramFilters).length > 0) {
     applyFilters(paramFilters);

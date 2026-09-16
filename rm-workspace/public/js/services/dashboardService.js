@@ -18,6 +18,7 @@ import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
 const LEAD_SELECT = `
   id, student_name, student_phone, course_name, university_name,
   loan_amount_requested, currency, next_follow_up_at, created_at,
+  last_activity_at, lost_reason_id,
   lead_stages ( name, sequence_order )
 `;
 

@@ -95,6 +95,7 @@ const VIEW_CRUMBS = {
 async function loadView(key) {
   currentViewKey = key;
   document.getElementById('dashboardView').hidden = key !== 'dashboard';
+  document.getElementById('listHeader').hidden = key === 'dashboard';
   document.getElementById('listView').hidden = key === 'tasks' || key === 'dashboard' || key === 'calls';
   document.getElementById('tasksView').hidden = key !== 'tasks';
   document.getElementById('callsView').hidden = key !== 'calls';
@@ -102,8 +103,6 @@ async function loadView(key) {
   setBreadcrumb(VIEW_CRUMBS[key] ? [VIEW_CRUMBS[key]] : []);
 
   if (key === 'dashboard') {
-    document.getElementById('viewTitle').textContent = 'Dashboard';
-    document.getElementById('viewSubtitle').textContent = 'Your leads at a glance.';
     try {
       await renderRmDashboard();
     } catch (err) {
@@ -216,6 +215,17 @@ async function renderCallsView() {
   `).join('');
 }
 
+/** The dashboard's panels are entry points, not dead ends: each one hands
+ *  off to the screen that can work the whole set. */
+function initDashboardLinks() {
+  document.getElementById('btnOpenFollowUps').addEventListener('click', () => loadView('followups'));
+  document.getElementById('btnOpenTasks').addEventListener('click', () => loadView('tasks'));
+  document.getElementById('btnOpenQuiet').addEventListener('click', () => {
+    const params = new URLSearchParams({ rmId: currentUser.id, notContactedDays: '30', openOnly: 'true' });
+    window.location.href = `../../lead-management/public/index.html?${params}`;
+  });
+}
+
 function initCallsPeriodToggle() {
   document.querySelectorAll('#callsPeriodToggle .pill-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -227,48 +237,175 @@ function initCallsPeriodToggle() {
   });
 }
 
+// =========================================================
+// The dashboard is the RM's day, not a summary of what exists: what was
+// promised today, what has gone quiet, and what is sitting past its
+// turnaround time. Everything here is the RM's own book — every query in
+// dashboardService.js filters on assigned_rm_id, because since migration 035
+// RLS lets an RM READ the whole company's leads.
+// =========================================================
+const QUIET_DAYS = 30;
+const SANCTION_ORDER = 50;
+const JOURNEY_ORDER = ['Lead Qualified', 'App Start', 'Bank Prospect', 'Login', 'Sanction', 'PF Paid', 'Disbursement'];
+
+const dayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const dayEnd = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
+const daysSince = (d) => (d ? Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)) : null);
+const fmtInt = (n) => Number(n || 0).toLocaleString('en-IN');
+
+function compactInr(n) {
+  if (!n) return '–';
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+/** Lead Lost sits at sequence_order 900 — above Disbursement — so "open"
+ *  can never be inferred from stage ordering alone. */
+const isLost = (l) => Boolean(l.lost_reason_id) || l.lead_stages?.name === 'Lead Lost';
+const isOpenLead = (l) => !isLost(l) && (l.lead_stages?.sequence_order ?? 0) < 70;
+const quietDays = (l) => daysSince(l.last_activity_at ?? l.created_at);
+const isQuiet = (l) => isOpenLead(l) && quietDays(l) > QUIET_DAYS;
+
+function greetingFor(name) {
+  const h = new Date().getHours();
+  const part = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  return `${part}, ${(name || '').split(' ')[0] || 'there'}`;
+}
+
+function stageChipHtml(l) {
+  if (isLost(l)) return '<span class="pp-chip">Lost</span>';
+  const order = l.lead_stages?.sequence_order ?? 0;
+  const tone = order >= SANCTION_ORDER ? 'good' : order >= 40 ? 'accent' : '';
+  return `<span class="pp-chip ${tone}">${escapeHtml(l.lead_stages?.name || '–')}</span>`;
+}
+
+/** Days since last contact, as bar and figure — the same reading as the
+ *  partner portals, so one explanation covers both. */
+function recencyHtml(l) {
+  const d = quietDays(l);
+  if (d === null) return '<span class="pp-muted">–</span>';
+  const tone = d > QUIET_DAYS ? 'bad' : d > 14 ? 'warn' : '';
+  return `<span class="pp-meter ${tone}"><span class="pp-meter-track"><span class="pp-meter-fill" style="width:${Math.max(4, Math.min(100, (d / 60) * 100))}%"></span></span><span class="pp-meter-text">${d === 0 ? 'today' : `${d}d`}</span></span>`;
+}
+
+function promisedHtml(at) {
+  if (!at) return '<span class="pp-muted">–</span>';
+  const when = new Date(at);
+  const late = when < dayStart();
+  const label = when < dayEnd() && when >= dayStart()
+    ? when.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    : formatDate(at);
+  return `<span class="pp-num" style="color:${late ? 'var(--danger)' : 'var(--success)'}">${late ? 'Overdue · ' : ''}${label}</span>`;
+}
+
+function rowsHtml(leads, cells, emptyHtml) {
+  if (leads.length === 0) return `<tr><td colspan="4">${emptyHtml}</td></tr>`;
+  return leads.map((l) => `<tr data-lead-id="${escapeHtml(l.id)}">${cells(l)}</tr>`).join('');
+}
+
 async function renderRmDashboard() {
   const leads = await getAssignedLeads(currentUser.id);
-  const now = Date.now();
-  const overdue = leads.filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < now);
   const today = new Date().toISOString().slice(0, 10);
-  const [overdueTasks, tatBreaches] = await Promise.all([
-    getMyTasks().then((tasks) => tasks.filter((t) => !t.is_completed && t.due_date && t.due_date < today)),
-    getMyTatBreachedDeals(currentUser.id),
-  ]);
+  const [tasks, tatBreaches] = await Promise.all([getMyTasks(), getMyTatBreachedDeals(currentUser.id)]);
 
+  const open = leads.filter(isOpenLead);
+  const due = open
+    .filter((l) => l.next_follow_up_at && new Date(l.next_follow_up_at) <= dayEnd())
+    .sort((a, b) => new Date(a.next_follow_up_at) - new Date(b.next_follow_up_at));
+  const overdue = due.filter((l) => new Date(l.next_follow_up_at) < dayStart());
+  const quiet = open.filter(isQuiet).sort((a, b) => quietDays(b) - quietDays(a));
+  const sanctioned = leads.filter((l) => !isLost(l) && (l.lead_stages?.sequence_order ?? 0) >= SANCTION_ORDER);
+  const openTasks = tasks.filter((t) => !t.is_completed);
+  const overdueTasks = openTasks.filter((t) => t.due_date && t.due_date < today);
+
+  document.getElementById('rmGreeting').textContent = greetingFor(currentUser.fullName);
+  document.getElementById('rmBlurb').textContent = due.length || quiet.length
+    ? `${fmtInt(due.length)} follow-up${due.length === 1 ? '' : 's'} due today${overdue.length ? ` (${fmtInt(overdue.length)} already overdue)` : ''}, and ${fmtInt(quiet.length)} lead${quiet.length === 1 ? '' : 's'} that have gone quiet.`
+    : `Nothing is due today and nothing has gone quiet across your ${fmtInt(open.length)} open leads.`;
+
+  const stat = (label, value, sub, tone = '', view = '') => `<div class="pp-stat ${tone}"${view ? ` data-goto-view="${view}" style="cursor:pointer;"` : ''}><div class="pp-stat-label">${label}</div><div class="pp-stat-value">${value}</div>${sub ? `<div class="pp-stat-sub">${sub}</div>` : ''}</div>`;
   document.getElementById('rmDashStats').innerHTML = [
-    [leads.length, 'Assigned leads', 'fa-inbox', 'var(--accent)', 'assigned'],
-    [overdue.length, 'Overdue follow-ups', 'fa-clock', 'var(--danger)', 'followups'],
-    [leads.length - overdue.length, 'On track', 'fa-circle-check', 'var(--success)', null],
-  ].map(([value, label, icon, accent, view]) => `<div class="stat-card"${view ? ` data-goto-view="${view}"` : ''} style="--stat-accent:${accent};${view ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+    stat('Due today', fmtInt(due.length), overdue.length ? `${fmtInt(overdue.length)} already overdue` : 'All still in hand', overdue.length ? 'bad' : '', 'followups'),
+    stat(`Gone quiet ${QUIET_DAYS}+ days`, fmtInt(quiet.length), `of ${fmtInt(open.length)} open leads`, quiet.length ? 'warn' : 'good'),
+    stat('Sanctioned or beyond', fmtInt(sanctioned.length), open.length ? `${((sanctioned.length / leads.length) * 100).toFixed(1)}% of your book` : '', sanctioned.length ? 'good' : ''),
+    stat('Open tasks', fmtInt(openTasks.length), overdueTasks.length ? `${fmtInt(overdueTasks.length)} overdue` : 'None overdue', overdueTasks.length ? 'bad' : '', 'tasks'),
+  ].join('');
   document.querySelectorAll('#rmDashStats [data-goto-view]').forEach((card) => {
     card.addEventListener('click', () => loadView(card.dataset.gotoView));
   });
 
+  document.getElementById('rmDueBody').innerHTML = rowsHtml(
+    due.slice(0, 12),
+    (l) => `
+      <td><div class="pp-name">${escapeHtml(l.student_name)}</div><div class="pp-sub pp-num">${escapeHtml(l.student_phone || '')}</div></td>
+      <td>${stageChipHtml(l)}</td>
+      <td>${recencyHtml(l)}</td>
+      <td>${promisedHtml(l.next_follow_up_at)}</td>`,
+    emptyState('fa-mug-hot', 'Nothing promised today', 'Follow-ups you set on a lead show up here on the day they fall due.'),
+  );
+
+  document.getElementById('rmQuietBody').innerHTML = rowsHtml(
+    quiet.slice(0, 12),
+    (l) => `
+      <td><div class="pp-name">${escapeHtml(l.student_name)}</div><div class="pp-sub pp-num">${escapeHtml(l.student_phone || '')}</div></td>
+      <td>${stageChipHtml(l)}</td>
+      <td>${recencyHtml(l)}</td>
+      <td class="r pp-num">${compactInr(l.loan_amount_requested)}</td>`,
+    emptyState('fa-circle-check', 'Everyone has been contacted', `No open lead of yours has been untouched for ${QUIET_DAYS} days.`),
+  );
+
   const stageCounts = {};
-  leads.forEach((l) => {
-    const name = l.lead_stages?.name || 'Unknown';
-    stageCounts[name] = (stageCounts[name] || 0) + 1;
-  });
-  const maxCount = Math.max(...Object.values(stageCounts), 1);
-  document.getElementById('rmDashStageBreakdown').innerHTML = Object.entries(stageCounts).map(([name, count]) => `
-    <div style="margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(name)}</span><span class="amount">${count}</span></div>
-      <div style="background:var(--bg-hover);border-radius:4px;height:8px;"><div style="background:var(--accent);width:${(count / maxCount) * 100}%;height:100%;border-radius:4px;"></div></div>
-    </div>
-  `).join('') || emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, their stage breakdown will show here.');
+  open.forEach((l) => { const n = l.lead_stages?.name || 'Unknown'; stageCounts[n] = (stageCounts[n] || 0) + 1; });
+  const names = [...JOURNEY_ORDER, ...Object.keys(stageCounts).filter((n) => !JOURNEY_ORDER.includes(n))].filter((n) => stageCounts[n]);
+  const maxCount = Math.max(1, ...Object.values(stageCounts));
+  document.getElementById('rmStageSub').textContent = `${fmtInt(open.length)} open · ${fmtInt(leads.length - open.length)} closed or lost`;
+  document.getElementById('rmDashStageBreakdown').innerHTML = names.length === 0
+    ? emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, their stage breakdown shows here.')
+    : names.map((n) => `
+      <div class="pp-funnel-row">
+        <span>${escapeHtml(n)}</span>
+        <span class="pp-funnel-track"><span class="pp-funnel-fill" style="width:${Math.max(3, (stageCounts[n] / maxCount) * 100)}%"></span></span>
+        <span class="pp-num">${fmtInt(stageCounts[n])}</span>
+      </div>`).join('');
 
-  const attentionRowAttr = (leadId) => (leadId ? ` data-lead-id="${escapeHtml(leadId)}" style="cursor:pointer;"` : '');
-  const overdueFollowUpHtml = overdue.slice(0, 8).map((l) => `<div${attentionRowAttr(l.id)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(l.student_name)}</span><span class="badge badge-danger">${formatDateTime(l.next_follow_up_at)}</span></div>`).join('');
-  const overdueTaskHtml = overdueTasks.slice(0, 8).map((t) => `<div${attentionRowAttr(t.leads?.id)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(t.title)}${t.leads ? ' · ' + escapeHtml(t.leads.student_name) : ''}</span><span class="badge badge-danger">Overdue task</span></div>`).join('');
-  const tatBreachHtml = tatBreaches.slice(0, 8).map((d) => `<div${attentionRowAttr(d.leadId)} style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${escapeHtml(d.student || '–')}</span><span class="badge badge-warning">Overstayed ${escapeHtml(d.stage)} (${d.thresholdDays}d TAT)</span></div>`).join('');
-
+  const line = (leadId, main, sub, badge, tone) =>
+    `<div class="pp-line ${leadId ? 'click' : ''}"${leadId ? ` data-lead-id="${escapeHtml(leadId)}"` : ''}>
+       <span class="pp-line-main">${escapeHtml(main)}${sub ? `<span>${escapeHtml(sub)}</span>` : ''}</span>
+       <span class="pp-chip ${tone}">${escapeHtml(badge)}</span>
+     </div>`;
   const attentionEl = document.getElementById('rmDashAttention');
-  attentionEl.innerHTML = (overdue.length + overdueTasks.length + tatBreaches.length) === 0
-    ? emptyState('fa-circle-check', 'Nothing overdue', 'No overdue follow-ups, tasks, or TAT breaches right now — nice work.')
-    : overdueFollowUpHtml + overdueTaskHtml + tatBreachHtml;
-  attentionEl.querySelectorAll('[data-lead-id]').forEach((row) => {
+  attentionEl.innerHTML = (overdueTasks.length + tatBreaches.length) === 0
+    ? emptyState('fa-circle-check', 'Nothing overdue', 'No overdue tasks, and no case sitting past its turnaround time.')
+    : overdueTasks.slice(0, 6).map((t) => line(t.leads?.id, t.title, t.leads?.student_name || '', `Task due ${formatDate(t.due_date)}`, 'bad')).join('')
+      + tatBreaches.slice(0, 6).map((d) => line(d.leadId, d.student || '–', `${d.stage} stage`, `Past ${d.thresholdDays}d TAT`, 'warn')).join('');
+
+  document.getElementById('rmTaskSub').textContent = openTasks.length
+    ? `${fmtInt(openTasks.length)} open${overdueTasks.length ? ` · ${fmtInt(overdueTasks.length)} overdue` : ''}`
+    : 'Nothing open';
+  const tasksEl = document.getElementById('rmDashTasks');
+  tasksEl.innerHTML = openTasks.length === 0
+    ? emptyState('fa-list-check', 'No open tasks', 'Add one from the Tasks screen and it shows up here.')
+    : openTasks.slice(0, 6).map((t) => `
+      <label class="pp-task">
+        <input type="checkbox" data-dash-task-id="${escapeHtml(t.id)}" />
+        <span><span class="pp-task-title">${escapeHtml(t.title)}</span>
+          <span class="pp-task-meta ${t.due_date && t.due_date < today ? 'late' : ''}">${t.due_date ? `Due ${formatDate(t.due_date)}` : 'No due date'}${t.leads ? ` · ${escapeHtml(t.leads.student_name)}` : ''}</span>
+        </span>
+      </label>`).join('');
+  tasksEl.querySelectorAll('[data-dash-task-id]').forEach((cb) => {
+    cb.addEventListener('change', async () => {
+      try {
+        await toggleTaskComplete(cb.dataset.dashTaskId, cb.checked);
+        await renderRmDashboard();
+      } catch (err) {
+        cb.checked = !cb.checked;
+        showToast('Could not update this task.', true);
+      }
+    });
+  });
+
+  document.querySelectorAll('#dashboardView [data-lead-id]').forEach((row) => {
     row.addEventListener('click', () => leadDrawer.open(row.dataset.leadId));
   });
 }
@@ -327,6 +464,7 @@ function initLeadModal() {
   window.__closeLeadModal = close;
 
   document.getElementById('btnNewLead').addEventListener('click', open);
+  document.getElementById('btnNewLeadList').addEventListener('click', open);
   document.getElementById('btnCloseLeadModal').addEventListener('click', close);
   document.getElementById('btnCancelLeadModal').addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -421,6 +559,7 @@ async function bootstrap() {
   });
   initLeadModal();
   initCallsPeriodToggle();
+  initDashboardLinks();
   initRowNavigation();
 
   try {
