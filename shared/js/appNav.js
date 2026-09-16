@@ -138,11 +138,24 @@ const PROFILE_ROUTES = {
  */
 function userMenuItemsHtml() {
   const profileHref = PROFILE_ROUTES[state.user?.role];
+  // Switching apps IS an account action — "which of my surfaces am I on" —
+  // so it lives with the name and the role rather than as a second dropdown
+  // competing with it in the topbar. Roles with one destination get no list.
+  const apps = state.user ? accessibleApps(state.user.role) : [];
+  const switchHtml = apps.length > 1 ? `
+    <div class="zt-menu-label">Switch to</div>
+    ${apps.map((a) => `
+      <a class="zt-menu-item zt-switch-item ${a.key === state.app ? 'current' : ''}" href="${a.path}" role="menuitem">
+        <i class="fa-solid ${a.icon}"></i><span>${escapeHtml(a.label)}</span>
+        ${a.key === state.app ? '<i class="fa-solid fa-check zt-switch-check"></i>' : ''}
+      </a>`).join('')}
+    <div class="zt-menu-sep"></div>` : '';
   return `
     <div class="zt-menu-head">
       <strong>${escapeHtml(state.user?.fullName || '')}</strong>
       <span>${escapeHtml(state.user?.role || '')}</span>
     </div>
+    ${switchHtml}
     ${profileHref ? `<a class="zt-menu-item" href="${profileHref}" role="menuitem">
       <i class="fa-solid fa-id-badge"></i><span>Profile</span>
     </a>` : ''}
@@ -215,19 +228,6 @@ function render() {
   const current = destination(state.app);
   const currentLabel = current ? current.label : 'Zolve Tangent';
   const currentIcon = current ? current.icon : 'fa-layer-group';
-  const apps = state.user ? accessibleApps(state.user.role) : [];
-  // Shown wherever there is somewhere else to go. This is the ONLY route
-  // between apps now that the sidebar no longer lists them, so it must not
-  // be conditional on the page lacking a sidebar the way it once was.
-  const showSwitcher = apps.length > 1;
-
-  const menuItems = apps.map((a) => `
-    <a class="zt-switch-item ${a.key === state.app ? 'current' : ''}" href="${a.path}" role="menuitem">
-      <i class="fa-solid ${a.icon}"></i>
-      <span>${escapeHtml(a.label)}</span>
-      ${a.key === state.app ? '<i class="fa-solid fa-check zt-switch-check"></i>' : ''}
-    </a>`).join('');
-
   const crumbHtml = state.crumbs.map((c) => {
     const label = typeof c === 'string' ? c : c.label;
     const inner = `<span>${escapeHtml(label)}</span>`;
@@ -250,16 +250,11 @@ function render() {
       ${canGoBack ? `<button type="button" class="zt-back" title="Go back" aria-label="Go back">
         <i class="fa-solid fa-arrow-left"></i>
       </button>` : ''}
-      <div class="zt-appswitch ${showSwitcher ? '' : 'static'}">
-        <button type="button" class="zt-appswitch-btn" ${showSwitcher ? 'aria-haspopup="true" aria-expanded="false"' : 'disabled'}>
+      <div class="zt-appswitch static">
+        <span class="zt-appswitch-btn" aria-hidden="true">
           <span class="zt-appswitch-mark"><i class="fa-solid ${currentIcon}"></i></span>
           <span class="zt-appswitch-label">${escapeHtml(currentLabel)}</span>
-          ${showSwitcher ? '<i class="fa-solid fa-angle-down zt-appswitch-caret"></i>' : ''}
-        </button>
-        ${showSwitcher ? `<div class="zt-switch-menu" role="menu" hidden>
-          <div class="zt-switch-menu-head">Switch to</div>
-          ${menuItems}
-        </div>` : ''}
+        </span>
       </div>
       <nav class="zt-crumbs" aria-label="Breadcrumb">${crumbHtml}</nav>
     </div>
@@ -318,18 +313,8 @@ function wireBrandHome() {
 }
 
 function wireEvents(host) {
-  const switchBtn = host.querySelector('.zt-appswitch-btn');
-  const menu = host.querySelector('.zt-switch-menu');
-  if (switchBtn && menu) {
-    const close = () => { menu.hidden = true; switchBtn.setAttribute('aria-expanded', 'false'); };
-    const open = () => { menu.hidden = false; switchBtn.setAttribute('aria-expanded', 'true'); };
-    switchBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (menu.hidden) open(); else close();
-    });
-    document.addEventListener('click', (e) => { if (!host.contains(e.target)) close(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  }
+  // The app list moved into the account menu, which wireMenu() handles. The
+  // topbar chip is now a label for where you are, with nothing to open.
 
   // Back closes an open drawer/modal FIRST if there is one. Opening a lead
   // does not push a history entry, so a plain history.back() from an open

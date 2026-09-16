@@ -62,12 +62,21 @@ async function loadOverview() {
     return (now - new Date(enteredAt).getTime()) / 86400000 > tatThresholds[stageName];
   }).length;
   const attention = [{ text: `${leads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at) < new Date()).length} overdue follow-ups`, icon: 'fa-clock' }, { text: `${deals.filter((deal) => deal.is_on_hold).length} deals on hold`, icon: 'fa-hand' }, { text: `${docs.filter((doc) => doc.verification_status === 'Pending Review').length} documents awaiting review`, icon: 'fa-file-lines' }, { text: `${overdueTasks.length} overdue tasks`, icon: 'fa-list-check' }, { text: `${tatBreachedCount} deals overstayed their stage TAT`, icon: 'fa-hourglass-end' }].filter((item) => item.text.slice(0, 1) !== '0');
-  $('attentionCount').textContent = attention.length ? attention.length : 'All clear';
-  $('attentionList').innerHTML = attention.length
-    ? attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('')
-    : emptyState('fa-circle-check', 'Everything is on track', 'No overdue items right now — nice work.');
-
-  await loadAdminChecks();
+  // One list, not two boxes that both say "here is what is wrong". The items
+  // an Admin can act on come first and carry the action; the operational
+  // counts follow as context for whoever owns them.
+  const adminItems = await getAdminChecks();
+  const total = adminItems.length + attention.length;
+  $('attentionCount').textContent = total || 'All clear';
+  $('attentionList').innerHTML = total === 0
+    ? emptyState('fa-circle-check', 'Everything is on track', 'No overdue items right now — nice work.')
+    : adminItems.map((i) => `
+        <div class="attention-row attention-row-action">
+          <span class="attention-main"><span class="attention-dot" style="background:var(--${i.tone === 'bad' ? 'danger' : 'warning'});"></span>
+            <span><strong>${esc(i.title)}</strong><span class="muted">${esc(i.body)}</span></span></span>
+          <a class="btn btn-ghost" href="${i.href}">${esc(i.action)}</a>
+        </div>`).join('')
+      + attention.map((item) => `<div class="attention-row"><i class="fa-solid ${item.icon} row-icon"></i>${esc(item.text)}</div>`).join('');
 }
 
 /**
@@ -78,8 +87,7 @@ async function loadOverview() {
  * Each check returns null when it is clean, so "nothing here" is the same
  * shape as "nothing to do".
  */
-async function loadAdminChecks() {
-  const host = $('adminChecks');
+async function getAdminChecks() {
   const USERS_PAGE = '../../authentication/public/users-admin.html';
 
   const checks = await Promise.allSettled([
@@ -137,21 +145,8 @@ async function loadAdminChecks() {
 
   ]);
 
-  const items = checks
-    .filter((c) => c.status === 'fulfilled' && c.value)
-    .map((c) => c.value);
-  const failed = checks.filter((c) => c.status === 'rejected');
-
-  $('adminCheckCount').textContent = items.length ? items.length : 'All clear';
-  host.innerHTML = items.length === 0 && failed.length === 0
-    ? emptyState('fa-circle-check', 'Nothing needs an administrator', 'No orphaned logins, unlinked partners, or unassigned people right now.')
-    : items.map((i) => `
-      <div class="pp-line">
-        <span class="pp-line-main"><span style="display:inline-flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--${i.tone === 'bad' ? 'danger' : 'warning'});"></span>${esc(i.title)}</span>
-          <span>${esc(i.body)}</span></span>
-        <a class="btn btn-ghost" href="${i.href}">${esc(i.action)}</a>
-      </div>`).join('')
-      + (failed.length ? `<p class="subtitle" style="margin:10px 0 0;font-size:12px;">${failed.length} check${failed.length === 1 ? '' : 's'} could not run.</p>` : '');
+  // Promise.allSettled, so one failing query leaves the rest readable.
+  return checks.filter((c) => c.status === 'fulfilled' && c.value).map((c) => c.value);
 }
 
 // ---------- Stage movement trends (lead + bank-wise deal) ----------

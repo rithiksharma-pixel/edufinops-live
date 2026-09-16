@@ -88,6 +88,13 @@ h1 { font-family: Fraunces, serif; font-size: 32px; margin-bottom: 7px; }
 .attention-row:last-child, .activity-row:last-child, .notification-row:last-child, .simple-row:last-child { border-bottom: 0; }
 .attention-row { display: flex; align-items: center; gap: 9px; }
 .attention-row .row-icon { color: var(--warning); font-size: 12px; flex-shrink: 0; }
+
+/* An item an Admin can act on: severity dot, what it is, what to do. */
+.attention-row-action { align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.attention-row-action .attention-main { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.attention-row-action .attention-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; }
+.attention-row-action .muted { display: block; font-size: 12px; margin-top: 2px; }
+.attention-row-action .btn { flex-shrink: 0; }
 .muted { color: var(--ink-500); font-size: 12px; margin-top: 4px; }
 
 /* ---------- Badges — driven by shared semantic tokens, not hardcoded hex ---------- */
