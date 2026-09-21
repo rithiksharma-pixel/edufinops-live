@@ -623,45 +623,139 @@ function initBulkAdd() {
 
 const DOCUMENT_CATEGORIES = ['KYC', 'Academics', 'Financials', 'Other'];
 
-async function loadSettings() {
-  const { data, error } = await supabase.from('document_types').select('id,name,applies_to,category,is_required').eq('is_deleted', false).order('sequence_order');
-  if (error) throw error;
-  // category defaults to 'Other' on every pre-existing type after the
-  // migration - this inline select is how an Admin reclassifies them
-  // without needing DB access, since the add-form only sets it at creation.
-  $('documentTypesList').innerHTML = data.map((type) => `<div class="simple-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><div><strong>${esc(type.name)}</strong><div class="muted">${esc(type.applies_to)}${type.is_required ? ' · Required' : ''}</div></div><select data-category-for="${type.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);font-size:12.5px;">${DOCUMENT_CATEGORIES.map((c) => `<option ${c === type.category ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`).join('') || '<p class="muted">No types configured.</p>';
-  document.querySelectorAll('[data-category-for]').forEach((select) => {
-    select.addEventListener('change', async (event) => {
-      const { error: updateError } = await supabase.from('document_types').update({ category: event.target.value }).eq('id', event.target.dataset.categoryFor);
-      if (updateError) return showToast(updateError.message, true);
-      showToast('Category updated.');
-    });
-  });
+// =========================================================
+// Settings — one section at a time behind tabs, instead of six unrelated
+// lists stacked in a two-column grid (932 consultancies made that page
+// thousands of pixels long). Each section is loaded once per visit; search
+// and filters are over what is already loaded, so they are instant.
+// =========================================================
+const settings = {
+  tab: 'consultancies', consultancies: [], branches: [], lenders: [],
+  consSearch: '', consFilter: 'all', consShown: 100, branchSearch: '', wired: false,
+};
 
-  const [{ data: lenders, error: lendersError }, { data: branches, error: branchesError }, { data: consultancies, error: consultanciesError }, { data: teams, error: teamsError }, { data: dealStages, error: dealStagesError }, { data: tatRows, error: tatRowsError }] = await Promise.all([
+function wireSettingsChrome() {
+  if (settings.wired) return;
+  settings.wired = true;
+  document.querySelectorAll('[data-set-tab]').forEach((b) => b.addEventListener('click', () => {
+    settings.tab = b.dataset.setTab;
+    document.querySelectorAll('[data-set-tab]').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('[data-set-panel]').forEach((p) => { p.hidden = p.dataset.setPanel !== settings.tab; });
+  }));
+  let t1; let t2;
+  $('setSearchConsultancies').addEventListener('input', (e) => {
+    clearTimeout(t1); t1 = setTimeout(() => { settings.consSearch = e.target.value.trim().toLowerCase(); settings.consShown = 100; renderConsultancies(); }, 120);
+  });
+  $('setSearchBranches').addEventListener('input', (e) => {
+    clearTimeout(t2); t2 = setTimeout(() => { settings.branchSearch = e.target.value.trim().toLowerCase(); renderBranches(); }, 120);
+  });
+}
+
+function renderConsultancies() {
+  const all = settings.consultancies;
+  const noBd = all.filter((c) => !c.bd_manager);
+  const filters = [['all', 'All', all.length], ['nobd', 'No BD manager', noBd.length]];
+  $('setConsultancyFilters').innerHTML = filters.map(([id, label, n]) =>
+    `<button type="button" class="set-chip ${settings.consFilter === id ? 'on' : ''} ${id === 'nobd' && n ? 'warn' : ''}" data-cons-filter="${id}">${label} <b>${n.toLocaleString('en-IN')}</b></button>`).join('');
+  document.querySelectorAll('[data-cons-filter]').forEach((b) => b.addEventListener('click', () => {
+    settings.consFilter = b.dataset.consFilter; settings.consShown = 100; renderConsultancies();
+  }));
+
+  const q = settings.consSearch;
+  const rows = (settings.consFilter === 'nobd' ? noBd : all)
+    .filter((c) => !q || c.name.toLowerCase().includes(q) || (c.bd_manager || '').toLowerCase().includes(q));
+  $('consultanciesList').innerHTML = rows.length
+    ? rows.slice(0, settings.consShown).map((c) => `<tr><td class="strong">${esc(c.name)}</td><td>${c.bd_manager ? esc(c.bd_manager) : '<span class="set-missing">No BD manager</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="2">${emptyState('fa-magnifying-glass', 'No consultancies match', 'Try another name, or clear the search.')}</td></tr>`;
+  $('setConsultancyFoot').innerHTML = rows.length > settings.consShown
+    ? `<span>Showing ${settings.consShown.toLocaleString('en-IN')} of ${rows.length.toLocaleString('en-IN')}</span><button type="button" class="btn btn-ghost" id="setConsMore">Show more</button>`
+    : `<span>${rows.length.toLocaleString('en-IN')} ${rows.length === 1 ? 'consultancy' : 'consultancies'}</span>`;
+  $('setConsMore')?.addEventListener('click', () => { settings.consShown += 200; renderConsultancies(); });
+}
+
+/** Grouped by bank: a bank and its cities on one row, not one row per city
+ *  sorted alphabetically across every bank. */
+function renderBranches() {
+  const q = settings.branchSearch;
+  const byLender = new Map(settings.lenders.map((l) => [l.name, []]));
+  settings.branches.forEach((b) => {
+    const name = b.lenders?.name || 'Unknown bank';
+    if (!byLender.has(name)) byLender.set(name, []);
+    byLender.get(name).push(b.name);
+  });
+  const rows = [...byLender.entries()]
+    .map(([bank, cities]) => ({ bank, cities: [...new Set(cities)].sort((a, c) => a.localeCompare(c)) }))
+    .filter((r) => !q || r.bank.toLowerCase().includes(q) || r.cities.some((c) => c.toLowerCase().includes(q)))
+    .sort((a, c) => c.cities.length - a.cities.length || a.bank.localeCompare(c.bank));
+  $('lenderBranchesList').innerHTML = rows.length
+    ? rows.map((r) => `<tr><td class="strong">${esc(r.bank)}</td><td class="r mono">${r.cities.length || '<span class="set-missing">0</span>'}</td><td>${r.cities.length ? r.cities.map((c) => `<span class="set-city">${esc(c)}</span>`).join('') : '<span class="set-missing">No branches yet — officers at this bank can’t be invited</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="3">${emptyState('fa-magnifying-glass', 'No banks match', 'Try another bank or city.')}</td></tr>`;
+}
+
+async function loadSettings() {
+  wireSettingsChrome();
+
+  const [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows, pipeline] = await Promise.all([
+    supabase.from('document_types').select('id,name,applies_to,category,is_required').eq('is_deleted', false).order('sequence_order'),
     supabase.from('lenders').select('id,name').eq('is_deleted', false).order('name'),
-    supabase.from('lender_branches').select('name,lenders(name)').eq('is_deleted', false).order('name'),
-    supabase.from('consultancies').select('name, bd_manager').eq('is_deleted', false).order('name').range(0, 4999),
-    supabase.from('teams').select('name').eq('is_deleted', false).order('name'),
+    fetchAllResult(() => supabase.from('lender_branches').select('id,name,lenders(name)').eq('is_deleted', false).order('name')),
+    fetchAllResult(() => supabase.from('consultancies').select('id,name,bd_manager').eq('is_deleted', false).order('name')),
+    supabase.from('teams').select('id,name,branch,lead_user_id').eq('is_deleted', false).order('name'),
+    fetchAllResult(() => supabase.from('users').select('id,full_name,team_id,is_active').eq('is_deleted', false)),
     supabase.from('deal_stages').select('id,name').eq('is_deleted', false).eq('is_terminal', false).order('sequence_order'),
     supabase.from('stage_tat_thresholds').select('id,deal_stage_id,threshold_days').eq('is_deleted', false),
+    // Real days-at-stage for every open case, so each limit can be read
+    // against what actually happens. Admins get every bank's cases here.
+    fetchAllResult(() => supabase.rpc('lender_pipeline'), { tiebreak: 'deal_id' }),
   ]);
-  if (lendersError) throw lendersError;
-  if (branchesError) throw branchesError;
-  if (consultanciesError) throw consultanciesError;
-  if (teamsError) throw teamsError;
-  if (dealStagesError) throw dealStagesError;
-  if (tatRowsError) throw tatRowsError;
-  $('branchLenderSelect').innerHTML = lenders.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
-  $('lenderBranchesList').innerHTML = branches.map((b) => `<div class="simple-row"><strong>${esc(b.name)}</strong><div class="muted">${esc(b.lenders?.name || '–')}</div></div>`).join('') || '<p class="muted">No branches configured.</p>';
-  $('consultanciesList').innerHTML = consultancies.map((c) => `<div class="simple-row"><strong>${esc(c.name)}</strong><div class="muted">${c.bd_manager ? `BD manager: ${esc(c.bd_manager)}` : 'No BD manager yet'}</div></div>`).join('') || '<p class="muted">No consultancies configured.</p>';
-  $('teamsList').innerHTML = teams.map((t) => `<div class="simple-row"><strong>${esc(t.name)}</strong></div>`).join('') || '<p class="muted">No teams configured.</p>';
+  for (const r of [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows]) if (r.error) throw r.error;
 
-  const tatByStage = Object.fromEntries(tatRows.map((r) => [r.deal_stage_id, r]));
-  $('tatThresholdsList').innerHTML = dealStages.map((stage) => {
-    const existing = tatByStage[stage.id];
-    return `<div class="simple-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><strong>${esc(stage.name)}</strong><input type="number" min="1" data-threshold-for="${stage.id}" value="${existing ? existing.threshold_days : ''}" placeholder="not tracked" style="width:110px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-surface);font-size:12.5px;"></div>`;
-  }).join('') || '<p class="muted">No stages configured.</p>';
+  // ---- Consultancies
+  settings.consultancies = consultancies.data;
+  $('setCountConsultancies').textContent = consultancies.data.length.toLocaleString('en-IN');
+  renderConsultancies();
+
+  // ---- Lender branches
+  settings.lenders = lenders.data;
+  settings.branches = branches.data;
+  $('setCountBranches').textContent = branches.data.length;
+  $('branchLenderSelect').innerHTML = lenders.data.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  renderBranches();
+
+  // ---- Teams, with the branch structure from 066
+  const people = users.data.filter((u) => u.is_active);
+  const nameOf = (id) => users.data.find((u) => u.id === id)?.full_name;
+  $('setCountTeams').textContent = teams.data.length;
+  $('teamsList').innerHTML = teams.data.length
+    ? teams.data
+      .map((t) => ({ ...t, members: people.filter((u) => u.team_id === t.id).length }))
+      .sort((a, c) => c.members - a.members || a.name.localeCompare(c.name))
+      .map((t) => `<tr><td class="strong">${esc(t.name)}</td><td>${t.branch ? esc(t.branch) : '<span class="set-missing">Not a branch</span>'}</td><td>${t.lead_user_id ? esc(nameOf(t.lead_user_id) || '–') : '<span class="set-missing">No lead</span>'}</td><td class="r mono">${t.members}</td></tr>`).join('')
+    : `<tr><td colspan="4">${emptyState('fa-people-group', 'No teams yet', 'Add one above.')}</td></tr>`;
+
+  // ---- Turnaround times, each against reality
+  const open = (pipeline.data || []).filter((d) => !d.is_terminal && !d.is_rejected);
+  const median = (xs) => {
+    if (!xs.length) return null;
+    const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+  };
+  const tatByStage = Object.fromEntries(tatRows.data.map((r) => [r.deal_stage_id, r]));
+  $('tatThresholdsList').innerHTML = dealStages.data.map((stage) => {
+    const limit = tatByStage[stage.id]?.threshold_days ?? null;
+    const days = open.filter((d) => d.stage_name === stage.name).map((d) => d.days_at_stage);
+    const typical = median(days);
+    const past = limit == null ? null : days.filter((d) => d > limit).length;
+    const share = past != null && days.length ? past / days.length : 0;
+    const tone = past == null ? '' : share > 0.6 ? 'bad' : share > 0.3 ? 'warn' : 'good';
+    return `<tr>
+      <td class="strong">${esc(stage.name)}</td>
+      <td><input type="number" min="1" class="set-days" data-threshold-for="${stage.id}" value="${limit ?? ''}" placeholder="Not tracked" aria-label="${esc(stage.name)} limit in days" /></td>
+      <td class="r mono">${days.length.toLocaleString('en-IN')}</td>
+      <td class="r mono">${typical == null ? '–' : `${typical}d`}</td>
+      <td class="r">${past == null ? '<span class="set-missing">Not tracked</span>' : `<span class="set-pill ${tone}">${past.toLocaleString('en-IN')} · ${Math.round(share * 100)}%</span>`}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5">${emptyState('fa-hourglass', 'No stages configured', '')}</td></tr>`;
   document.querySelectorAll('[data-threshold-for]').forEach((input) => {
     input.addEventListener('change', async (event) => {
       const stageId = event.target.dataset.thresholdFor;
@@ -678,6 +772,26 @@ async function loadSettings() {
           );
       if (saveError) return showToast(saveError.message, true);
       showToast('Saved.');
+      loadSettings(); // repaint "past the limit" against the new number
+    });
+  });
+
+  // ---- Document types
+  $('setCountDocs').textContent = docs.data.length;
+  // category defaults to 'Other' on every pre-existing type after the
+  // migration - this inline select is how an Admin reclassifies them
+  // without needing DB access, since the add-form only sets it at creation.
+  $('documentTypesList').innerHTML = docs.data.map((type) => `<tr>
+      <td class="strong">${esc(type.name)}</td>
+      <td>${esc(type.applies_to)}</td>
+      <td>${type.is_required ? '<span class="set-pill good">Required</span>' : '<span class="set-missing">Optional</span>'}</td>
+      <td><select class="set-select" data-category-for="${type.id}" aria-label="Category for ${esc(type.name)}">${DOCUMENT_CATEGORIES.map((c) => `<option ${c === type.category ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
+    </tr>`).join('');
+  document.querySelectorAll('[data-category-for]').forEach((select) => {
+    select.addEventListener('change', async (event) => {
+      const { error: updateError } = await supabase.from('document_types').update({ category: event.target.value }).eq('id', event.target.dataset.categoryFor);
+      if (updateError) return showToast(updateError.message, true);
+      showToast('Category updated.');
     });
   });
 }
