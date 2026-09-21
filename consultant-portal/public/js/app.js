@@ -9,6 +9,7 @@ import { getLeadStages, getLeadSources } from './services/lookupService.js';
 import { getMessages, sendMessage } from './services/messageService.js';
 import { validateLeadForm, formatDateTime } from './utils/validation.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
+import { leadFunnel, leadFunnelRowsHtml } from '../../../shared/js/leadFunnel.js';
 
 let currentUser;
 
@@ -88,19 +89,12 @@ function renderStats() {
 }
 
 function renderFunnel() {
-  const open = state.rows.filter((r) => !r.is_lost);
-  const counts = Object.fromEntries(JOURNEY.map((n) => [n, 0]));
-  open.forEach((r) => { if (r.stage_name in counts) counts[r.stage_name] += 1; });
-  const max = Math.max(1, ...Object.values(counts));
-  const lost = state.rows.length - open.length;
+  // Reached, not current: a student counts at every stage they got to, so
+  // each step's rate shows where the firm's students drop out.
+  const lost = state.rows.filter((r) => r.is_lost).length;
   document.getElementById('cpFunnel').innerHTML = state.rows.length === 0
     ? emptyState('fa-user-graduate', 'No students yet', 'Add your first student to start tracking their loan.')
-    : JOURNEY.map((n) => `
-      <div class="pp-funnel-row">
-        <span>${escapeHtml(n)}</span>
-        <span class="pp-funnel-track"><span class="pp-funnel-fill" style="width:${counts[n] ? Math.max(3, (counts[n] / max) * 100) : 0}%"></span></span>
-        <span class="pp-num">${fmtInt(counts[n])}</span>
-      </div>`).join('') +
+    : leadFunnelRowsHtml(leadFunnel(state.rows), escapeHtml) +
       `<div class="pp-funnel-row" style="margin-top:6px;color:var(--ink-500);"><span>Did not proceed</span><span></span><span class="pp-num">${fmtInt(lost)}</span></div>`;
 }
 

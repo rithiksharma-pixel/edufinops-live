@@ -17,6 +17,7 @@ import { initLeadDrawer } from '../../../lead-management/public/js/components/le
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
 import { attachDuplicatePhoneCheck } from '../../../shared/js/duplicatePhone.js';
+import { leadFunnel, leadFunnelRowsHtml } from '../../../shared/js/leadFunnel.js';
 import { supabase } from './config/supabaseClient.js';
 
 let currentUser;
@@ -249,7 +250,6 @@ function initCallsPeriodToggle() {
 // =========================================================
 const QUIET_DAYS = 30;
 const SANCTION_ORDER = 50;
-const JOURNEY_ORDER = ['Lead Qualified', 'App Start', 'Bank Prospect', 'Login', 'Sanction', 'PF Paid', 'Disbursement'];
 
 const dayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 const dayEnd = () => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; };
@@ -358,19 +358,14 @@ async function renderRmDashboard() {
     emptyState('fa-circle-check', 'Everyone has been contacted', `No open lead of yours has been untouched for ${QUIET_DAYS} days.`),
   );
 
-  const stageCounts = {};
-  open.forEach((l) => { const n = l.lead_stages?.name || 'Unknown'; stageCounts[n] = (stageCounts[n] || 0) + 1; });
-  const names = [...JOURNEY_ORDER, ...Object.keys(stageCounts).filter((n) => !JOURNEY_ORDER.includes(n))].filter((n) => stageCounts[n]);
-  const maxCount = Math.max(1, ...Object.values(stageCounts));
-  document.getElementById('rmStageSub').textContent = `${fmtInt(open.length)} open · ${fmtInt(leads.length - open.length)} closed or lost`;
-  document.getElementById('rmDashStageBreakdown').innerHTML = names.length === 0
-    ? emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, their stage breakdown shows here.')
-    : names.map((n) => `
-      <div class="pp-funnel-row">
-        <span>${escapeHtml(n)}</span>
-        <span class="pp-funnel-track"><span class="pp-funnel-fill" style="width:${Math.max(3, (stageCounts[n] / maxCount) * 100)}%"></span></span>
-        <span class="pp-num">${fmtInt(stageCounts[n])}</span>
-      </div>`).join('');
+  // A funnel over the whole book: each stage counts every lead that got at
+  // least that far, so the step rates say where this RM's leads drop out.
+  const funnel = leadFunnel(leads);
+  document.getElementById('rmStageSub').textContent =
+    `How far your ${fmtInt(leads.length)} leads got · ${fmtInt(open.length)} still open`;
+  document.getElementById('rmDashStageBreakdown').innerHTML = leads.length === 0
+    ? emptyState('fa-diagram-project', 'No leads assigned yet', 'Once leads are assigned to you, your funnel shows here.')
+    : leadFunnelRowsHtml(funnel, escapeHtml);
 
   const line = (leadId, main, sub, badge, tone) =>
     `<div class="pp-line ${leadId ? 'click' : ''}"${leadId ? ` data-lead-id="${escapeHtml(leadId)}"` : ''}>

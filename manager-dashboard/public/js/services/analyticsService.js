@@ -11,6 +11,7 @@
 // aggregates rather than fetching raw rows and summing in the browser.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { leadFunnel } from '../../../../shared/js/leadFunnel.js';
 import { fetchAll, fetchAllResult } from '../../../../shared/js/fetchAll.js';
 import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
 // CALL_STATUS_OPTIONS is owned by Lead Management's leadService.js (the
@@ -24,21 +25,11 @@ export async function getTeamFunnel() {
   const data = await fetchAll(
     () => supabase
       .from('leads')
-      .select('id, current_stage_id, lead_stages ( name, sequence_order )')
+      .select('id, lost_reason_id, login_date, sanction_date, pf_date, disbursed_date, lead_stages ( name, sequence_order )')
       .eq('is_deleted', false)
   );
-
-  const counts = {};
-  data.forEach((l) => {
-    const name = l.lead_stages?.name || 'Unknown';
-    counts[name] = (counts[name] || 0) + 1;
-  });
-  // Sort by the stage's actual sequence, not alphabetically
-  const order = {};
-  data.forEach((l) => { if (l.lead_stages) order[l.lead_stages.name] = l.lead_stages.sequence_order; });
-  return Object.entries(counts)
-    .sort((a, b) => (order[a[0]] ?? 999) - (order[b[0]] ?? 999))
-    .map(([name, count]) => ({ name, count }));
+  // Reached, not current: see shared/js/leadFunnel.js.
+  return leadFunnel(data);
 }
 
 /** Grouping options for the performance table. */
@@ -143,27 +134,24 @@ export async function getRmCallStats() {
   return byRm;
 }
 
+/**
+ * Per-lender funnel from lender_funnel() (deployment/068): each case counts
+ * at every stage it REACHED, from its history, not only where it sits now.
+ * The old version counted current stage only, so "Login" left out every
+ * case that had logged in and moved on, Closed Won appeared in no column,
+ * and disbursed value counted Closed Won cases only.
+ */
 export async function getLenderBreakdown() {
-  const { data, error } = await fetchAllResult(() => supabase
-    .from('deals')
-    .select(`
-      id, is_on_hold, is_rejected, total_disbursed_amount,
-      lenders ( name ),
-      current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey ( name )
-    `)
-    .eq('is_deleted', false));
+  const { data, error } = await supabase.rpc('lender_funnel');
   if (error) throw error;
-
-  const byLender = {};
-  data.forEach((d) => {
-    const name = d.lenders?.name || 'Unknown';
-    if (!byLender[name]) byLender[name] = { name, dealCount: 0, stageCounts: {}, disbursedAmount: 0 };
-    byLender[name].dealCount += 1;
-    const stageName = d.current_deal_stage?.name || 'Unknown';
-    byLender[name].stageCounts[stageName] = (byLender[name].stageCounts[stageName] || 0) + 1;
-    if (stageName === 'Closed Won') byLender[name].disbursedAmount += Number(d.total_disbursed_amount || 0);
-  });
-  return Object.values(byLender).sort((a, b) => b.dealCount - a.dealCount);
+  return (data || [])
+    .map((r) => ({
+      name: r.lender_name,
+      cases: Number(r.cases), login: Number(r.reached_login), sanction: Number(r.reached_sanction),
+      pf: Number(r.reached_pf), disbursement: Number(r.reached_disbursement),
+      open: Number(r.open_cases), declined: Number(r.declined), disbursedAmount: Number(r.disbursed_amount),
+    }))
+    .sort((a, b) => b.login - a.login || b.cases - a.cases);
 }
 
 /**

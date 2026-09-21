@@ -265,3 +265,9 @@
 .data-table input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
 /* Right-align numeric columns and keep digits from jittering between periods. */
 .data-table .num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- Funnel tables: count with the step rate beneath ---------- */
+.funnel-table td.num { line-height: 1.2; }
+.funnel-table .f-count { display: block; font-variant-numeric: tabular-nums; }
+.funnel-table .f-rate { display: block; font: 500 11px/1.3 'IBM Plex Mono', monospace; color: var(--ink-500); margin-top: 2px; }
+.funnel-table tr.funnel-total td { border-top: 1.5px solid var(--ink-300); background: var(--bg-hover); }

@@ -103,11 +103,17 @@ async function renderFunnelChart() {
     type: 'bar',
     data: {
       labels: funnel.map((f) => f.name),
-      datasets: [{ label: 'Leads', data: funnel.map((f) => f.count), backgroundColor: '#4F46E5', borderRadius: 4 }],
+      datasets: [{ label: 'Leads that reached this stage', data: funnel.map((f) => f.count), backgroundColor: '#4F46E5', borderRadius: 4 }],
     },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { afterLabel: (ctx) => {
+          const rate = funnel[ctx.dataIndex]?.rate;
+          return rate == null ? '' : `${Math.round(rate * 100)}% of the stage before`;
+        } } },
+      },
       scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
     },
   });
@@ -410,38 +416,49 @@ function wireBulkAssign(tbody, rmOptions) {
  * question — the old text list made that impossible because every lender
  * listed its stages in a different order.
  */
-const LENDER_STAGE_COLUMNS = ['Bank Prospect', 'Login', 'Sanction', 'PF Paid', 'Disbursement'];
+/**
+ * A funnel cell: the count, and underneath it the share of the stage before.
+ * The rate is what makes one bank comparable with another of a different
+ * size; the count alone only says who got the most cases.
+ */
+function funnelCell(value, previous) {
+  if (!value) return '<td class="num"><span class="pp-muted">–</span></td>';
+  const rate = previous ? `${Math.round((value / previous) * 100)}%` : '';
+  return `<td class="num"><span class="f-count">${Number(value).toLocaleString('en-IN')}</span>${rate ? `<span class="f-rate">${rate}</span>` : ''}</td>`;
+}
 
 async function renderLenderBreakdown() {
   const tbody = document.getElementById('lenderBreakdown');
-  let breakdown;
+  let rows;
   try {
-    breakdown = await getLenderBreakdown();
+    rows = await getLenderBreakdown();
   } catch (err) {
     console.error('lender breakdown failed', err);
-    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">Could not load lender deals.<br>
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Could not load lender deals.<br>
       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
-  if (!breakdown.length) {
-    tbody.innerHTML = `<tr><td colspan="9">${emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.')}</td></tr>`;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8">${emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.')}</td></tr>`;
     return;
   }
 
-  const n = (v) => (v ? Number(v).toLocaleString('en-IN') : '–');
-  tbody.innerHTML = breakdown.map((l) => {
-    const c = l.stageCounts || {};
-    // Credit Decline and Student Decline are both "the bank said no" for this
-    // view; splitting them across two columns of mostly zeros helps nobody.
-    const declined = (c['Credit Decline'] || 0) + (c['Student Decline'] || 0);
-    return `<tr>
+  const total = rows.reduce((t, r) => {
+    ['cases', 'login', 'sanction', 'pf', 'disbursement', 'declined', 'disbursedAmount'].forEach((k) => { t[k] += r[k]; });
+    return t;
+  }, { name: 'All lenders', cases: 0, login: 0, sanction: 0, pf: 0, disbursement: 0, declined: 0, disbursedAmount: 0 });
+
+  const row = (l, cls = '') => `<tr class="${cls}">
       <td><strong>${escapeHtml(l.name)}</strong></td>
-      ${LENDER_STAGE_COLUMNS.map((stage) => `<td class="num">${n(c[stage])}</td>`).join('')}
-      <td class="num">${declined ? `<span class="badge badge-danger">${n(declined)}</span>` : '–'}</td>
-      <td class="num"><strong>${n(l.dealCount)}</strong></td>
-      <td class="num">${l.disbursedAmount > 0 ? formatCurrency(l.disbursedAmount) : '–'}</td>
+      <td class="num"><span class="f-count">${Number(l.cases).toLocaleString('en-IN')}</span></td>
+      ${funnelCell(l.login, l.cases)}
+      ${funnelCell(l.sanction, l.login)}
+      ${funnelCell(l.pf, l.sanction)}
+      ${funnelCell(l.disbursement, l.pf)}
+      <td class="num">${l.declined ? `<span class="badge badge-danger">${l.declined.toLocaleString('en-IN')}</span>` : '<span class="pp-muted">–</span>'}</td>
+      <td class="num">${l.disbursedAmount > 0 ? formatCurrency(l.disbursedAmount) : '<span class="pp-muted">–</span>'}</td>
     </tr>`;
-  }).join('');
+  tbody.innerHTML = rows.map((l) => row(l)).join('') + row(total, 'funnel-total');
 }
 
 async function renderTatAnalysis() {

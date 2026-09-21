@@ -71,22 +71,23 @@
 
       <section class="chart-card" style="margin-bottom:22px;">
         <h3>By lender</h3>
-        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">Where each bank's deals currently sit. Declines are Credit and Student decline combined.</p>
+        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">A funnel: each case counts at every stage it has reached, so Login includes every case that went on to Sanction, PF and Disbursement. The small figure is the share of the stage before. Declined cases still count for the stages they reached.</p>
         <div style="overflow-x:auto;">
-          <table class="data-table" id="lenderTable">
+          <table class="data-table funnel-table" id="lenderTable">
             <thead><tr>
               <th>Lender</th>
-              <th class="num">Bank Prospect</th><th class="num">Login</th><th class="num">Sanction</th>
-              <th class="num">PF Paid</th><th class="num">Disbursement</th><th class="num">Declined</th>
-              <th class="num">Total</th><th class="num">Disbursed value</th>
+              <th class="num">Cases</th><th class="num">Login</th><th class="num">Sanction</th>
+              <th class="num">PF paid</th><th class="num">Disbursed</th><th class="num">Declined</th>
+              <th class="num">Disbursed value</th>
             </tr></thead>
-            <tbody id="lenderBreakdown"><tr><td colspan="9"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
+            <tbody id="lenderBreakdown"><tr><td colspan="8"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></td></tr></tbody>
           </table>
         </div>
       </section>
 
       <section class="chart-card">
-        <h3>Funnel — leads by stage</h3>
+        <h3>Funnel — leads that reached each stage</h3>
+        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">Each stage includes every lead that went further. Lost leads count for the stages they reached before they were lost. Hover a bar for its rate from the stage before.</p>
         <canvas id="funnelChart" height="90"></canvas>
       </section>
 
