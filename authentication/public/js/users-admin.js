@@ -44,8 +44,9 @@ let currentUserProfile = null;
  * the one place a person picking it had no visual cue they'd done so.
  */
 function managerLabel(m) {
-  const teamName = teams.find((t) => t.id === m.team_id)?.name;
-  return `${m.full_name}${teamName ? ` — ${teamName}` : ''}`;
+  const team = teams.find((t) => t.id === m.team_id);
+  const where = team?.branch || team?.name;
+  return `${m.full_name}${where ? ` (${where})` : ''}`;
 }
 
 // Which roles each inviter is allowed to hand out — mirrors invite_user()'s
@@ -82,34 +83,97 @@ function removeButton(u, blocker, me) {
   return `<button class="row-action-btn danger" data-remove-user="${u.id}" data-remove-name="${escapeHtml(u.full_name)}" title="Remove from the team">Remove</button>`;
 }
 
+// =========================================================
+// Roster view state. The whole roster is loaded once (it is ~45 people) and
+// the branch tabs and search are filters over it, so switching is instant
+// and the tab counts always agree with the rows below them.
+// =========================================================
+const roster = { users: [], blockers: new Map(), branch: 'all', search: '' };
+
+const teamOf = (u) => teams.find((t) => t.id === u.team_id);
+const branchOf = (u) => teamOf(u)?.branch || null;
+
+function rosterTabs() {
+  const branches = [...new Set(teams.map((t) => t.branch).filter(Boolean))].sort();
+  return [
+    { id: 'all', label: 'Everyone', test: () => true },
+    ...branches.map((b) => ({ id: b, label: b, test: (u) => branchOf(u) === b })),
+    { id: 'none', label: 'No branch', test: (u) => !branchOf(u), alert: true },
+  ];
+}
+
 async function loadUsers() {
-  const tbody = document.getElementById('usersTableBody');
-  const users = await getAllUsers();
+  roster.users = await getAllUsers();
   // Fetched alongside the roster so Remove can say WHY it is unavailable.
   // A failure here must not take the whole table down, so it degrades to an
   // empty map and the button falls back to letting the RPC refuse.
-  let blockers = new Map();
-  try { blockers = await getRemovalBlockers(); } catch { /* non-fatal */ }
+  try { roster.blockers = await getRemovalBlockers(); } catch { roster.blockers = new Map(); }
+  renderRoster();
+}
+
+function renderRoster() {
+  const tbody = document.getElementById('usersTableBody');
+  const blockers = roster.blockers;
+  const tabs = rosterTabs();
+  if (!tabs.some((t) => t.id === roster.branch)) roster.branch = 'all';
+  const tab = tabs.find((t) => t.id === roster.branch);
+
+  const tabsEl = document.getElementById('rosterTabs');
+  tabsEl.innerHTML = tabs.map((t) => {
+    const n = roster.users.filter(t.test).length;
+    return `<button type="button" class="roster-tab ${t.id === roster.branch ? 'on' : ''} ${t.alert && n ? 'alert' : ''}" data-roster-tab="${escapeHtml(t.id)}">${escapeHtml(t.label)} <span class="n">${n}</span></button>`;
+  }).join('');
+  tabsEl.querySelectorAll('[data-roster-tab]').forEach((b) => b.addEventListener('click', () => {
+    roster.branch = b.dataset.rosterTab; renderRoster();
+  }));
+
+  const q = roster.search.toLowerCase();
+  // Grouped the way the business is: branch, then who they report to, then
+  // name. Reading down a branch shows each sub-team together.
+  const users = roster.users
+    .filter(tab.test)
+    .filter((u) => !q || (u.full_name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q))
+    .sort((a, b) => (branchOf(a) || 'zzz').localeCompare(branchOf(b) || 'zzz')
+      || (a.reporting_manager?.full_name || '').localeCompare(b.reporting_manager?.full_name || '')
+      || (a.full_name || '').localeCompare(b.full_name || ''));
+
+  document.getElementById('rosterFoot').textContent =
+    `${users.length} of ${roster.users.length} people${q ? ` matching "${roster.search}"` : ''}`;
+
   if (users.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6">${emptyState('fa-users', 'No users yet', 'Invite your first teammate and they will show up here.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6">${roster.users.length === 0
+      ? emptyState('fa-users', 'No users yet', 'Invite your first teammate and they will show up here.')
+      : emptyState('fa-magnifying-glass', 'Nobody matches', 'Try a different name, or another branch.')}</td></tr>`;
     return;
   }
   tbody.innerHTML = '';
   users.forEach((u) => {
     const tr = document.createElement('tr');
+    if (!u.is_active) tr.className = 'inactive';
     const roleOptions = roles.map((r) => `<option value="${r.id}" ${r.name === u.roles?.name ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
     // Match on id, not full_name — two teammates with the same name used to
     // select the wrong row (and the right one looked unset).
-    const managerOptions = `<option value="">None</option>` + managers.map((m) => `<option value="${m.id}" ${m.id === u.reporting_manager_id ? 'selected' : ''}>${escapeHtml(managerLabel(m))}</option>`).join('');
+    const managerOptions = `<option value="">None</option>` + managers
+      .filter((m) => m.id !== u.id)
+      .map((m) => `<option value="${m.id}" ${m.id === u.reporting_manager_id ? 'selected' : ''}>${escapeHtml(managerLabel(m))}</option>`).join('');
+
+    // Team follows manager (trg_users_inherit_team, deployment/066), so for
+    // most people it is a fact to read, not a field to set. Only a Manager —
+    // who can head a team — gets the picker.
+    const team = teamOf(u);
+    const isLead = team?.lead_user_id === u.id;
     const isManager = u.roles?.name === 'Manager';
     const teamCell = isManager
-      ? `<select class="inline-select" data-team-for="${u.id}"><option value="">None</option>${teams.map((t) => `<option value="${t.id}" ${t.id === u.team_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>`
-      : '<span style="color:var(--ink-500);">–</span>';
+      ? `<select class="inline-select" data-team-for="${u.id}"><option value="">None</option>${teams.map((t) => `<option value="${t.id}" ${t.id === u.team_id ? 'selected' : ''}>${escapeHtml(t.branch ? `${t.branch} · ${t.name}` : t.name)}</option>`).join('')}</select>`
+      : team
+        ? `<span class="team-chip">${escapeHtml(team.branch || team.name)}</span>${team.branch ? `<span class="team-sub">${escapeHtml(team.name)}</span>` : ''}`
+        : '<span class="team-none" title="Set a reporting manager and the team follows">No branch</span>';
+
     tr.innerHTML = `
-      <td class="name-cell">${escapeHtml(u.full_name)}<div style="font-size:12px;color:var(--ink-500);font-weight:400;">${escapeHtml(u.email)}</div></td>
+      <td class="name-cell"><div class="person">${escapeHtml(u.full_name)}${isLead ? ' <span class="lead-badge" title="Heads this branch">Branch lead</span>' : ''}</div><div class="person-email">${escapeHtml(u.email)}</div></td>
       <td><select class="inline-select" data-role-for="${u.id}">${roleOptions}</select></td>
       <td><select class="inline-select" data-manager-for="${u.id}">${managerOptions}</select></td>
-      <td>${teamCell}</td>
+      <td class="team-cell">${teamCell}</td>
       <td><span class="badge ${u.is_active ? 'badge-success' : 'badge-neutral'}">${u.is_active ? 'Active' : 'Deactivated'}</span></td>
       <td class="row-actions">${waButton({ fullName: u.full_name, email: u.email, phone: u.phone, roleName: u.roles?.name, pending: false, active: u.is_active })}<button class="row-action-btn ${u.is_active ? 'danger' : ''}" data-toggle-active="${u.id}" data-active="${u.is_active}">${u.is_active ? 'Deactivate' : 'Reactivate'}</button>${removeButton(u, blockers.get(u.id), currentUserProfile)}</td>
     `;
@@ -536,6 +600,11 @@ async function bootstrap() {
     initInviteModal();
     initBulkInviteModal();
     if (isAdmin) {
+      let rosterDebounce;
+      document.getElementById('rosterSearch').addEventListener('input', (e) => {
+        clearTimeout(rosterDebounce);
+        rosterDebounce = setTimeout(() => { roster.search = e.target.value.trim(); renderRoster(); }, 120);
+      });
       await Promise.all([loadUsers(), loadInvitations()]);
     }
   } catch (err) {

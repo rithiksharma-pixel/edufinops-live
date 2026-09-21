@@ -18,7 +18,7 @@ export async function getAllUsers() {
 }
 
 export async function getTeams() {
-  const { data, error } = await supabase.from('teams').select('id, name').eq('is_deleted', false).order('name');
+  const { data, error } = await supabase.from('teams').select('id, name, branch, lead_user_id').eq('is_deleted', false).order('name');
   if (error) throw error;
   return data;
 }

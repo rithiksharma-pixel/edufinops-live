@@ -1,4 +1,4 @@
-.page { max-width: 1000px; margin: 0 auto; padding: 32px 28px 60px; }
+.page { max-width: 1240px; margin: 0 auto; padding: 32px 28px 60px; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
 .page-header h1 { font-size: 22px; font-weight: 500; margin: 0 0 4px; }
 .subtitle { margin: 0; color: var(--ink-500); font-size: 14px; }
@@ -13,7 +13,7 @@
 .data-table tbody tr:hover { background: var(--bg-hover); }
 .empty-state { text-align: center; color: var(--ink-500); padding: 28px !important; }
 .name-cell { font-weight: 500; color: var(--ink-900); }
-.inline-select { padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; background: var(--bg-surface); }
+.inline-select { padding: 6px 28px 6px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; background-color: var(--bg-surface); color: var(--ink-900); width: 100%; max-width: 210px; text-overflow: ellipsis; }
 .row-action-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--accent); padding: 4px 8px; transition: color 0.12s ease; }
 .row-action-btn.danger { color: var(--danger); }
 .btn:active { transform: translateY(1px); }
@@ -55,3 +55,40 @@
 }
 .wa-link:hover { text-decoration: underline; }
 .wa-link i { font-size: 13px; }
+
+/* ---------- Roster ---------- */
+.roster-toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.roster-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.roster-tab { background: none; border: 0; cursor: pointer; border-radius: var(--radius-sm); padding: 7px 11px; font: 500 13px/1 inherit; color: var(--ink-500); display: inline-flex; align-items: center; gap: 7px; }
+.roster-tab:hover { background: var(--bg-hover); color: var(--ink-700); }
+.roster-tab.on { background: var(--bg-hover); color: var(--ink-900); }
+.roster-tab .n { font: 600 11px/1 'IBM Plex Mono', monospace; padding: 3px 6px; border-radius: 999px; background: var(--paper-sunken); color: var(--ink-700); }
+.roster-tab.alert .n { background: var(--warning-soft); color: var(--warning-soft-ink); }
+.roster-search { margin-left: auto; flex: 0 1 260px; min-width: 180px; padding: 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--ink-900); font: inherit; font-size: 13px; }
+.roster-foot { padding: 10px 16px; font-size: 12.5px; color: var(--ink-500); border-top: 1px solid var(--border); }
+
+/* Fixed layout so the columns share the width instead of the widest
+   dropdown pushing the table past the card and hiding the names. */
+.roster-table { table-layout: fixed; }
+.roster-table th:nth-child(1) { width: 22%; }
+.roster-table th:nth-child(2) { width: 15%; }
+.roster-table th:nth-child(3) { width: 18%; }
+.roster-table th:nth-child(4) { width: 14%; }
+.roster-table th:nth-child(5) { width: 9%; }
+.roster-table th.actions-col { width: 22%; }
+.roster-table td, .roster-table th { padding-left: 14px; padding-right: 14px; vertical-align: middle; }
+.roster-table .person { font-weight: 600; color: var(--ink-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-table .person-email { font-size: 12px; color: var(--ink-500); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.roster-table tr.inactive td { opacity: .6; }
+.lead-badge { font: 600 10px/1 'IBM Plex Mono', monospace; letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-soft-ink); vertical-align: 2px; }
+.team-cell { font-size: 13px; }
+.team-chip { display: inline-block; font-weight: 600; color: var(--ink-900); }
+.team-sub { display: block; font-size: 11.5px; color: var(--ink-500); margin-top: 2px; }
+.team-none { font-size: 12.5px; color: var(--warning); }
+.roster-table .row-actions { white-space: nowrap; text-align: right; }
+.roster-table .row-action-btn { padding: 4px 6px; }
+
+@media (max-width: 1100px) {
+  .roster-table { table-layout: auto; }
+  .roster-table .person, .roster-table .person-email { white-space: normal; }
+}

@@ -30,13 +30,17 @@
     </header>
 
     <section class="table-card">
-      <h2 class="section-title">Active team</h2>
-      <table class="data-table">
+      <div class="roster-toolbar">
+        <div class="roster-tabs" id="rosterTabs" role="tablist"></div>
+        <input type="search" id="rosterSearch" class="roster-search" placeholder="Search name or email" />
+      </div>
+      <table class="data-table roster-table">
         <thead>
-          <tr><th>Name</th><th>Role</th><th>Reporting manager</th><th>Team</th><th>Status</th><th></th></tr>
+          <tr><th>Person</th><th>Role</th><th>Reports to</th><th>Branch · team</th><th>Status</th><th class="actions-col"></th></tr>
         </thead>
         <tbody id="usersTableBody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
       </table>
+      <div class="roster-foot" id="rosterFoot"></div>
     </section>
 
     <section class="table-card" style="margin-top:24px;">
