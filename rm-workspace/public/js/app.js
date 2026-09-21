@@ -16,6 +16,7 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
+import { attachDuplicatePhoneCheck } from '../../../shared/js/duplicatePhone.js';
 import { supabase } from './config/supabaseClient.js';
 
 let currentUser;
@@ -448,6 +449,7 @@ function initLeadModal() {
   async function open() {
     errorEl.textContent = '';
     form.reset();
+    dupCheck.reset();
     if (sourceSelect.options.length <= 0) {
       leadSources = await getLeadSources();
       sourceSelect.innerHTML = leadSources.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
@@ -464,6 +466,14 @@ function initLeadModal() {
   }
   function close() { overlay.hidden = true; }
   window.__closeLeadModal = close;
+
+  // Warns, before saving, when this number is already on another lead;
+  // "Open" swaps the form for that lead's drawer.
+  const dupCheck = attachDuplicatePhoneCheck({
+    input: document.getElementById('f_rm_student_phone'),
+    supabase,
+    onOpen: (leadId) => { close(); leadDrawer.open(leadId); },
+  });
 
   document.getElementById('btnNewLead').addEventListener('click', open);
   document.getElementById('btnNewLeadList').addEventListener('click', open);

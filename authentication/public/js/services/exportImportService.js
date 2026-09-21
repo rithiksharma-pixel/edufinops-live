@@ -122,16 +122,25 @@ export function downloadCsv(csvText, filename) {
 const VALID_LOAN_TYPES = ['Collateral', 'Non Collateral'];
 
 /**
- * Only student_phone is truly required — every other column is optional,
- * for HISTORICAL migration of leads from another system where not every
- * field is known:
+ * A NEW lead needs student_phone, source_name and loan_amount_requested.
+ * These used to be optional, with a blank source becoming "Unknown": that
+ * is how 5,285 leads (39% of the book) ended up with no source. The
+ * database now refuses a new lead without them (deployment/067), so the
+ * import checks them up front and reports the row instead of failing it
+ * halfway through the commit. On an UPDATE row every column stays optional,
+ * which is how the old "Unknown" leads get their real source: re-import
+ * them by phone with source_name filled in.
  *   - student_name: blank on a new lead defaults to the phone number as
  *     a placeholder (the database itself requires some name).
- *   - source_name: current pipeline lead source (must match an existing
- *     lead_sources.name exactly). Blank on a new lead defaults to "Unknown".
- *   - loan_amount_requested: blank = unset.
- *   - stage_name: current pipeline stage (must match an existing
- *     lead_stages.name exactly). Blank = the opening stage, same as before.
+ *   - source_name: must match an ACTIVE lead source exactly. "Unknown" is
+ *     not accepted.
+ *   - loan_amount_requested: more than zero. Required on a new lead.
+ *   - stage_name: must match an existing lead stage. Blank = the opening
+ *     stage. "Lead Lost" needs lost_reason (matching a lead_lost_reasons
+ *     name). Login and later stages are refused: those follow the bank case,
+ *     so a lead set to Login by hand has no bank behind it — which is how
+ *     3,922 imported logins ended up with no bank case at all.
+ *   - lost_reason: required with stage_name "Lead Lost", ignored otherwise.
  *   - assigned_rm_name: the RM this lead is currently assigned to
  *     (resolved to users.id by full name — must be an active user with the
  *     Relationship Manager role). Blank = unassigned.
@@ -153,8 +162,8 @@ export function importTemplateCsv() {
     {
       student_name: 'Jane Doe', student_phone: '+91 98765 43210', student_email: 'jane@example.com',
       course_name: 'MS Computer Science', university_name: 'Example University', destination_country: 'USA',
-      loan_amount_requested: 2500000, source_name: 'Direct Website Inquiry',
-      stage_name: 'Documents Received', assigned_rm_name: 'Priya Sharma', created_date: '2025-03-14',
+      loan_amount_requested: 2500000, source_name: 'Existing Customer Referral',
+      stage_name: 'Lead Qualified', lost_reason: '', assigned_rm_name: 'Priya Sharma', created_date: '2025-03-14',
       loan_type: 'Non Collateral', consultancy_name: '', consultancy_other_name: '',
     },
   ]);
@@ -214,21 +223,23 @@ const resolveConsultancyName = (nameRaw, consultancies) => {
  * leaves that field untouched on the existing lead (never nulls it out
  * from a sparse re-export). No match becomes an INSERT row — every column
  * there is optional too now, with sensible defaults for the two the
- * database itself requires (student_name, source_name — see above).
+ * database itself requires (student_name — see above).
  */
 export async function parseLeadsCsv(file, currentUserId) {
   // existingLeads and consultancies both need paging — the phone-dedup and
   // fuzzy-consultancy-match must see EVERY existing row, or a re-import
   // silently duplicates leads past the 1000th and fuzzy-matches against a
   // truncated list. Small lookups (sources/stages/rms) stay single-shot.
-  const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, consultancies, existingLeads] = await Promise.all([
-    supabase.from('lead_sources').select('id, name').eq('is_deleted', false),
+  const [{ data: sources, error: sourcesError }, { data: stages, error: stagesError }, { data: rms, error: rmsError }, consultancies, existingLeads, { data: lostReasons, error: lostReasonsError }] = await Promise.all([
+    supabase.from('lead_sources').select('id, name, is_active').eq('is_deleted', false),
     supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false),
     fetchAllResult(() => supabase.from('users').select('id, email, full_name, roles(name)').eq('is_deleted', false).eq('is_active', true)),
     fetchAllRows('consultancies', 'id, name'),
     fetchAllRows('leads', 'id, student_phone'),
+    supabase.from('lead_lost_reasons').select('id, name'),
   ]);
   if (sourcesError) throw sourcesError;
+  if (lostReasonsError) throw lostReasonsError;
   if (stagesError) throw stagesError;
   if (rmsError) throw rmsError;
   const openingStage = stages.reduce((min, s) => (s.sequence_order < min.sequence_order ? s : min), stages[0]);
@@ -255,13 +266,20 @@ export async function parseLeadsCsv(file, currentUserId) {
             if (Number.isNaN(amount) || amount <= 0) { errors.push(`Row ${rowNum}: invalid loan_amount_requested`); return; }
           }
 
+          if (mode === 'insert' && amount === undefined) {
+            errors.push(`Row ${rowNum}: loan_amount_requested is required for a new lead`); return;
+          }
+
           const sourceNameRaw = row.source_name?.trim();
           let source = null;
           if (sourceNameRaw) {
             source = sources.find((s) => s.name.toLowerCase() === sourceNameRaw.toLowerCase());
             if (!source) { errors.push(`Row ${rowNum}: unknown source_name "${row.source_name}"`); return; }
+            if (!source.is_active || source.name === 'Unknown') {
+              errors.push(`Row ${rowNum}: "${source.name}" can no longer be used as a source — give the real one`); return;
+            }
           } else if (mode === 'insert') {
-            source = sources.find((s) => s.name === 'Unknown');
+            errors.push(`Row ${rowNum}: source_name is required for a new lead`); return;
           }
 
           let rowHasError = false;
@@ -270,10 +288,21 @@ export async function parseLeadsCsv(file, currentUserId) {
           // left unchanged on update if blank.
           let stageId = mode === 'insert' ? openingStage.id : undefined;
           const stageName = row.stage_name?.trim();
+          let lostReasonId;
           if (stageName) {
             const stage = stages.find((s) => s.name.toLowerCase() === stageName.toLowerCase());
             if (!stage) { errors.push(`Row ${rowNum}: unknown stage_name "${stageName}"`); rowHasError = true; }
-            else stageId = stage.id;
+            else if (stage.name === 'Lead Lost') {
+              const reasonRaw = row.lost_reason?.trim();
+              const reason = reasonRaw && lostReasons.find((r) => r.name.toLowerCase() === reasonRaw.toLowerCase());
+              if (!reason) {
+                errors.push(`Row ${rowNum}: stage_name "Lead Lost" needs a lost_reason (one of: ${lostReasons.map((r) => r.name).join(', ')})`);
+                rowHasError = true;
+              } else { stageId = stage.id; lostReasonId = reason.id; }
+            } else if (stage.sequence_order >= 40) {
+              errors.push(`Row ${rowNum}: stage_name "${stage.name}" can't be set by import — Login and later follow the lead's bank case. Import the lead, then add its bank case`);
+              rowHasError = true;
+            } else stageId = stage.id;
           }
 
           // assigned_rm_name — optional, must be an active Relationship Manager.
@@ -349,6 +378,7 @@ export async function parseLeadsCsv(file, currentUserId) {
             if (amount !== undefined) patch.loan_amount_requested = amount;
             if (source) patch.lead_source_id = source.id;
             if (stageId !== undefined) patch.current_stage_id = stageId;
+            if (lostReasonId !== undefined) patch.lost_reason_id = lostReasonId;
             if (assignedRmId !== undefined) patch.assigned_rm_id = assignedRmId;
             if (loanType !== undefined) patch.loan_type = loanType;
             if (consultancyId !== undefined) patch.consultancy_id = consultancyId;
@@ -365,6 +395,7 @@ export async function parseLeadsCsv(file, currentUserId) {
               loan_amount_requested: amount,
               lead_source_id: source.id,
               current_stage_id: stageId,
+              lost_reason_id: lostReasonId ?? null,
               assigned_rm_id: assignedRmId,
               loan_type: loanType,
               consultancy_id: consultancyId,

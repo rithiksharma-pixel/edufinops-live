@@ -3,6 +3,8 @@
 // =========================================================
 import { validateLeadForm } from '../utils/validation.js';
 import { createLead } from '../services/leadService.js';
+import { attachDuplicatePhoneCheck } from '../../../../shared/js/duplicatePhone.js';
+import { supabase } from '../config/supabaseClient.js';
 import { getLeadSources, getLeadStages, getConsultancies } from '../services/lookupService.js';
 
 const OTHER_CONSULTANCY_VALUE = '__other__';
@@ -18,6 +20,8 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
   const consultancySelect = document.getElementById('f_consultancy_id');
   const consultancyOtherInput = document.getElementById('f_consultancy_other_name');
   const bdNameField = document.getElementById('bdNameField');
+  // Warns, before saving, when this number is already on another lead.
+  const dupCheck = attachDuplicatePhoneCheck({ input: document.getElementById('f_student_phone'), supabase });
   const bdNameInput = document.getElementById('f_bd_name');
 
   let sources = [];
@@ -69,6 +73,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
     if (window.__closeLeadDrawer) window.__closeLeadDrawer();
     clearErrors();
     form.reset();
+    dupCheck.reset();
     if (sourceSelect.options.length <= 0) {
       sources = await getLeadSources();
       sourceSelect.innerHTML = sources
