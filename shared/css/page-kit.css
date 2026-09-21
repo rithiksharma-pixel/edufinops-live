@@ -149,3 +149,22 @@
 .pp-task.done .pp-task-title { text-decoration: line-through; color: var(--ink-500); }
 .pp-task-meta { font-size: 11.5px; color: var(--ink-500); margin-top: 2px; }
 .pp-task-meta.late { color: var(--danger); }
+
+/* ---------- Performance by source and branch (orgPerformanceView.js) ---------- */
+.org-perf-sub { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px 8px; }
+.org-perf-sub h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink-900); }
+.org-perf-sub p { margin: 3px 0 0; font-size: 12px; color: var(--ink-500); }
+.org-perf-select { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--ink-900); font: inherit; font-size: 13px; }
+.org-perf-table td { white-space: nowrap; }
+.org-perf-table tr.is-total td { border-top: 1.5px solid var(--ink-300); background: var(--paper-sunken); }
+.org-perf-table tr.is-gap .pp-name { color: var(--warning-soft-ink); }
+.org-perf-note { margin: 0; padding: 10px 16px 14px; font-size: 12px; color: var(--warning-soft-ink); }
+.org-perf-table tr.lvl-branch { cursor: pointer; background: var(--paper-sunken); }
+.org-perf-table tr.lvl-branch td { border-top: 1px solid var(--border); }
+.org-perf-table tr.lvl-branch .pp-sub { display: inline; margin-left: 8px; }
+.org-perf-table tr.lvl-team { cursor: pointer; }
+.org-perf-table tr.lvl-team td:first-child { padding-left: 34px; font-weight: 500; color: var(--ink-900); }
+.org-perf-table tr.lvl-rm td:first-child { padding-left: 58px; color: var(--ink-700); }
+.org-perf-table tr.lvl-rm { cursor: default; }
+.org-perf-table .lvl-caret { width: 14px; color: var(--ink-500); font-size: 11px; margin-right: 6px; }
+.pp-sub-inline { font-size: 11.5px; color: var(--ink-500); font-weight: 400; margin-left: 6px; }

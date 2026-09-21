@@ -13,6 +13,7 @@ import { initLeadDrawer } from '../../../lead-management/public/js/components/le
 import { fetchAll, fetchAllResult } from '../../../shared/js/fetchAll.js';
 import { getTatThresholds } from '../../../shared/js/tatThresholds.js';
 import { getMilestoneCounts, MILESTONES } from '../../../manager-dashboard/public/js/services/milestoneService.js';
+import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
 
 let leadDrawer;
 
@@ -27,7 +28,12 @@ let activeView = 'overview';
 async function records(table, select) { return fetchAll(() => supabase.from(table).select(select).eq('is_deleted', false)); }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
+// Mounted once; it has its own period controls and reloads itself.
+let orgPerf = null;
+
 async function loadOverview() {
+  if (!orgPerf) orgPerf = mountOrgPerformance({ host: $('orgPerf'), supabase });
+  else orgPerf.reload();
   const [leads, deals, docs, users, overdueTasks, stageEvents, tatThresholds] = await Promise.all([
     records('leads', 'id, lead_stages(name), next_follow_up_at'),
     records('deals', 'id, total_disbursed_amount, is_on_hold, is_rejected, created_at, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)'),

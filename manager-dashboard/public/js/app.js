@@ -20,6 +20,7 @@ import { getAssignableRms } from '../../../lead-management/public/js/services/lo
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { getMilestoneCounts, getMilestoneRows } from './services/milestoneService.js';
+import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 
 let leadDrawer;
@@ -642,6 +643,7 @@ async function bootstrap() {
   });
 
   wirePerformanceControls();
+  mountOrgPerformance({ host: document.getElementById('orgPerf'), supabase });
   await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
 }
 

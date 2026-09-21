@@ -15,6 +15,8 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 // shared/css/lead-drawer.css.
 import { initLeadDrawer } from '../../../lead-management/public/js/components/leadDrawer.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
+import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
+import { supabase } from './config/supabaseClient.js';
 
 let currentUser;
 let leadDrawer;
@@ -560,6 +562,7 @@ async function bootstrap() {
   initLeadModal();
   initCallsPeriodToggle();
   initDashboardLinks();
+  mountOrgPerformance({ host: document.getElementById('rmSourcePerf'), supabase, scope: 'rm', userId: currentUser.id });
   initRowNavigation();
 
   try {
