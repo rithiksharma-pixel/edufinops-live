@@ -7,6 +7,13 @@
 // is the scoping boundary, same as milestoneService.
 // =========================================================
 import { supabase } from '../config/supabaseClient.js';
+import { fetchAll } from '../../../../shared/js/fetchAll.js';
+
+/** consultancy id -> the BD manager who owns that relationship. */
+export async function getConsultancyBdMap() {
+  const rows = await fetchAll(() => supabase.from('consultancies').select('id, bd_manager').eq('is_deleted', false));
+  return new Map(rows.map((r) => [r.id, r.bd_manager || null]));
+}
 
 /**
  * One row per consultancy for the given window (null = all time).

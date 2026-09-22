@@ -10,6 +10,7 @@ import { getMessages, sendMessage } from './services/messageService.js';
 import { validateLeadForm, formatDateTime } from './utils/validation.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { leadFunnel, leadFunnelRowsHtml } from '../../../shared/js/leadFunnel.js';
+import { renderInsights, funnelDropInsight } from '../../../shared/js/insights.js';
 
 let currentUser;
 
@@ -138,9 +139,34 @@ function renderRows() {
   document.getElementById('btnShowMore')?.addEventListener('click', () => { state.shown += PAGE; renderRows(); });
 }
 
+/** What the firm's students' progress says, in sentences. */
+function renderStudentInsights() {
+  const rows = state.rows;
+  if (rows.length < 5) { renderInsights(document.getElementById('cpInsights'), []); return; }
+  const funnel = leadFunnel(rows);
+  const login = funnel.find((f) => f.name === 'Login')?.count || 0;
+  const quiet = rows.filter(isQuiet).length;
+  const recent = rows.filter((r) => daysSince(r.created_at) <= 30).length;
+  renderInsights(document.getElementById('cpInsights'), [
+    {
+      tone: '',
+      headline: `${Math.round((login / rows.length) * 100)}% of your students reached a bank login`,
+      detail: `${fmtInt(login)} of ${fmtInt(rows.length)} referred.`,
+    },
+    funnelDropInsight(funnel, { noun: 'students' }),
+    quiet ? {
+      tone: 'warn',
+      headline: `${fmtInt(quiet)} open student${quiet === 1 ? ' has' : 's have'} had no update in ${QUIET_DAYS}+ days`,
+      detail: 'Open the "No update" tab and message the team about them.',
+    } : null,
+    { tone: '', headline: `${fmtInt(recent)} referred in the last 30 days`, detail: '' },
+  ], { title: 'What your students’ progress shows' });
+}
+
 async function refreshLeads() {
   state.rows = await listMyStudents();
   renderStats();
+  renderStudentInsights();
   renderFunnel();
   renderTabs();
   renderRows();

@@ -19,6 +19,7 @@
 // =========================================================
 import { escapeHtml } from './utils.js';
 import { emptyState } from './emptyState.js';
+import { renderInsights, topNInsight, shareInsight } from './insights.js';
 
 const PERIODS = [
   { id: 'month', label: 'This month' },
@@ -242,13 +243,87 @@ export function mountOrgPerformance({ host, supabase, scope = 'org', userId = nu
       </table></div>`;
   }
 
+  /**
+   * The sentences on top: computed from the same rows as the tables below,
+   * for the same period, so they change when the period does.
+   */
+  function insights() {
+    const rows = state.rows;
+    const sum = (list, k) => list.reduce((t, r) => t + Number(r[k] || 0), 0);
+    const logins = sum(rows, 'logins');
+    const leads = sum(rows, 'leads');
+    const bySource = rollup(rows, (r) => r.source_name, (r) => ({ label: r.source_name })).sort((a, b) => b.logins - a.logins);
+    const topSource = bySource[0];
+    const unknown = bySource.find((g) => g.label === 'Unknown');
+
+    if (mine) {
+      const known = bySource.filter((g) => g.label !== 'Unknown' && g.leads >= 10);
+      const best = [...known].sort((a, b) => b.logins / b.leads - a.logins / a.leads)[0];
+      return [
+        best && leads ? {
+          tone: 'good',
+          headline: `${best.label} is your best source`,
+          detail: `${pct(best.logins, best.leads)} of those leads reached login, against ${pct(logins, leads)} across all your leads.`,
+        } : null,
+        topSource && logins ? {
+          tone: '',
+          headline: `${pct(topSource.logins, logins)} of your logins came from ${topSource.label}`,
+          detail: `${n(topSource.logins)} of ${n(logins)} logins in this period.`,
+        } : null,
+        shareInsight({
+          part: unknown?.leads || 0, whole: leads,
+          headline: (p) => `${p} of your leads have no source recorded`,
+          detail: () => 'Add the source on those leads so your figures show what is really working.',
+        }),
+      ];
+    }
+
+    const byRm = rollup(rows.filter((r) => r.rm_id), (r) => r.rm_id, (r) => ({ label: r.rm_name }));
+    const byBranch = rollup(rows.filter((r) => r.branch), (r) => r.branch, (r) => ({ label: r.branch }))
+      .sort((a, b) => b.logins - a.logins);
+    const people = (branch) => new Set(rows.filter((r) => r.branch === branch && r.rm_id).map((r) => r.rm_id)).size;
+    const allPeople = new Set(rows.filter((r) => r.branch && r.rm_id).map((r) => r.rm_id)).size;
+    const lead = byBranch[0];
+    const referral = bySource.filter((g) => isReferral({ source_name: g.label }));
+    const refLeads = referral.reduce((t, g) => t + g.leads, 0);
+    const refLogins = referral.reduce((t, g) => t + g.logins, 0);
+
+    return [
+      topSource && logins ? {
+        tone: topSource.logins / logins >= 0.7 ? 'warn' : '',
+        headline: `${topSource.label} brings ${pct(topSource.logins, logins)} of logins`,
+        detail: topSource.logins / logins >= 0.7
+          ? 'The business rests on one source. Referrals and campaigns together are the hedge.'
+          : `${n(topSource.logins)} of ${n(logins)} logins in this period.`,
+      } : null,
+      lead && byBranch.length > 1 && allPeople ? {
+        tone: '',
+        headline: `${lead.label} does ${pct(lead.logins, sum(byBranch, 'logins'))} of branch logins`,
+        detail: `With ${pct(people(lead.label), allPeople)} of the people in a branch. ${byBranch.slice(1).map((b) => `${b.label}: ${pct(b.logins, b.leads)} lead→login`).join(' · ')} against ${pct(lead.logins, lead.leads)} in ${lead.label}.`,
+      } : null,
+      topNInsight(byRm, { value: (r) => r.logins, name: (r) => r.label, n: 5, plural: 'RMs', metric: 'logins' }),
+      refLeads >= 10 && leads ? {
+        tone: refLogins / refLeads > logins / leads ? 'good' : '',
+        headline: `Referral leads reach login ${pct(refLogins, refLeads)} of the time`,
+        detail: `Against ${pct(logins, leads)} overall, from ${n(refLeads)} referral leads.`,
+      } : null,
+      shareInsight({
+        part: unknown?.leads || 0, whole: leads,
+        headline: (p) => `${p} of leads in this period have no source`,
+        detail: () => 'Every source above reads low by that much.',
+      }),
+    ];
+  }
+
   function render() {
     const body = host.querySelector('[data-op-body]');
     body.innerHTML = `
+      <div class="insights org-perf-insights" data-op-insights hidden></div>
       <div class="org-perf-sub"><div><h4>By source</h4><p>Ranked by logins. Share shows how much of the business each source carries.</p></div></div>
       ${sourceTable()}
       ${mine ? '' : branchTable()}`;
 
+    renderInsights(body.querySelector('[data-op-insights]'), insights(), { max: 4 });
     body.querySelector('[data-op-source]')?.addEventListener('change', (e) => { state.source = e.target.value; render(); });
     body.querySelectorAll('[data-op-toggle]').forEach((tr) => tr.addEventListener('click', () => {
       const k = tr.dataset.opToggle;

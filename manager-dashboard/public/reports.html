@@ -103,6 +103,8 @@
            bar answers "how many logins in this window" without exporting. -->
       <section class="funnel-row" id="repTotals" style="margin-bottom:18px;" aria-live="polite"></section>
 
+      <section class="insights" id="repInsights" aria-live="polite" hidden></section>
+
       <!-- Every th carries data-sort; reports.js wires them generically and
            paints the active arrow, so adding a column needs no JS change. -->
       <section class="table-card" id="cardConsultancy">
@@ -112,6 +114,7 @@
             <thead>
               <tr>
                 <th data-sort="consultancy_name">Consultancy</th>
+                <th data-sort="bd_owner">BD</th>
                 <th class="num" data-sort="total_leads">Leads</th>
                 <th class="num" data-sort="login">Login</th>
                 <th data-sort="loginShare">Share of logins</th>
@@ -126,7 +129,7 @@
               </tr>
             </thead>
             <tbody id="repBody">
-              <tr><td colspan="12"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
+              <tr><td colspan="13"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>
             </tbody>
           </table>
         </div>

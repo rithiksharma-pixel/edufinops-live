@@ -13,6 +13,7 @@ import {
 } from './services/lenderDealService.js';
 import { getQueryCategories, getQueriesForDeal, raiseQuery, resolveQuery } from './services/dealQueryService.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
+import { renderInsights } from '../../../shared/js/insights.js';
 
 let currentUser;
 function formatCurrency(amount) {
@@ -176,9 +177,49 @@ function renderPipeline() {
   renderRows();
 }
 
+/** What this bank's pipeline says, in sentences, from the same rows. */
+function renderPipelineInsights() {
+  const live = pipe.rows.filter((r) => !isClosed(r));
+  if (!live.length) { renderInsights(document.getElementById('lpInsights'), []); return; }
+  const share = (a, b) => `${Math.round((a / b) * 100)}%`;
+  const byStage = {};
+  live.forEach((r) => { byStage[r.stage_name] = (byStage[r.stage_name] || 0) + 1; });
+  const [bulkStage, bulkCount] = Object.entries(byStage).sort((a, b) => b[1] - a[1])[0];
+  const past = live.filter(isPastTat);
+  const pastByStage = {};
+  past.forEach((r) => { pastByStage[r.stage_name] = (pastByStage[r.stage_name] || 0) + 1; });
+  const worst = Object.entries(pastByStage).sort((a, b) => b[1] - a[1])[0];
+  const queries = live.filter((r) => r.open_queries > 0).length;
+  const sanctioned = pipe.rows.filter((r) => Number(r.sanction_amount) > 0 && !r.is_rejected).length;
+
+  renderInsights(document.getElementById('lpInsights'), [
+    {
+      tone: bulkCount / live.length >= 0.5 ? 'warn' : '',
+      headline: `${share(bulkCount, live.length)} of live cases are at ${bulkStage}`,
+      detail: `${fmtInt(bulkCount)} of ${fmtInt(live.length)}. This is where your pipeline is waiting.`,
+    },
+    past.length ? {
+      tone: past.length / live.length >= 0.5 ? 'warn' : '',
+      headline: `${share(past.length, live.length)} of live cases are past turnaround`,
+      detail: worst ? `Most of them at ${worst[0]} (${fmtInt(worst[1])}). Needs action lists them longest-waiting first.` : '',
+    } : { tone: 'good', headline: 'No live case is past its turnaround time', detail: '' },
+    queries ? {
+      tone: 'warn',
+      headline: `${fmtInt(queries)} case${queries === 1 ? ' has' : 's have'} an open query`,
+      detail: 'A case with an unanswered query cannot move. Answer from the case’s Queries tab.',
+    } : null,
+    sanctioned ? {
+      tone: 'good',
+      headline: `${fmtInt(sanctioned)} case${sanctioned === 1 ? '' : 's'} sanctioned so far`,
+      detail: `${share(sanctioned, pipe.rows.length)} of every case shared with you.`,
+    } : null,
+  ], { title: 'What your pipeline shows' });
+}
+
 async function refreshDealsList() {
   pipe.rows = await getPipeline();
   renderStats();
+  renderPipelineInsights();
   renderPipeline();
 }
 

@@ -14,8 +14,9 @@ import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
+import { renderInsights, paretoInsight, topNInsight, outlierInsight, shareInsight } from '../../../shared/js/insights.js';
 import {
-  getConsultancyReport, getConsultancyLeads, getBdReport, getBdLeads,
+  getConsultancyReport, getConsultancyLeads, getBdReport, getBdLeads, getConsultancyBdMap,
   conversionRates, toCsv, downloadText, buildPartnerReportHtml, REPORT_DATE_FIELDS,
 } from './services/consultancyReportService.js';
 
@@ -201,10 +202,48 @@ function renderTotals(rows) {
        </div>`;
 }
 
+/**
+ * What the consultancy table says, in sentences. Computed from exactly the
+ * rows on screen, so a date range or filter changes the insights with it.
+ */
+function renderConsultancyInsights(rows) {
+  const login = (r) => Number(r.login || 0);
+  const leads = rows.reduce((s, r) => s + Number(r.total_leads || 0), 0);
+  // Partners grouped under the BD who owns them.
+  const byBd = new Map();
+  rows.forEach((r) => {
+    const k = r.bd_owner || 'No BD';
+    byBd.set(k, (byBd.get(k) || 0) + login(r));
+  });
+  const bdRows = [...byBd.entries()].filter(([k]) => k !== 'No BD').map(([name, logins]) => ({ name, logins }));
+  const dead = rows.filter((r) => Number(r.total_leads) >= 10 && !login(r));
+  const unlinkedLeads = rows.filter((r) => !r.is_linked).reduce((s, r) => s + Number(r.total_leads || 0), 0);
+
+  renderInsights(document.getElementById('repInsights'), [
+    paretoInsight(rows, { value: login, noun: 'partner', plural: 'partners', metric: 'logins' }),
+    topNInsight(bdRows, { value: (r) => r.logins, name: (r) => r.name, n: 3, plural: 'BDs', metric: 'partner logins' }),
+    outlierInsight(rows, {
+      num: login, den: (r) => r.total_leads, label: (r) => r.consultancy_name,
+      what: 'of its leads to login', denNoun: 'leads', minDen: 30,
+    }),
+    dead.length ? {
+      tone: 'warn',
+      headline: `${n(dead.length)} partner${dead.length === 1 ? ' has' : 's have'} sent 10+ leads with no login`,
+      detail: `${dead.slice(0, 3).map((r) => r.consultancy_name).join(', ')}${dead.length > 3 ? ` and ${dead.length - 3} more` : ''}. Worth a call to find out why.`,
+    } : null,
+    shareInsight({
+      part: unlinkedLeads, whole: leads,
+      headline: (p) => `${p} of leads name a partner that isn't in the system`,
+      detail: () => 'Typed as free text, so they cannot be tied to a BD or given portal access. Link them in Admin Settings.',
+    }),
+  ]);
+}
+
 function render() {
   const body = document.getElementById('repBody');
   const rows = visibleRows();
   renderTotals(rows);
+  renderConsultancyInsights(rows);
   paintSortHeaders('repTable', state.sort.consultancy);
 
   document.getElementById('repCount').innerHTML =
@@ -215,7 +254,7 @@ function render() {
     + '</span>';
 
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="12">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the consultancy, the date range, or the minimum-leads filter.')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="13">${emptyState('fa-handshake', 'No consultancies match', 'Try clearing the consultancy, the date range, or the minimum-leads filter.')}</td></tr>`;
     return;
   }
 
@@ -228,6 +267,7 @@ function render() {
     return `
       <tr data-i="${i}" class="rep-row">
         <td><div class="student-name">${escapeHtml(r.consultancy_name)}${freetext}</div></td>
+        <td>${r.bd_owner ? escapeHtml(r.bd_owner) : '<span class="muted">No BD</span>'}</td>
         <td class="num">${n(r.total_leads)}</td>
         <td class="num">${n(r.login)}</td>
         ${shareCell(r.login, totalLogins)}
@@ -263,10 +303,30 @@ function populateBdDropdown() {
   sel.value = state.bd;
 }
 
+function renderBdInsights(rows) {
+  const named = rows.filter((r) => r.bd_manager);
+  const unattributed = rows.filter((r) => !r.bd_manager).reduce((s, r) => s + Number(r.total_leads || 0), 0);
+  const leads = rows.reduce((s, r) => s + Number(r.total_leads || 0), 0);
+  renderInsights(document.getElementById('repInsights'), [
+    topNInsight(named, { value: (r) => r.login, name: (r) => r.bd_manager, n: 3, plural: 'BDs', metric: 'logins' }),
+    paretoInsight(named, { value: (r) => r.login, noun: 'BD', plural: 'BDs', metric: 'logins' }),
+    outlierInsight(named, {
+      num: (r) => r.login, den: (r) => r.total_leads, label: (r) => r.bd_manager,
+      what: 'of leads to login', denNoun: 'leads', minDen: 50,
+    }),
+    shareInsight({
+      part: unattributed, whole: leads,
+      headline: (p) => `${p} of leads have no BD on record`,
+      detail: () => 'No BD name on the lead and none on its consultancy, so these logins count for nobody.',
+    }),
+  ]);
+}
+
 function renderBd() {
   const body = document.getElementById('bdBody');
   const rows = visibleBdRows();
   renderTotals(rows);
+  renderBdInsights(rows);
   paintSortHeaders('bdTable', state.sort.bd);
 
   document.getElementById('bdCount').innerHTML =
@@ -314,6 +374,7 @@ function renderBd() {
 
 const SUMMARY_COLUMNS = [
   { label: 'Consultancy', get: (r) => r.consultancy_name },
+  { label: 'BD manager', get: (r) => r.bd_owner || '' },
   { label: 'Has CRM record', get: (r) => (r.is_linked ? 'Yes' : 'No') },
   { label: 'Total leads', get: (r) => r.total_leads },
   { label: 'Reached Login', get: (r) => r.login },
@@ -601,7 +662,14 @@ async function load() {
   const body = document.getElementById('repBody');
   body.innerHTML = '<tr><td colspan="11"><div class="spinner-block"><span class="spinner"></span><span>Loading report…</span></div></td></tr>';
   try {
-    state.rows = await getConsultancyReport(state.from, state.to, state.dateField);
+    const [rows, bdMap] = await Promise.all([
+      getConsultancyReport(state.from, state.to, state.dateField),
+      state.bdMap ? Promise.resolve(state.bdMap) : getConsultancyBdMap(),
+    ]);
+    state.bdMap = bdMap;
+    // The BD who owns each partner relationship, so the consultancy table
+    // answers "whose partner is this" without switching tabs.
+    state.rows = rows.map((r) => ({ ...r, bd_owner: (r.consultancy_id && bdMap.get(r.consultancy_id)) || null }));
     populateConsultancyDropdown();
     render();
   } catch (err) {
