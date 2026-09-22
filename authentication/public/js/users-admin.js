@@ -46,7 +46,8 @@ let currentUserProfile = null;
 function managerLabel(m) {
   const team = teams.find((t) => t.id === m.team_id);
   const where = team?.branch || team?.name;
-  return `${m.full_name}${where ? ` (${where})` : ''}`;
+  const isLead = teams.some((t) => t.lead_user_id === m.id);
+  return `${m.full_name}${where ? ` (${where}${isLead ? ' · branch lead' : ''})` : ''}`;
 }
 
 // Which roles each inviter is allowed to hand out — mirrors invite_user()'s
@@ -332,11 +333,22 @@ function initInviteModal() {
   // already scoped to their own reporting subtree — but an Associate
   // Team Manager can't report to another Associate Team Manager, so
   // when THAT role is selected, narrow further to Manager-level choices.
+  // A branch lead can be anyone's reporting manager whatever their role:
+  // Julius heads Hyderabad as an Admin, and filtering on role alone left
+  // the whole Hyderabad branch with no manager to pick. Admins who don't
+  // lead a branch stay off the list — nobody should report to them by
+  // accident. Sorted by branch, so the two branches read as two groups.
+  const branchLeadIds = new Set(teams.map((t) => t.lead_user_id).filter(Boolean));
+  const branchOf = (m) => teams.find((t) => t.id === m.team_id)?.branch || '~';
+  const byBranch = (list) => [...list].sort((a, b) => branchOf(a).localeCompare(branchOf(b))
+    || (branchLeadIds.has(b.id) - branchLeadIds.has(a.id))
+    || a.full_name.localeCompare(b.full_name));
+
   function managerChoicesFor(selectedName) {
     if (isAdmin) {
-      return selectedName === 'Associate Team Manager'
-        ? managers.filter((m) => m.roles?.name === 'Manager')
-        : managers.filter((m) => ['Manager', 'Associate Team Manager'].includes(m.roles?.name));
+      return byBranch(selectedName === 'Associate Team Manager'
+        ? managers.filter((m) => m.roles?.name === 'Manager' || branchLeadIds.has(m.id))
+        : managers.filter((m) => ['Manager', 'Associate Team Manager'].includes(m.roles?.name) || branchLeadIds.has(m.id)));
     }
     return selectedName === 'Associate Team Manager'
       ? managers.filter((m) => m.roles?.name === 'Manager')
