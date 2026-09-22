@@ -10,6 +10,7 @@
 // a bulk edit can touch.
 // =========================================================
 import { updateLeadsBulk, BULK_EDITABLE } from '../services/leadService.js';
+import { getBdManagers } from '../services/lookupService.js';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -64,15 +65,18 @@ export function initBulkEditModal({ showToast, onDone }) {
       <input type="${f.type}" data-field="${f.key}" placeholder="Leave blank to keep as is" /></div>`;
   }
 
-  function open(leadIds) {
+  async function open(leadIds) {
     ensureOverlay();
     ids = [...leadIds];
+    let bds = [];
+    try { bds = await getBdManagers(); } catch { /* the BD field just offers nothing */ }
+    const fields = BULK_EDITABLE.map((f) => (f.dynamic === 'bd' ? { ...f, options: bds.map((b) => b.name) } : f));
     overlay.querySelector('#bulkEditBody').innerHTML = `
       <p class="empty-state" style="margin:0 0 14px;text-align:left;">
         Changing <strong>${ids.length}</strong> lead${ids.length === 1 ? '' : 's'}.
         Anything left blank stays as it is.
       </p>
-      <div class="form-grid">${BULK_EDITABLE.map(fieldHtml).join('')}</div>`;
+      <div class="form-grid">${fields.map(fieldHtml).join('')}</div>`;
     overlay.hidden = false;
   }
 

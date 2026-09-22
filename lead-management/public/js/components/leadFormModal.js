@@ -5,7 +5,7 @@ import { validateLeadForm } from '../utils/validation.js';
 import { createLead } from '../services/leadService.js';
 import { attachDuplicatePhoneCheck } from '../../../../shared/js/duplicatePhone.js';
 import { supabase } from '../config/supabaseClient.js';
-import { getLeadSources, getLeadStages, getConsultancies } from '../services/lookupService.js';
+import { getLeadSources, getLeadStages, getConsultancies, getBdManagers } from '../services/lookupService.js';
 
 const OTHER_CONSULTANCY_VALUE = '__other__';
 
@@ -64,7 +64,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
     // overwrites a name already typed, since the person who sourced this
     // particular lead can differ from the account owner.
     const picked = consultancies.find((c) => c.id === consultancySelect.value);
-    if (picked?.bd_manager && !bdNameInput.value.trim()) {
+    if (picked?.bd_manager && !bdNameInput.value) {
       bdNameInput.value = picked.bd_manager;
     }
   });
@@ -74,6 +74,11 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
     clearErrors();
     form.reset();
     dupCheck.reset();
+    if (bdNameInput.options.length <= 1) {
+      const bds = await getBdManagers();
+      bdNameInput.innerHTML = '<option value="">Select the BD…</option>'
+        + bds.map((b) => `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`).join('');
+    }
     if (sourceSelect.options.length <= 0) {
       sources = await getLeadSources();
       sourceSelect.innerHTML = sources
@@ -149,7 +154,7 @@ export function initLeadFormModal({ onLeadCreated, showToast, currentUser }) {
         consultancyId = consultancySelect.value;
       }
       if (!bdNameInput.value.trim()) {
-        showErrors({ bd_name: 'Enter the BD name for this lead.' });
+        showErrors({ bd_name: 'Choose the BD for this lead.' });
         return;
       }
     }

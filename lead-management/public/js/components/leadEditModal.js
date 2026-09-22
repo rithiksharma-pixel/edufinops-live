@@ -15,7 +15,7 @@
 //     whenever a figure has already been recorded.
 // =========================================================
 import { updateLead, setLeadStage, getLeadDetail } from '../services/leadService.js';
-import { getLeadSources, getLeadStages, getConsultancies } from '../services/lookupService.js';
+import { getLeadSources, getLeadStages, getConsultancies, getBdManagers } from '../services/lookupService.js';
 
 const OTHER_CONSULTANCY_VALUE = '__other__';
 const DISBURSED_STAGE = 'Disbursement';
@@ -86,6 +86,7 @@ export function initLeadEditModal({ showToast, currentUser, onLeadUpdated }) {
   let sources = [];
   let stages = [];
   let consultancies = [];
+  let bdManagers = [];
   let lead = null;
 
   const isAdmin = currentUser.role === 'Admin';
@@ -180,6 +181,11 @@ export function initLeadEditModal({ showToast, currentUser, onLeadUpdated }) {
     const sourceOpts = sources
       .map((s) => `<option value="${s.id}" ${s.id === lead.lead_source_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`)
       .join('');
+    // The BD list, plus the lead's current value if it is somehow not on it,
+    // so opening the form never silently changes a BD.
+    const bdNames = bdManagers.map((b) => b.name);
+    if (lead.bd_name && !bdNames.includes(lead.bd_name)) bdNames.unshift(lead.bd_name);
+    const bdOpts = bdNames.map((n) => `<option value="${escapeHtml(n)}" ${n === lead.bd_name ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('');
     const consOpts = consultancies
       .map((c) => `<option value="${c.id}" ${c.id === lead.consultancy_id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`)
       .join('');
@@ -205,7 +211,7 @@ export function initLeadEditModal({ showToast, currentUser, onLeadUpdated }) {
       '</div>',
       '<div class="form-field">',
       '  <label>BD name</label>',
-      `  <input type="text" data-field="bd_name" data-type="text" value="${escapeHtml(lead.bd_name ?? '')}" />`,
+      `  <select data-field="bd_name"><option value="">Not set</option>${bdOpts}</select>`,
       '</div>',
       '<div class="form-field">',
       '  <label>Priority</label>',
@@ -355,12 +361,14 @@ export function initLeadEditModal({ showToast, currentUser, onLeadUpdated }) {
     overlay.hidden = false;
 
     try {
-      const [detail, srcs, stgs, cons] = await Promise.all([
+      const [detail, srcs, stgs, cons, bds] = await Promise.all([
         getLeadDetail(leadId),
         sources.length ? sources : getLeadSources(),
         stages.length ? stages : getLeadStages(),
         consultancies.length ? consultancies : getConsultancies(),
+        bdManagers.length ? bdManagers : getBdManagers(),
       ]);
+      bdManagers = bds;
       lead = detail.lead;
       sources = srcs;
       stages = stgs;

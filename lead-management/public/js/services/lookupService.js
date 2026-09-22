@@ -152,6 +152,18 @@ export async function getLenders() {
 
 let consultancyCache = null;
 
+let bdCache = null;
+/** The Admin-managed BD list (deployment/069). The database refuses any BD
+ *  name not on it, so every BD field picks from this rather than free text. */
+export async function getBdManagers() {
+  if (bdCache) return bdCache;
+  const { data, error } = await supabase
+    .from('bd_managers').select('id, name').eq('is_active', true).eq('is_deleted', false).order('name');
+  if (error) throw error;
+  bdCache = data;
+  return data;
+}
+
 /** Admin-managed list for the "Consultancy name" field shown when Lead Source = BD Partnership. */
 export async function getConsultancies() {
   if (consultancyCache) return consultancyCache;

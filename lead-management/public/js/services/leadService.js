@@ -596,7 +596,8 @@ export async function updateLeadsBulk(leadIds, patch) {
 /** Fields the bulk editor offers, matching the RPC's whitelist. */
 export const BULK_EDITABLE = [
   { key: 'priority', label: 'Priority', type: 'select', options: ['Urgent', 'High', 'Normal', 'Low'] },
-  { key: 'bd_name', label: 'BD name', type: 'text' },
+  // Options are the live BD list, filled in by the bulk editor when it opens.
+  { key: 'bd_name', label: 'BD name', type: 'select', options: [], dynamic: 'bd' },
   { key: 'destination_country', label: 'Destination country', type: 'text' },
   { key: 'intake_month', label: 'Intake month', type: 'select',
     options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] },

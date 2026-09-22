@@ -509,6 +509,19 @@ async function bulkUpsertConsultancies() {
   }
   const byName = new Map(existing.map((c) => [c.name.toLowerCase(), c]));
 
+  // The database only accepts a BD on the list (069). Resolve each pasted
+  // BD here first — same matching rule, case and punctuation ignored, known
+  // misspellings accepted — so one unknown name is reported on its line
+  // instead of failing the whole batch.
+  const [{ data: bdList, error: bdErr }, { data: aliases, error: aliasErr }] = await Promise.all([
+    supabase.from('bd_managers').select('id,name').eq('is_deleted', false),
+    supabase.from('bd_manager_aliases').select('alias,bd_manager_id'),
+  ]);
+  if (bdErr || aliasErr) return showBulkResult(resultId, (bdErr || aliasErr).message, true);
+  const matchKey = (v) => String(v || '').toLowerCase().replace(/[^a-z]/g, '');
+  const bdByKey = new Map(bdList.map((b) => [matchKey(b.name), b.name]));
+  (aliases || []).forEach((a) => { const b = bdList.find((x) => x.id === a.bd_manager_id); if (b) bdByKey.set(a.alias, b.name); });
+
   const { data: auth } = await supabase.auth.getUser();
   const inserts = [];
   const failures = [];
@@ -519,8 +532,10 @@ async function bulkUpsertConsultancies() {
   for (const line of lines) {
     const idx = line.indexOf(',');
     const name = (idx === -1 ? line : line.slice(0, idx)).trim();
-    const manager = idx === -1 ? '' : line.slice(idx + 1).trim();
+    const managerRaw = idx === -1 ? '' : line.slice(idx + 1).trim();
     if (!name) { failures.push(`"${line}" — missing a name`); continue; }
+    const manager = managerRaw ? bdByKey.get(matchKey(managerRaw)) : '';
+    if (managerRaw && !manager) { failures.push(`${name} — "${managerRaw}" is not on the BD list (add them under BD managers first)`); continue; }
     const key = name.toLowerCase();
     if (seenInPaste.has(key)) { skipped++; continue; }
     seenInPaste.add(key);
@@ -695,7 +710,7 @@ function renderBranches() {
 async function loadSettings() {
   wireSettingsChrome();
 
-  const [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows, pipeline] = await Promise.all([
+  const [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows, pipeline, bds, bdLeadRows] = await Promise.all([
     supabase.from('document_types').select('id,name,applies_to,category,is_required').eq('is_deleted', false).order('sequence_order'),
     supabase.from('lenders').select('id,name').eq('is_deleted', false).order('name'),
     fetchAllResult(() => supabase.from('lender_branches').select('id,name,lenders(name)').eq('is_deleted', false).order('name')),
@@ -707,8 +722,33 @@ async function loadSettings() {
     // Real days-at-stage for every open case, so each limit can be read
     // against what actually happens. Admins get every bank's cases here.
     fetchAllResult(() => supabase.rpc('lender_pipeline'), { tiebreak: 'deal_id' }),
+    supabase.from('bd_managers').select('id,name,is_active').eq('is_deleted', false).order('name'),
+    fetchAllResult(() => supabase.from('leads').select('id,bd_name').eq('is_deleted', false).not('bd_name', 'is', null)),
   ]);
-  for (const r of [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows]) if (r.error) throw r.error;
+  for (const r of [docs, lenders, branches, consultancies, teams, users, dealStages, tatRows, bds, bdLeadRows]) if (r.error) throw r.error;
+
+  // ---- BD managers (deployment/069)
+  const consPerBd = {}; consultancies.data.forEach((c) => { if (c.bd_manager) consPerBd[c.bd_manager] = (consPerBd[c.bd_manager] || 0) + 1; });
+  const leadsPerBd = {}; bdLeadRows.data.forEach((l) => { leadsPerBd[l.bd_name] = (leadsPerBd[l.bd_name] || 0) + 1; });
+  $('setCountBds').textContent = bds.data.filter((b) => b.is_active).length;
+  $('bdManagersList').innerHTML = bds.data.length
+    ? [...bds.data].sort((a, b) => (b.is_active - a.is_active) || (consPerBd[b.name] || 0) - (consPerBd[a.name] || 0))
+      .map((b) => `<tr>
+        <td class="strong">${esc(b.name)}</td>
+        <td class="r mono">${(consPerBd[b.name] || 0).toLocaleString('en-IN')}</td>
+        <td class="r mono">${(leadsPerBd[b.name] || 0).toLocaleString('en-IN')}</td>
+        <td><label class="set-check"><input type="checkbox" data-bd-active="${b.id}" ${b.is_active ? 'checked' : ''} /> ${b.is_active ? 'Can be picked' : 'Turned off'}</label></td>
+      </tr>`).join('')
+    : `<tr><td colspan="4">${emptyState('fa-user-tie', 'No BDs yet', 'Add one above.')}</td></tr>`;
+  document.querySelectorAll('[data-bd-active]').forEach((cb) => cb.addEventListener('change', async () => {
+    const { data: auth } = await supabase.auth.getUser();
+    const { error: bdError } = await supabase.from('bd_managers').update({ is_active: cb.checked, updated_by: auth.user.id, updated_at: new Date().toISOString() }).eq('id', cb.dataset.bdActive);
+    if (bdError) { cb.checked = !cb.checked; return showToast(bdError.message, true); }
+    showToast(cb.checked ? 'BD can be picked again.' : 'BD turned off. Their history is kept.');
+    loadSettings();
+  }));
+  $('consultancyBdSelect').innerHTML = '<option value="">No BD yet</option>'
+    + bds.data.filter((b) => b.is_active).map((b) => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
 
   // ---- Consultancies
   settings.consultancies = consultancies.data;
@@ -801,6 +841,17 @@ document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEven
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
 $('lenderBranchForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('lender_branches').insert({ lender_id: form.get('lender_id'), name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Branch added.'); loadSettings(); });
+$('bdManagerForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = new FormData(event.target).get('name').trim().replace(/\s+/g, ' ');
+  if (!name) return;
+  const { data: auth } = await supabase.auth.getUser();
+  const { error } = await supabase.from('bd_managers').insert({ name, created_by: auth.user.id, updated_by: auth.user.id });
+  if (error) return showToast(error.code === '23505' ? `${name} is already on the list.` : error.message, true);
+  event.target.reset();
+  showToast(`${name} added. They can now be picked as a BD.`);
+  loadSettings();
+});
 $('consultancyForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('consultancies').insert({ name: form.get('name').trim(), bd_manager: (form.get('bd_manager') || '').trim() || null, created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Consultancy added.'); loadSettings(); });
 $('teamForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('teams').insert({ name: form.get('name').trim(), created_by: auth.user.id, updated_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Team added.'); loadSettings(); });
 initBulkAdd();
