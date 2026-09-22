@@ -325,7 +325,13 @@ function initInviteModal() {
   const allowedRoleNames = INVITABLE_ROLES_BY_INVITER[currentUserProfile?.role] ?? [];
   const invitableRoles = isAdmin ? roles : roles.filter((r) => allowedRoleNames.includes(r.name));
 
-  roleSelect.innerHTML = invitableRoles.map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+  // No default role. The list is alphabetical, so the first option — and the
+  // old default — was always "Admin": re-invites went out as Admin without
+  // anyone choosing it. Relationship Manager is listed first as the usual case.
+  const roleOrder = (r) => (r.name === 'Relationship Manager' ? 0 : r.name === 'Admin' ? 2 : 1);
+  roleSelect.innerHTML = '<option value="" data-name="">Choose a role…</option>'
+    + [...invitableRoles].sort((a, b) => roleOrder(a) - roleOrder(b) || a.name.localeCompare(b.name))
+      .map((r) => `<option value="${r.id}" data-name="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
   teamSelect.innerHTML = `<option value="">Select…</option>` + teams.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   lenderOrgSelect.innerHTML = `<option value="">Select…</option>` + lenders.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
 
@@ -408,6 +414,13 @@ function initInviteModal() {
       return;
     }
     const selectedRoleName = roleSelect.selectedOptions[0]?.dataset.name;
+    // Admin can see and change everything, so it is never a quiet choice.
+    if (selectedRoleName === 'Admin'
+        && !window.confirm(`Invite ${payload.full_name} as an Admin?
+
+Admins can see and change everything, including users and settings. For someone who works leads, choose Relationship Manager.`)) {
+      return;
+    }
     if (selectedRoleName === 'Lender' && (!payload.lender_organization_id || !payload.lender_branch_id)) {
       showToast('Select the lender institution and branch for this person.', true);
       return;
@@ -497,7 +510,9 @@ function initBulkInviteModal() {
   const allowedRoleNames = INVITABLE_ROLES_BY_INVITER[currentUserProfile?.role] ?? [];
   const bulkRoles = (isAdmin ? roles : roles.filter((r) => allowedRoleNames.includes(r.name)))
     .filter((r) => r.name !== 'Lender');
-  roleSelect.innerHTML = bulkRoles.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
+  roleSelect.innerHTML = '<option value="">Choose a role…</option>'
+    + [...bulkRoles].sort((a, b) => (a.name === 'Relationship Manager' ? -1 : b.name === 'Relationship Manager' ? 1 : 0) || (a.name === 'Admin') - (b.name === 'Admin') || a.name.localeCompare(b.name))
+      .map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
 
   document.getElementById('bulkInviteFile').addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -520,6 +535,16 @@ function initBulkInviteModal() {
       resultEl.hidden = false;
       resultEl.classList.add('bulk-error');
       resultEl.textContent = 'Nothing to send — paste some lines first.';
+      return;
+    }
+    if (!roleSelect.value) {
+      resultEl.hidden = false;
+      resultEl.classList.add('bulk-error');
+      resultEl.textContent = 'Choose the role everyone in this list should get.';
+      return;
+    }
+    if (roleSelect.selectedOptions[0]?.text === 'Admin'
+        && !window.confirm('Invite everyone in this list as an Admin?' + String.fromCharCode(10, 10) + 'Admins can see and change everything, including users and settings.')) {
       return;
     }
 
