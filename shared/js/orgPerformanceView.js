@@ -20,30 +20,7 @@
 import { escapeHtml } from './utils.js';
 import { emptyState } from './emptyState.js';
 import { renderInsights, topNInsight, shareInsight } from './insights.js';
-
-const PERIODS = [
-  { id: 'month', label: 'This month' },
-  { id: 'last-month', label: 'Last month' },
-  { id: 'quarter', label: 'This quarter' },
-  { id: 'all', label: 'All time' },
-];
-
-// Local-date parts, not toISOString(): in IST, local midnight on the 1st is
-// the previous day in UTC and every "this month" would start a day early.
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-function rangeFor(period) {
-  const t = new Date();
-  if (period === 'month') return { from: iso(new Date(t.getFullYear(), t.getMonth(), 1)), to: iso(t) };
-  if (period === 'last-month') {
-    return { from: iso(new Date(t.getFullYear(), t.getMonth() - 1, 1)), to: iso(new Date(t.getFullYear(), t.getMonth(), 0)) };
-  }
-  if (period === 'quarter') {
-    const q = Math.floor(t.getMonth() / 3) * 3;
-    return { from: iso(new Date(t.getFullYear(), q, 1)), to: iso(t) };
-  }
-  return { from: null, to: null };
-}
+import { mountPeriodPicker, resolvePeriod } from './periodPicker.js';
 
 const n = (v) => Number(v || 0).toLocaleString('en-IN');
 const pct = (num, den) => (den ? `${((num / den) * 100).toFixed(1)}%` : '–');
@@ -86,9 +63,16 @@ function rateCell(num, den, avg) {
   return `<td class="r pp-num" style="color:${color}">${v.toFixed(1)}%</td>`;
 }
 
-export function mountOrgPerformance({ host, supabase, scope = 'org', userId = null, title = null }) {
+/**
+ * @param {?object} opts.period  A period value from shared/js/periodPicker.js.
+ *   Pass it when the page has its own picker in the header: the component
+ *   then shows no control of its own and follows setPeriod(). Leave it out
+ *   and the component mounts a picker in its own title row.
+ */
+export function mountOrgPerformance({ host, supabase, scope = 'org', userId = null, title = null, period = null }) {
   if (!host) return;
-  const state = { period: 'month', source: '', rows: [], open: new Set(), loading: false };
+  const ownPicker = !period;
+  const state = { period: period || resolvePeriod('this-month'), source: '', rows: [], open: new Set(), seq: 0 };
   const mine = scope === 'rm';
 
   host.innerHTML = `
@@ -100,22 +84,27 @@ export function mountOrgPerformance({ host, supabase, scope = 'org', userId = nu
             ? 'Where your leads came from, and how each source is converting for you.'
             : 'Where the volume comes from, and which branch and team is converting it. Click a branch or team to see its people.'}</p>
         </div>
-        <div class="pp-tabs" data-op-periods>${PERIODS.map((p) => `<button type="button" class="pp-tab ${p.id === state.period ? 'on' : ''}" data-op-period="${p.id}">${p.label}</button>`).join('')}</div>
+        ${ownPicker ? '<div data-op-picker></div>' : ''}
       </div>
       <div data-op-body><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
     </section>`;
 
-  host.querySelectorAll('[data-op-period]').forEach((b) => b.addEventListener('click', () => {
-    state.period = b.dataset.opPeriod;
-    host.querySelectorAll('[data-op-period]').forEach((x) => x.classList.toggle('on', x === b));
-    load();
-  }));
+  if (ownPicker) {
+    const picker = mountPeriodPicker({
+      host: host.querySelector('[data-op-picker]'),
+      defaultId: 'this-month',
+      onChange: (value) => { state.period = value; load(); },
+    });
+    state.period = picker.get();
+  }
 
   async function load() {
     const body = host.querySelector('[data-op-body]');
     body.innerHTML = '<div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div>';
-    const { from, to } = rangeFor(state.period);
-    const { data, error } = await supabase.rpc('org_performance', { p_from: from, p_to: to });
+    // Two quick period changes can answer out of order; only the latest paints.
+    const seq = ++state.seq;
+    const { data, error } = await supabase.rpc('org_performance', { p_from: state.period.from, p_to: state.period.to });
+    if (seq !== state.seq) return;
     if (error) {
       body.innerHTML = emptyState('fa-triangle-exclamation', 'Could not load performance', error.message || 'Try refreshing the page.');
       return;
@@ -333,5 +322,5 @@ export function mountOrgPerformance({ host, supabase, scope = 'org', userId = nu
   }
 
   load();
-  return { reload: load };
+  return { reload: load, setPeriod(value) { state.period = value; load(); } };
 }

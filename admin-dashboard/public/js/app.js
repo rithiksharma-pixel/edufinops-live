@@ -14,6 +14,7 @@ import { fetchAll, fetchAllResult } from '../../../shared/js/fetchAll.js';
 import { getTatThresholds } from '../../../shared/js/tatThresholds.js';
 import { getMilestoneCounts, MILESTONES } from '../../../manager-dashboard/public/js/services/milestoneService.js';
 import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
+import { mountPeriodPicker, periodTester } from '../../../shared/js/periodPicker.js';
 
 let leadDrawer;
 
@@ -28,32 +29,54 @@ let activeView = 'overview';
 async function records(table, select) { return fetchAll(() => supabase.from(table).select(select).eq('is_deleted', false)); }
 async function requireAdmin() { const { data: auth } = await supabase.auth.getUser(); if (!auth?.user) throw new Error('Please sign in first.'); const { data, error } = await supabase.from('users').select('full_name, roles(name)').eq('id', auth.user.id).single(); if (error || data.roles?.name !== 'Admin') throw new Error('This page is available to Administrators only.'); $('userName').textContent = data.full_name; $('avatar').textContent = data.full_name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase(); const user = { id: auth.user.id, fullName: data.full_name, role: 'Admin' }; mountTopbar({ app: 'admin-dashboard', user }); return user; }
 
-// Mounted once; it has its own period controls and reloads itself.
+// The console's one period, set by the picker in the header. Overview and
+// Analytics read it; the Insights sub-tab keeps its own day/week/month
+// comparison, which is a different question.
+let period = mountPeriodPicker({
+  host: $('periodPicker'),
+  onChange: (value) => { period = value; teamPerfData = null; loadActive(); },
+}).get();
+
+// Mounted once; it follows the header's period.
 let orgPerf = null;
 
 async function loadOverview() {
-  if (!orgPerf) orgPerf = mountOrgPerformance({ host: $('orgPerf'), supabase });
-  else orgPerf.reload();
-  const [leads, deals, docs, users, overdueTasks, stageEvents, tatThresholds] = await Promise.all([
-    records('leads', 'id, lead_stages(name), next_follow_up_at'),
+  if (!orgPerf) orgPerf = mountOrgPerformance({ host: $('orgPerf'), supabase, period });
+  else orgPerf.setPeriod(period);
+  const [leads, deals, docs, users, overdueTasks, stageEvents, tatThresholds, milestones] = await Promise.all([
+    records('leads', 'id, created_at, lead_stages(name), next_follow_up_at'),
     records('deals', 'id, total_disbursed_amount, is_on_hold, is_rejected, created_at, current_deal_stage:deal_stages!deals_current_deal_stage_id_fkey(name)'),
     records('documents', 'id, verification_status'),
     records('users', 'id, is_active'),
     fetchAll(() => supabase.from('tasks').select('id').eq('is_deleted', false).eq('is_completed', false).lt('due_date', new Date().toISOString().slice(0, 10))),
     fetchAll(() => supabase.from('deal_events').select('id, deal_id, to_stage_id, created_at').not('to_stage_id', 'is', null).order('created_at', { ascending: false }), { tiebreak: 'id', ascending: false }),
     getTatThresholds(supabase),
+    period.isAll ? Promise.resolve(null) : getMilestoneCounts(period.from, period.to),
   ]);
-  const totalDisbursed = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
-  // Only "Active leads" has an honest drill-down target — the rest are
+  // The first three tiles are for the chosen period: leads and deals by the
+  // day they were created, money by the day it was disbursed. Team size and
+  // everything under "Needs attention" are right-now figures in any period.
+  const inPeriod = periodTester(period);
+  const periodLeads = leads.filter((lead) => inPeriod(lead.created_at));
+  const periodDeals = deals.filter((deal) => inPeriod(deal.created_at));
+  const totalDisbursed = milestones
+    ? Number(milestones.find((m) => m.milestone === 'Disbursement')?.total_amount || 0)
+    : deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
+  // Only the leads tile has an honest drill-down target — the rest are
   // deal-level/user-level counts, and Lead Management's list is leads-only.
   $('statGrid').innerHTML = [
-    [leads.length, 'Active leads', 'fa-diagram-project', 'var(--accent)', true],
-    [deals.length, 'Lender deals', 'fa-building-columns', 'var(--accent)', false],
-    [inr(totalDisbursed), 'Disbursed amount', 'fa-sack-dollar', 'var(--success)', false],
+    [periodLeads.length.toLocaleString('en-IN'), period.isAll ? 'Active leads' : 'New leads', 'fa-diagram-project', 'var(--accent)', true],
+    [periodDeals.length.toLocaleString('en-IN'), period.isAll ? 'Lender deals' : 'New lender deals', 'fa-building-columns', 'var(--accent)', false],
+    [inr(totalDisbursed), period.isAll ? 'Disbursed amount' : 'Disbursed in period', 'fa-sack-dollar', 'var(--success)', false],
     [users.filter((user) => user.is_active).length, 'Active team members', 'fa-users', 'var(--accent)', false],
   ].map(([value, label, icon, accent, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads' : ''} style="--stat-accent:${accent};${clickable ? 'cursor:pointer;' : ''}"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  // Lead Management takes the same window as a created-date filter, so the
+  // list that opens has exactly the leads the tile counted.
+  const leadsLink = period.isAll
+    ? '../../lead-management/public/index.html'
+    : `../../lead-management/public/index.html?${new URLSearchParams({ dateField: 'created_at', dateFrom: period.from, dateTo: period.to })}`;
   document.querySelectorAll('#statGrid [data-goto-leads]').forEach((card) => {
-    card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
+    card.addEventListener('click', () => window.open(leadsLink, '_blank'));
   });
 
   await renderFunnel();
@@ -217,9 +240,23 @@ async function loadReports() {
   await populateTrendLenders();
   await Promise.all([renderLeadTrends(), renderDealTrends()]);
 
-  const [leads, deals] = await Promise.all([records('leads', 'id'), records('deals', 'id,is_on_hold,total_disbursed_amount')]);
-  const total = deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
-  $('reportSnapshot').innerHTML = [[leads.length, 'Total leads', true], [deals.length, 'Total deals', false], [deals.filter((deal) => deal.is_on_hold).length, 'Deals on hold', false], [inr(total), 'Disbursed', false]].map(([value, label, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads' : ''} style="${clickable ? 'cursor:pointer;' : ''}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
+  const inPeriod = periodTester(period);
+  const [allLeads, allDeals, milestones] = await Promise.all([
+    records('leads', 'id,created_at'),
+    records('deals', 'id,created_at,is_on_hold,total_disbursed_amount'),
+    period.isAll ? Promise.resolve(null) : getMilestoneCounts(period.from, period.to),
+  ]);
+  const leads = allLeads.filter((lead) => inPeriod(lead.created_at));
+  const deals = allDeals.filter((deal) => inPeriod(deal.created_at));
+  const total = milestones
+    ? Number(milestones.find((m) => m.milestone === 'Disbursement')?.total_amount || 0)
+    : deals.reduce((sum, deal) => sum + Number(deal.total_disbursed_amount || 0), 0);
+  $('snapshotPeriod').textContent = period.text;
+  $('tatPeriod').textContent = period.isAll ? 'All time' : `Completed ${period.text}`;
+  const snapshot = period.isAll
+    ? [[leads.length, 'Total leads', true], [deals.length, 'Total deals', false], [deals.filter((deal) => deal.is_on_hold).length, 'Deals on hold', false], [inr(total), 'Disbursed', false]]
+    : [[leads.length, 'Leads created', true], [deals.length, 'Deals opened', false], [deals.filter((deal) => deal.is_on_hold).length, 'Of those, on hold', false], [inr(total), 'Disbursed in period', false]];
+  $('reportSnapshot').innerHTML = snapshot.map(([value, label, clickable]) => `<div class="stat-card"${clickable ? ' data-goto-leads' : ''} style="${clickable ? 'cursor:pointer;' : ''}"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
   document.querySelectorAll('#reportSnapshot [data-goto-leads]').forEach((card) => {
     card.addEventListener('click', () => window.open('../../lead-management/public/index.html', '_blank'));
   });
@@ -228,13 +265,13 @@ async function loadReports() {
   if (eventsError) throw eventsError;
   const byDeal = {}; events.forEach((ev) => { (byDeal[ev.deal_id] ??= []).push(ev); });
   const transitions = [];
-  Object.values(byDeal).forEach((evs) => { for (let i = 1; i < evs.length; i++) { const prev = evs[i - 1]; const curr = evs[i]; const days = (new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()) / 86400000; transitions.push({ label: `${prev.to_stage?.name || '–'} → ${curr.to_stage?.name || '–'}`, days, student: curr.deals?.leads?.student_name, remarks: curr.remarks }); } });
+  Object.values(byDeal).forEach((evs) => { for (let i = 1; i < evs.length; i++) { const prev = evs[i - 1]; const curr = evs[i]; if (!inPeriod(curr.created_at)) continue; const days = (new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()) / 86400000; transitions.push({ label: `${prev.to_stage?.name || '–'} → ${curr.to_stage?.name || '–'}`, days, student: curr.deals?.leads?.student_name, remarks: curr.remarks }); } });
   const byLabel = {}; transitions.forEach((t) => { (byLabel[t.label] ??= []).push(t.days); });
   const averages = Object.entries(byLabel).map(([label, values]) => ({ label, avgDays: values.reduce((a, b) => a + b, 0) / values.length, count: values.length })).sort((a, b) => b.avgDays - a.avgDays);
   const worstOffenders = [...transitions].sort((a, b) => b.days - a.days).slice(0, 10);
 
-  $('tatAverages').innerHTML = averages.length ? averages.map((t) => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${esc(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div></div>`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
-  $('tatWorstOffenders').innerHTML = worstOffenders.length ? worstOffenders.map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${esc(t.student || '–')} <span style="color:var(--ink-500);">· ${esc(t.label)}</span></span><span class="badge">${t.days.toFixed(1)}d</span></div>${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${esc(t.remarks)}</div>` : ''}`).join('') : '<p class="muted">No stage transitions recorded yet.</p>';
+  $('tatAverages').innerHTML = averages.length ? averages.map((t) => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${esc(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div></div>`).join('') : `<p class="muted">${period.isAll ? 'No stage transitions recorded yet.' : 'No stage transitions completed in this period.'}</p>`;
+  $('tatWorstOffenders').innerHTML = worstOffenders.length ? worstOffenders.map((t) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${esc(t.student || '–')} <span style="color:var(--ink-500);">· ${esc(t.label)}</span></span><span class="badge">${t.days.toFixed(1)}d</span></div>${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${esc(t.remarks)}</div>` : ''}`).join('') : `<p class="muted">${period.isAll ? 'No stage transitions recorded yet.' : 'No stage transitions completed in this period.'}</p>`;
 }
 // ---------- Insights: DoD / WoW / MoM comparisons ----------
 // Deliberately count/amount deltas only — no RM/team scoring formula.
@@ -350,13 +387,17 @@ async function loadTeamPerformance() {
       supabase.from('teams').select('id,name').eq('is_deleted', false).order('name'),
       fetchAllResult(() => supabase.from('users').select('id,full_name,team_id,roles!inner(name)').in('roles.name', ['Manager', 'Associate Team Manager']).eq('is_deleted', false)),
       fetchAllResult(() => supabase.from('users').select('id,full_name,reporting_manager_id,roles!inner(name)').eq('roles.name', 'Relationship Manager').eq('is_deleted', false)),
-      fetchAll(() => supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false)),
-      fetchAll(() => supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false)),
+      // Leads and deals count toward the period they were created in. The
+      // window is applied in the query, so a short period is a short fetch.
+      fetchAll(() => { let q = supabase.from('leads').select('id,assigned_manager_id,assigned_rm_id,loan_amount_requested,lead_stages(name)').eq('is_deleted', false); if (period.fromTs) q = q.gte('created_at', period.fromTs); if (period.toTs) q = q.lte('created_at', period.toTs); return q; }),
+      fetchAll(() => { let q = supabase.from('deals').select('id,total_disbursed_amount,leads(assigned_manager_id,assigned_rm_id)').eq('is_deleted', false); if (period.fromTs) q = q.gte('created_at', period.fromTs); if (period.toTs) q = q.lte('created_at', period.toTs); return q; }),
       // Admin sees every lead_events row (is_admin() bypasses can_view_lead's
       // team scoping) — filtered to call outcomes only, keyed below by
       // created_by so each RM's own activity is counted, not just calls
       // logged on their leads by someone else.
-      fetchAll(() => supabase.from('lead_events').select('id,event_type,created_by').in('event_type', CALL_STATUS_OPTIONS).eq('is_deleted', false).gte('created_at', startOfWeek().toISOString())),
+      // Calls logged in the period; "All time" shows this week instead of
+      // paging through every call ever logged for one figure.
+      fetchAll(() => { let q = supabase.from('lead_events').select('id,event_type,created_by').in('event_type', CALL_STATUS_OPTIONS).eq('is_deleted', false).gte('created_at', period.isAll ? startOfWeek().toISOString() : period.fromTs); if (!period.isAll && period.toTs) q = q.lte('created_at', period.toTs); return q; }),
     ]);
     for (const r of [teamsRes, managersRes, rmsRes]) if (r.error) throw r.error;
 
@@ -369,6 +410,9 @@ async function loadTeamPerformance() {
     });
 
     teamPerfData = { teams: teamsRes.data, managers: managersRes.data, rms: rmsRes.data, leads: leadsRes, deals: dealsRes, callStats };
+    $('teamPerfBlurb').textContent = period.isAll
+      ? 'All time. Narrow to one team, then one RM within it.'
+      : `Leads and deals created ${period.text}. Narrow to one team, then one RM within it.`;
 
     $('teamScopeSelect').innerHTML = '<option value="">All teams</option>' + teamPerfData.teams.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   }
@@ -393,7 +437,7 @@ function renderTeamPerformance() {
   const scopedDeals = teamPerfData.deals.filter(dealMatches);
   const totalDisbursed = scopedDeals.reduce((sum, d) => sum + Number(d.total_disbursed_amount || 0), 0);
 
-  $('teamStatGrid').innerHTML = [[scopedLeads.length, 'Leads'], [scopedDeals.length, 'Deals'], [inr(totalDisbursed), 'Disbursed amount']]
+  $('teamStatGrid').innerHTML = [[scopedLeads.length, period.isAll ? 'Leads' : 'New leads'], [scopedDeals.length, period.isAll ? 'Deals' : 'New deals'], [inr(totalDisbursed), period.isAll ? 'Disbursed amount' : 'Disbursed on those deals']]
     .map(([value, label]) => `<div class="stat-card"><div class="stat-value">${value}</div><div class="stat-label">${label}</div></div>`).join('');
 
   const stages = scopedLeads.reduce((all, lead) => { const name = lead.lead_stages?.name || 'Unassigned'; all[name] = (all[name] || 0) + 1; return all; }, {});
@@ -410,7 +454,7 @@ function renderTeamPerformance() {
       const rmDeals = teamPerfData.deals.filter((d) => d.leads?.assigned_rm_id === rm.id);
       const calls = teamPerfData.callStats[rm.id] || { callCount: 0, connectedCount: 0 };
       const connectRate = calls.callCount > 0 ? `${Math.round((calls.connectedCount / calls.callCount) * 100)}%` : '–';
-      return `<div class="simple-row"><strong>${esc(rm.full_name)}</strong><div class="muted">${rmLeads.length} leads · ${rmDeals.length} deals · ${calls.callCount} calls this week · ${connectRate} connect rate</div></div>`;
+      return `<div class="simple-row"><strong>${esc(rm.full_name)}</strong><div class="muted">${rmLeads.length} leads · ${rmDeals.length} deals · ${calls.callCount} calls${period.isAll ? ' this week' : ''} · ${connectRate} connect rate</div></div>`;
     }).join('') || '<p class="muted">No RMs assigned to this team yet.</p>';
   } else {
     $('teamBreakdownTitle').textContent = 'By team';
@@ -836,7 +880,7 @@ async function loadSettings() {
   });
 }
 async function loadActive() { try { if (activeView === 'overview') await loadOverview(); if (activeView === 'analytics') await loadAnalytics(); if (activeView === 'smart-views') await loadSmartViews(); if (activeView === 'notifications') await loadNotifications(); if (activeView === 'settings') await loadSettings(); } catch (error) { console.error(error); showToast(error.message || 'Could not load this section.', true); } }
-function changeView(view) { activeView = view; if (view === 'analytics') teamPerfData = null; document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], analytics: ['Analytics', 'Reports, trends and team performance in one place.'], 'smart-views': ['Smart views', 'Saved filter presets, shared with the team.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
+function changeView(view) { activeView = view; if (view === 'analytics') teamPerfData = null; $('periodPicker').hidden = !['overview', 'analytics'].includes(view); document.querySelectorAll('.view').forEach((section) => { section.hidden = section.id !== `${view}View`; }); document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.classList.toggle('active', item.dataset.view === view)); const labels = { overview: ['Business overview', 'Your complete loan operations picture.'], documents: ['Document centre', 'Verify and track all submitted files.'], analytics: ['Analytics', 'Reports, trends and team performance in one place.'], 'smart-views': ['Smart views', 'Saved filter presets, shared with the team.'], notifications: ['Notifications', 'Keep every team in the loop.'], settings: ['Settings', 'Manage the system reference data.'] }; $('viewTitle').textContent = labels[view][0]; $('viewSubtitle').textContent = labels[view][1]; setBreadcrumb(view === 'overview' ? [] : [labels[view][0]]); loadActive(); }
 document.querySelectorAll('.nav-item[data-view]').forEach((item) => item.addEventListener('click', (event) => { event.preventDefault(); changeView(item.dataset.view); })); $('refreshButton').addEventListener('click', () => { if (activeView === 'analytics') teamPerfData = null; loadActive(); }); $('teamScopeSelect').addEventListener('change', renderTeamPerformance); $('rmScopeSelect').addEventListener('change', renderTeamPerformance);
 $('notificationForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: auth } = await supabase.auth.getUser(); const { error } = await supabase.from('announcements').insert({ title: form.get('title').trim(), body: form.get('body').trim(), audience_role: form.get('audience'), created_by: auth.user.id }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Announcement published.'); loadNotifications(); });
 $('documentTypeForm').addEventListener('submit', async (event) => { event.preventDefault(); const form = new FormData(event.target); const { data: ranks } = await supabase.from('document_types').select('sequence_order').order('sequence_order', { ascending: false }).limit(1); const { error } = await supabase.from('document_types').insert({ name: form.get('name').trim(), applies_to: form.get('applies_to'), category: form.get('category'), is_required: form.get('is_required') === 'on', sequence_order: (ranks?.[0]?.sequence_order || 0) + 10 }); if (error) return showToast(error.message, true); event.target.reset(); showToast('Document type added.'); loadSettings(); });
@@ -997,23 +1041,12 @@ $('smartViewForm').addEventListener('submit', async (event) => {
 // at sequence_order 900: a lost lead's stage tells you nothing about how far
 // it got, but its login_date does.
 // =========================================================
-const funnelState = { period: 'all', basis: 'created' };
-
-function funnelRange(period) {
-  const d = new Date();
-  const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-  if (period === 'today') return { from: iso(d), to: iso(d) };
-  if (period === 'month') return { from: iso(new Date(d.getFullYear(), d.getMonth(), 1)), to: iso(d) };
-  // Apr–Jul of the current year: the intake window the team plans around.
-  if (period === 'apr-jul') return { from: `${d.getFullYear()}-04-01`, to: `${d.getFullYear()}-07-31` };
-  return { from: null, to: null };
-}
+const funnelState = { basis: 'created' };
 
 async function renderFunnel() {
   const host = $('funnelTable');
-  const { from, to } = funnelRange(funnelState.period);
   const { data, error } = await supabase.rpc('lead_funnel_summary', {
-    p_from: from, p_to: to, p_basis: funnelState.basis,
+    p_from: period.from, p_to: period.to, p_basis: funnelState.basis,
   });
   if (error) {
     host.innerHTML = `<p class="empty-state">Could not load the funnel.<br><span style="font-size:12px;">${esc(error.message)}</span></p>`;
@@ -1042,13 +1075,6 @@ async function renderFunnel() {
   </p>`;
 }
 
-document.getElementById('funnelPeriod')?.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-fp]');
-  if (!btn) return;
-  document.querySelectorAll('#funnelPeriod button').forEach((b) => b.classList.toggle('active', b === btn));
-  funnelState.period = btn.dataset.fp;
-  renderFunnel();
-});
 document.getElementById('funnelBasis')?.addEventListener('change', (e) => {
   funnelState.basis = e.target.value;
   renderFunnel();

@@ -15,37 +15,24 @@ import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-ma
 
 export { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS };
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-// Calendar week starting Monday 00:00 local time.
-function startOfWeek() {
-  const d = new Date();
-  const day = d.getDay(); // 0 = Sunday .. 6 = Saturday
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diffToMonday);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 /**
- * Fetches this RM's own logged calls for the given period ('today' | 'week'),
- * newest first, with the student name attached for display.
+ * Fetches this RM's own logged calls for a period (a value from
+ * shared/js/periodPicker.js), newest first, with the student name attached
+ * for display.
  */
-export async function getMyCalls(currentUserId, period = 'today') {
-  const since = period === 'week' ? startOfWeek() : startOfToday();
+export async function getMyCalls(currentUserId, period) {
   const data = await fetchAll(
-    () => supabase
-      .from('lead_events')
-      .select('id, event_type, remarks, created_at, leads ( id, student_name )')
-      .in('event_type', CALL_STATUS_OPTIONS)
-      .eq('created_by', currentUserId)
-      .eq('is_deleted', false)
-      .gte('created_at', since.toISOString())
-      .order('created_at', { ascending: false }),
+    () => {
+      let query = supabase
+        .from('lead_events')
+        .select('id, event_type, remarks, created_at, leads ( id, student_name )')
+        .in('event_type', CALL_STATUS_OPTIONS)
+        .eq('created_by', currentUserId)
+        .eq('is_deleted', false);
+      if (period.fromTs) query = query.gte('created_at', period.fromTs);
+      if (period.toTs) query = query.lte('created_at', period.toTs);
+      return query.order('created_at', { ascending: false });
+    },
     { tiebreak: 'id', ascending: false }
   );
   return data;

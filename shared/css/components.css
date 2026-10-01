@@ -115,6 +115,30 @@
   background: var(--bg-surface); font-family: inherit; font-size: 13px; color: var(--ink-700);
 }
 
+/* =========================================================
+   PERIOD PICKER — the one date control every dashboard uses
+   (see shared/js/periodPicker.js)
+   ========================================================= */
+.period-picker {
+  display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); font-size: 13px; color: var(--ink-500);
+}
+.period-picker[hidden] { display: none; }
+.period-picker-select {
+  border: 0; background: transparent; padding: 3px 2px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-900);
+}
+.period-picker-custom { display: inline-flex; align-items: center; gap: 6px; }
+.period-picker-custom[hidden] { display: none; }
+.period-picker-custom input[type="date"] {
+  padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-surface); color: var(--ink-900); font-family: inherit; font-size: 12.5px;
+}
+.period-picker-text { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.period-picker-text:empty { display: none; }
+.period-picker-text.is-error { color: var(--danger); }
+
 /* Wide matrices scroll inside their own container rather than pushing
    the page sideways. */
 .trend-scroll { overflow-x: auto; }

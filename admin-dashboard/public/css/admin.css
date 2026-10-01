@@ -40,7 +40,8 @@ body { margin: 0; font-family: Inter, sans-serif; color: var(--ink-900); backgro
 
 /* ---------- Shell ---------- */
 .main { width: min(1280px, calc(100vw - 254px)); padding: 38px 42px 64px; }
-.main-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+.main-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 30px; }
+.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .eyebrow { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 0.11em; margin: 0 0 7px; }
 h1, h2, p { margin-top: 0; }
 h1 { font-family: Fraunces, serif; font-size: 32px; margin-bottom: 7px; }

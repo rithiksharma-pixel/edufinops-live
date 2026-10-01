@@ -38,45 +38,27 @@
           <h1 class="pp-title">Team performance</h1>
           <p class="pp-blurb" id="mgrBlurb">Ranked by what converts, not by how many leads were handed out.</p>
         </div>
+        <!-- One period for the whole page: every figure below except the
+             stage-movement trends (which are their own time series) and the
+             unassigned queue (which is a to-do list) is for this window. -->
+        <div class="pp-actions">
+          <div id="periodPicker"></div>
+          <button class="btn btn-ghost" id="btnMilestoneCsv" title="Every login, sanction, PF and disbursement in the period, one row each"><i class="fa-solid fa-file-arrow-down"></i> Milestones CSV</button>
+        </div>
       </header>
 
       <section class="pp-stats" id="dailyStats"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></section>
 
       <div id="orgPerf" style="margin-bottom:22px;"></div>
 
-      <!-- Milestone counts for a date window. Numbers come from the
-           milestone_counts() RPC, which is RLS-scoped: a Manager sees their
-           team, an Admin sees everything — no role logic needed here. -->
-      <section class="chart-card" style="margin-bottom:22px;">
-        <div class="milestone-head">
-          <div>
-            <h2 style="margin:0;">Milestones by date</h2>
-            <p class="subtitle" style="margin:2px 0 0;">How many deals hit Login, Sanction, PF and Disbursement in a period.</p>
-          </div>
-          <div class="period-toggle" id="milestonePresets">
-            <button type="button" data-days="7">7d</button>
-            <button type="button" data-days="30" class="active">30d</button>
-            <button type="button" data-days="90">90d</button>
-            <button type="button" data-days="365">1y</button>
-          </div>
-        </div>
-        <div class="milestone-range">
-          <label>From <input type="date" id="milestoneFrom"></label>
-          <label>To <input type="date" id="milestoneTo"></label>
-          <button class="btn btn-secondary" id="btnMilestoneApply">Apply</button>
-          <button class="btn btn-ghost" id="btnMilestoneCsv"><i class="fa-solid fa-file-arrow-down"></i> CSV</button>
-        </div>
-        <div id="milestoneCounts"><div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div></div>
-      </section>
-
       <section class="chart-card" style="margin-bottom:22px;">
         <h3>By lender</h3>
-        <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">A funnel: each case counts at every stage it has reached, so Login includes every case that went on to Sanction, PF and Disbursement. The small figure is the share of the stage before. Declined cases still count for the stages they reached.</p>
+        <p class="subtitle" id="lenderSubtitle" style="margin:0 0 12px;font-size:12.5px;"></p>
         <div style="overflow-x:auto;">
           <table class="data-table funnel-table" id="lenderTable">
             <thead><tr>
               <th>Lender</th>
-              <th class="num">Cases</th><th class="num">Login</th><th class="num">Sanction</th>
+              <th class="num" id="lenderCasesHead">Cases</th><th class="num">Login</th><th class="num">Sanction</th>
               <th class="num">PF paid</th><th class="num">Disbursed</th><th class="num">Declined</th>
               <th class="num">Disbursed value</th>
             </tr></thead>
@@ -86,7 +68,7 @@
       </section>
 
       <section class="chart-card">
-        <h3>Funnel — leads that reached each stage</h3>
+        <h3 id="funnelTitle">Funnel — leads that reached each stage</h3>
         <p class="subtitle" style="margin:0 0 12px;font-size:12.5px;">Each stage includes every lead that went further. Lost leads count for the stages they reached before they were lost. Hover a bar for its rate from the stage before.</p>
         <canvas id="funnelChart" height="90"></canvas>
       </section>
@@ -114,12 +96,6 @@
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px 0;">
           <div><h3 class="section-title" style="font-size:14px;font-weight:500;margin:0;">Performance</h3><p class="subtitle" style="margin:3px 0 0;font-size:12px;">Login → PF is the efficiency measure. Leads is context: volume handed out is not volume converted.</p></div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <div class="period-toggle" id="perfPeriod">
-              <button data-period="day">Day</button>
-              <button data-period="week">Week</button>
-              <button data-period="month">Month</button>
-              <button data-period="all" class="active">Overall</button>
-            </div>
             <select class="trend-select" id="perfGroupBy">
               <option value="owner">By owner</option>
               <option value="team">By team</option>
@@ -137,7 +113,7 @@
               <th class="num">Leads</th><th class="num">Sanctions</th>
               <th class="num">PF</th><th class="num">Disbursed</th><th class="num">Disbursed value</th>
               <th class="num">Referrals</th><th class="num">PF from referrals</th>
-              <th class="num">Overdue</th><th class="num">Calls (wk)</th><th class="num">Connect</th>
+              <th class="num" title="Follow-ups overdue right now, whatever the period">Overdue</th><th class="num" id="perfCallsHead">Calls</th><th class="num">Connect</th>
             </tr></thead>
             <tbody id="rmPerformanceBody"><tr><td colspan="15" class="empty-state">Loading…</td></tr></tbody>
           </table>
@@ -149,6 +125,7 @@
       <div class="grid-two" style="margin-top:22px;">
         <section class="chart-card">
           <h3>TAT by stage transition</h3>
+          <p class="subtitle" id="tatSubtitle" style="margin:0 0 12px;font-size:12.5px;"></p>
           <div id="tatAverages"></div>
         </section>
         <section class="chart-card">

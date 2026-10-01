@@ -4,7 +4,8 @@ import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAc
 import { escapeHtml } from '../../../shared/js/utils.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
-import { getTeamFunnel, getRmPerformance, getRmCallStats, getLenderBreakdown, getTatAnalysis, PERF_GROUPS, periodRange, startOfWeek } from './services/analyticsService.js';
+import { getTeamFunnel, getRmPerformance, getRmCallStats, getLenderBreakdown, getLenderActivity, getTatAnalysis, PERF_GROUPS } from './services/analyticsService.js';
+import { mountPeriodPicker, periodTester, rangeText } from '../../../shared/js/periodPicker.js';
 import { getUnassignedLeads } from './services/unassignedLeadsService.js';
 import { createTrendsService } from '../../../shared/js/trendsService.js';
 import { renderTrendMatrix, renderGranularityPills } from '../../../shared/js/trendsView.js';
@@ -25,6 +26,12 @@ import { downloadCsv } from '../../../authentication/public/js/services/exportIm
 
 let leadDrawer;
 
+// The page's one period, set by the picker in the header. Every period-aware
+// renderer reads it, and compares periodSeq before painting so that two quick
+// changes cannot leave an older answer on screen.
+let period;
+let periodSeq = 0;
+
 const UNASSIGNED_WARNING_MS = 48 * 60 * 60 * 1000; // 48h — flagged with a warning badge
 
 function formatCurrency(amount) {
@@ -32,12 +39,13 @@ function formatCurrency(amount) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 }
 // =========================================================
-// Week figures. "Disbursements today" told a manager almost nothing: on a
-// normal day it is 0, and a 0 with no comparison is not a signal. These are
-// the four milestones counted this week against the same span last week, so
-// the number arrives with the only context that makes it readable —
-// direction. Counts come from milestone_counts(), which is RLS-scoped: a
-// Manager's figures cover their team, an Admin's the whole company.
+// Headline figures: the four milestones counted in the chosen period, against
+// the period before. A count on its own is not a signal — "14 sanctions" only
+// reads once it has a direction — so each figure arrives with its comparison.
+// Calendar periods compare like with like: nine days into this month is set
+// against the first nine days of last month, never against a whole month.
+// Counts come from milestone_counts(), which is RLS-scoped: a Manager's
+// figures cover their team, an Admin's the whole company.
 // =========================================================
 const MILESTONE_FIGURES = [
   { name: 'Login', label: 'Logins' },
@@ -46,60 +54,62 @@ const MILESTONE_FIGURES = [
   { name: 'Disbursement', label: 'Disbursements' },
 ];
 
-function weekRanges() {
-  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const today = new Date();
-  const thisFrom = startOfWeek();
-  // Same number of days last week, so a Tuesday is never compared against a
-  // whole seven-day week and read as a collapse.
-  const daysIn = Math.round((today - thisFrom) / 86400000);
-  const lastFrom = new Date(thisFrom); lastFrom.setDate(lastFrom.getDate() - 7);
-  const lastTo = new Date(lastFrom); lastTo.setDate(lastTo.getDate() + daysIn);
-  return { thisWeek: { from: iso(thisFrom), to: iso(today) }, lastWeek: { from: iso(lastFrom), to: iso(lastTo) }, daysIn: daysIn + 1 };
-}
-
 function deltaText(now, before) {
-  if (!before) return now ? 'None in the same span last week' : 'Nothing last week either';
+  if (!before) return now ? 'None in the period before' : 'None in the period before either';
   const pct = Math.round(((now - before) / before) * 100);
-  if (pct === 0) return `Level with last week (${before})`;
-  return `${pct > 0 ? '+' : ''}${pct}% on last week (${before})`;
+  if (pct === 0) return `Level with the period before (${before})`;
+  return `${pct > 0 ? '+' : ''}${pct}% on the period before (${before})`;
 }
 
-async function renderDailyStats() {
+async function renderHeadlineStats() {
   const host = document.getElementById('dailyStats');
-  const { thisWeek, lastWeek, daysIn } = weekRanges();
+  const seq = periodSeq;
+  const { from, to, prev } = period;
   let now; let before;
   try {
     [now, before] = await Promise.all([
-      getMilestoneCounts(thisWeek.from, thisWeek.to),
-      getMilestoneCounts(lastWeek.from, lastWeek.to),
+      getMilestoneCounts(from, to),
+      prev ? getMilestoneCounts(prev.from, prev.to) : Promise.resolve(null),
     ]);
   } catch (err) {
-    console.error('week figures failed', err);
-    host.innerHTML = `<p class="empty-state">Could not load this week's figures: ${escapeHtml(err.message || String(err))}</p>`;
+    console.error('headline figures failed', err);
+    if (seq === periodSeq) host.innerHTML = `<p class="empty-state">Could not load the figures for this period: ${escapeHtml(err.message || String(err))}</p>`;
     return;
   }
+  if (seq !== periodSeq) return;
 
   const count = (rows, name) => Number(rows.find((r) => r.milestone === name)?.deal_count || 0);
   const amount = (rows, name) => Number(rows.find((r) => r.milestone === name)?.total_amount || 0);
 
   host.innerHTML = MILESTONE_FIGURES.map(({ name, label }) => {
     const n = count(now, name);
-    const p = count(before, name);
-    const tone = !p ? '' : n > p ? 'good' : n < p ? 'bad' : '';
-    const sub = name === 'Disbursement' && amount(now, name) > 0
-      ? `${formatCurrency(amount(now, name))} · ${deltaText(n, p)}`
-      : deltaText(n, p);
-    return `<div class="pp-stat ${tone}"><div class="pp-stat-label">${label} this week</div><div class="pp-stat-value">${n.toLocaleString('en-IN')}</div><div class="pp-stat-sub">${escapeHtml(sub)}</div></div>`;
+    const p = before ? count(before, name) : 0;
+    const tone = !before || !p ? '' : n > p ? 'good' : n < p ? 'bad' : '';
+    const sub = [
+      amount(now, name) > 0 ? formatCurrency(amount(now, name)) : '',
+      before ? deltaText(n, p) : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="pp-stat ${tone}"><div class="pp-stat-label">${label}</div><div class="pp-stat-value">${n.toLocaleString('en-IN')}</div><div class="pp-stat-sub">${escapeHtml(sub)}</div></div>`;
   }).join('');
 
-  document.getElementById('mgrBlurb').textContent =
-    `Week so far (${daysIn} day${daysIn === 1 ? '' : 's'}), against the same span last week. Ranked below by what converts, not by how many leads were handed out.`;
+  document.getElementById('mgrBlurb').textContent = period.isAll
+    ? 'All time. Ranked below by what converts, not by how many leads were handed out.'
+    : `${period.label}: ${period.text}, against ${rangeText(prev.from, prev.to)}. Ranked below by what converts, not by how many leads were handed out.`;
 }
 
+let funnelChart = null;
+
 async function renderFunnelChart() {
-  const funnel = await getTeamFunnel();
-  new Chart(document.getElementById('funnelChart'), {
+  const seq = periodSeq;
+  const funnel = await getTeamFunnel(period);
+  if (seq !== periodSeq) return;
+  document.getElementById('funnelTitle').textContent = period.isAll
+    ? 'Funnel — leads that reached each stage'
+    : `Funnel — leads created ${period.text}, and how far they got`;
+  // Chart.js keeps drawing a replaced chart on the same canvas unless the
+  // old instance is destroyed first.
+  funnelChart?.destroy();
+  funnelChart = new Chart(document.getElementById('funnelChart'), {
     type: 'bar',
     data: {
       labels: funnel.map((f) => f.name),
@@ -119,11 +129,12 @@ async function renderFunnelChart() {
   });
 }
 
-const perfState = { period: 'all', groupBy: 'owner', rows: [] };
+const perfState = { groupBy: 'owner', rows: [] };
 
 async function renderRmPerformance() {
   const tbody = document.getElementById('rmPerformanceBody');
-  const { from, to } = periodRange(perfState.period);
+  const seq = periodSeq;
+  const { from, to } = period;
 
   // Call stats are per USER, so they only line up when grouping by owner.
   // Showing one RM's call count against a whole team's row would be a lie,
@@ -133,17 +144,21 @@ async function renderRmPerformance() {
   try {
     [perf, callStats] = await Promise.all([
       getRmPerformance(from, to, perfState.groupBy),
-      byOwner ? getRmCallStats() : Promise.resolve({}),
+      byOwner ? getRmCallStats(period) : Promise.resolve({}),
     ]);
   } catch (err) {
     console.error('performance failed', err);
+    if (seq !== periodSeq) return;
     tbody.innerHTML = `<tr><td colspan="15" class="empty-state">Could not load performance.<br>
       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
 
+  if (seq !== periodSeq) return;
   perfState.rows = perf;
   document.getElementById('perfGroupHeader').textContent = PERF_GROUPS[perfState.groupBy];
+  // "All time" shows this week's calls rather than every call ever logged.
+  document.getElementById('perfCallsHead').textContent = period.isAll ? 'Calls (this wk)' : 'Calls';
 
   if (perf.length === 0) {
     tbody.innerHTML = `<tr><td colspan="15">${emptyState('fa-people-group', 'Nothing in this period', 'Try a wider period, or check that leads are assigned.')}</td></tr>`;
@@ -205,15 +220,6 @@ async function renderRmPerformance() {
 }
 
 function wirePerformanceControls() {
-  const pills = document.getElementById('perfPeriod');
-  pills?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-period]');
-    if (!btn) return;
-    pills.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-    perfState.period = btn.dataset.period;
-    renderRmPerformance();
-  });
-
   document.getElementById('perfGroupBy')?.addEventListener('change', (e) => {
     perfState.groupBy = e.target.value;
     renderRmPerformance();
@@ -239,7 +245,7 @@ function wirePerformanceControls() {
       .concat([...perfState.rows].sort((a, b) => b.logins - a.logins || b.pf - a.pf)
         .map((r) => cols.map((c) => esc(c[1](r))).join(',')))
       .join('\n');
-    downloadCsv(csv, `performance-${perfState.groupBy}-${perfState.period}.csv`);
+    downloadCsv(csv, `performance-${perfState.groupBy}-${period.isAll ? 'all-time' : `${period.from}_to_${period.to}`}.csv`);
     showToast(`Exported ${perfState.rows.length} rows`);
   });
 }
@@ -429,32 +435,48 @@ function funnelCell(value, previous) {
 
 async function renderLenderBreakdown() {
   const tbody = document.getElementById('lenderBreakdown');
+  const seq = periodSeq;
+  // Two different questions. All time is a funnel: how far every case has
+  // got. A period is activity: what each lender did inside it. A sanction
+  // this month can belong to a case that logged in last month, so in a
+  // period the stages are not shares of one another and no rate is shown.
+  const activity = !period.isAll;
+  document.getElementById('lenderSubtitle').textContent = activity
+    ? `What each lender did ${period.text}: cases opened, and logins, sanctions, PF and disbursements dated in the period. A stage here can belong to a case opened earlier, so these are counts, not a funnel. Choose All time for the funnel and for declines.`
+    : 'A funnel: each case counts at every stage it has reached, so Login includes every case that went on to Sanction, PF and Disbursement. The small figure is the share of the stage before. Declined cases still count for the stages they reached.';
+  document.getElementById('lenderCasesHead').textContent = activity ? 'New cases' : 'Cases';
+
   let rows;
   try {
-    rows = await getLenderBreakdown();
+    rows = activity ? await getLenderActivity(period) : await getLenderBreakdown();
   } catch (err) {
     console.error('lender breakdown failed', err);
+    if (seq !== periodSeq) return;
     tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Could not load lender deals.<br>
       <span style="font-size:12px;">${escapeHtml(err?.message || String(err))}</span></td></tr>`;
     return;
   }
+  if (seq !== periodSeq) return;
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8">${emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8">${activity
+      ? emptyState('fa-building-columns', 'Nothing with a lender in this period', 'No case was opened and no milestone was dated in it. Try a wider period.')
+      : emptyState('fa-building-columns', 'No lender deals yet', 'Once a deal is shared with a lender, its progress will break down here.')}</td></tr>`;
     return;
   }
 
   const total = rows.reduce((t, r) => {
-    ['cases', 'login', 'sanction', 'pf', 'disbursement', 'declined', 'disbursedAmount'].forEach((k) => { t[k] += r[k]; });
+    ['cases', 'login', 'sanction', 'pf', 'disbursement', 'declined', 'disbursedAmount'].forEach((k) => { t[k] += r[k] || 0; });
     return t;
   }, { name: 'All lenders', cases: 0, login: 0, sanction: 0, pf: 0, disbursement: 0, declined: 0, disbursedAmount: 0 });
+  const prior = (value) => (activity ? null : value);
 
   const row = (l, cls = '') => `<tr class="${cls}">
       <td><strong>${escapeHtml(l.name)}</strong></td>
       <td class="num"><span class="f-count">${Number(l.cases).toLocaleString('en-IN')}</span></td>
-      ${funnelCell(l.login, l.cases)}
-      ${funnelCell(l.sanction, l.login)}
-      ${funnelCell(l.pf, l.sanction)}
-      ${funnelCell(l.disbursement, l.pf)}
+      ${funnelCell(l.login, prior(l.cases))}
+      ${funnelCell(l.sanction, prior(l.login))}
+      ${funnelCell(l.pf, prior(l.sanction))}
+      ${funnelCell(l.disbursement, prior(l.pf))}
       <td class="num">${l.declined ? `<span class="badge badge-danger">${l.declined.toLocaleString('en-IN')}</span>` : '<span class="pp-muted">–</span>'}</td>
       <td class="num">${l.disbursedAmount > 0 ? formatCurrency(l.disbursedAmount) : '<span class="pp-muted">–</span>'}</td>
     </tr>`;
@@ -462,14 +484,19 @@ async function renderLenderBreakdown() {
 }
 
 async function renderTatAnalysis() {
-  const { averages, worstOffenders } = await getTatAnalysis();
+  const seq = periodSeq;
+  const { averages, worstOffenders } = await getTatAnalysis(period.isAll ? null : periodTester(period));
+  if (seq !== periodSeq) return;
+  document.getElementById('tatSubtitle').textContent = period.isAll
+    ? 'Every stage change on record.'
+    : `Stage changes completed ${period.text}.`;
 
   document.getElementById('tatAverages').innerHTML = averages.length
     ? averages.map((t) => `
         <div style="margin-bottom:10px;">
           <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${escapeHtml(t.label)}</span><span class="amount">${t.avgDays.toFixed(1)}d avg · ${t.count} deal${t.count === 1 ? '' : 's'}</span></div>
         </div>`).join('')
-    : emptyState('fa-hourglass-half', 'No stage transitions yet', 'TAT averages will appear once deals start moving between stages.');
+    : emptyState('fa-hourglass-half', period.isAll ? 'No stage transitions yet' : 'No stage transitions in this period', period.isAll ? 'TAT averages will appear once deals start moving between stages.' : 'No deal moved between stages in it. Try a wider period.');
 
   document.getElementById('tatWorstOffenders').innerHTML = worstOffenders.length
     ? worstOffenders.map((t) => `
@@ -478,7 +505,7 @@ async function renderTatAnalysis() {
           <span class="badge badge-warning">${t.days.toFixed(1)}d</span>
         </div>
         ${t.remarks ? `<div style="font-size:12px;color:var(--ink-500);padding:0 0 6px;">${escapeHtml(t.remarks)}</div>` : ''}`).join('')
-    : '<p class="empty-state">No stage transitions recorded yet.</p>';
+    : `<p class="empty-state">${period.isAll ? 'No stage transitions recorded yet.' : 'No stage transitions in this period.'}</p>`;
 }
 
 // ---------- Stage movement trends (lead + bank-wise deal) ----------
@@ -541,66 +568,19 @@ async function populateTrendLenders() {
   }
 }
 
-/* ---------- Milestone counts by date range ---------- */
-
-const MILESTONE_META = {
-  Login:        { icon: 'fa-right-to-bracket', accent: 'var(--accent)' },
-  Sanction:     { icon: 'fa-stamp',            accent: 'var(--success)' },
-  'PF Paid':    { icon: 'fa-sack-dollar',      accent: 'var(--warning)' },
-  Disbursement: { icon: 'fa-money-bill-transfer', accent: 'var(--success)' },
-};
-
-const isoDay = (d) => d.toISOString().slice(0, 10);
-
-function currentMilestoneRange() {
-  return { from: document.getElementById('milestoneFrom').value, to: document.getElementById('milestoneTo').value };
-}
-
-function setMilestoneRange(days) {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - days);
-  document.getElementById('milestoneFrom').value = isoDay(from);
-  document.getElementById('milestoneTo').value = isoDay(to);
-}
-
-async function renderMilestoneCounts() {
-  const host = document.getElementById('milestoneCounts');
-  const { from, to } = currentMilestoneRange();
-  if (!from || !to) return;
-  if (from > to) {
-    host.innerHTML = `<p class="empty-state">"From" is after "To" — swap the dates to see results.</p>`;
-    return;
-  }
-  host.innerHTML = '<div class="spinner-block"><span class="spinner"></span><span>Loading…</span></div>';
-  try {
-    const rows = await getMilestoneCounts(from, to);
-    host.innerHTML = `<div class="milestone-grid">${rows.map((r) => {
-      const meta = MILESTONE_META[r.milestone] || { icon: 'fa-circle-dot', accent: 'var(--accent)' };
-      return `<div class="milestone-card" style="--stat-accent:${meta.accent}">
-        <div class="stat-icon"><i class="fa-solid ${meta.icon}"></i></div>
-        <div class="milestone-count">${r.deal_count}</div>
-        <div class="milestone-label">${escapeHtml(r.milestone)}</div>
-        <div class="milestone-value">${r.total_amount > 0 ? formatCurrency(r.total_amount) : '—'}</div>
-      </div>`;
-    }).join('')}</div>`;
-  } catch (err) {
-    console.error('milestone counts failed', err);
-    host.innerHTML = `<p class="empty-state">Could not load milestone counts: ${escapeHtml(err.message || String(err))}</p>`;
-  }
-}
+/* ---------- Milestones CSV: the rows behind the headline figures ---------- */
 
 async function exportMilestonesCsv() {
-  const { from, to } = currentMilestoneRange();
+  const { from, to } = period;
   const btn = document.getElementById('btnMilestoneCsv');
   btn.disabled = true;
   try {
     const rows = await getMilestoneRows(from, to);
-    if (!rows.length) { showToast('No milestones in that date range.', true); return; }
+    if (!rows.length) { showToast('No milestones in this period.', true); return; }
     const cols = ['event_date', 'milestone', 'student_name', 'student_phone', 'lender', 'lender_branch', 'assigned_rm', 'team', 'lead_source', 'amount', 'reference'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
-    downloadCsv(csv, `milestones_${from}_to_${to}.csv`);
+    downloadCsv(csv, period.isAll ? 'milestones_all-time.csv' : `milestones_${from}_to_${to}.csv`);
     showToast(`Exported ${rows.length} milestone${rows.length === 1 ? '' : 's'}.`);
   } catch (err) {
     console.error('milestone CSV failed', err);
@@ -610,21 +590,11 @@ async function exportMilestonesCsv() {
   }
 }
 
-function initMilestoneControls() {
-  setMilestoneRange(30); // default view: last 30 days
-  document.getElementById('btnMilestoneApply').addEventListener('click', () => {
-    document.querySelectorAll('#milestonePresets button').forEach((b) => b.classList.remove('active'));
-    renderMilestoneCounts();
-  });
-  document.getElementById('btnMilestoneCsv').addEventListener('click', exportMilestonesCsv);
-  document.querySelectorAll('#milestonePresets button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#milestonePresets button').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      setMilestoneRange(Number(btn.dataset.days));
-      renderMilestoneCounts();
-    });
-  });
+/** Everything on the page that is for the chosen period. */
+function renderPeriodSections() {
+  return Promise.all([
+    renderHeadlineStats(), renderFunnelChart(), renderRmPerformance(), renderLenderBreakdown(), renderTatAnalysis(),
+  ]);
 }
 
 async function bootstrap() {
@@ -651,8 +621,23 @@ async function bootstrap() {
     currentUser: user,
   });
 
+  let orgPerf;
+  const picker = mountPeriodPicker({
+    host: document.getElementById('periodPicker'),
+    onChange: (value) => {
+      period = value;
+      periodSeq += 1;
+      orgPerf?.setPeriod(value);
+      renderPeriodSections().catch((err) => {
+        console.error('period change failed', err);
+        showToast(err?.message || 'Could not load that period.', true);
+      });
+    },
+  });
+  period = picker.get();
+  document.getElementById('btnMilestoneCsv').addEventListener('click', exportMilestonesCsv);
+
   initTrendControls();
-  initMilestoneControls();
   await populateTrendLenders();
 
   document.addEventListener('keydown', (e) => {
@@ -660,8 +645,8 @@ async function bootstrap() {
   });
 
   wirePerformanceControls();
-  mountOrgPerformance({ host: document.getElementById('orgPerf'), supabase });
-  await Promise.all([renderDailyStats(), renderMilestoneCounts(), renderUnassignedLeads(), renderFunnelChart(), renderRmPerformance(), renderLenderBreakdown(), renderTatAnalysis(), renderLeadTrends(), renderDealTrends()]);
+  orgPerf = mountOrgPerformance({ host: document.getElementById('orgPerf'), supabase, period });
+  await Promise.all([renderPeriodSections(), renderUnassignedLeads(), renderLeadTrends(), renderDealTrends()]);
 }
 
 guardBootstrap(bootstrap, 'Manager Dashboard');

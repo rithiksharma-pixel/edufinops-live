@@ -18,6 +18,7 @@
 // Exported as a factory taking the app's own supabase client, matching
 // shared/js/authService.js — never spins up a second GoTrueClient.
 // =========================================================
+import { fetchAllResult } from './fetchAll.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -104,12 +105,15 @@ export function createTrendsService(supabase) {
   async function getLeadStageTrends(granularity) {
     const buckets = buildBuckets(granularity);
     const [eventsRes, stagesRes] = await Promise.all([
-      supabase
+      // Paged. Unpaged, PostgREST returned only the first 1000 stage changes
+      // in the window, in no particular order, so a busy week or any monthly
+      // view counted a fraction of what moved and still looked plausible.
+      fetchAllResult(() => supabase
         .from('lead_events')
         .select('to_stage_id, created_at')
         .not('to_stage_id', 'is', null)
         .eq('is_deleted', false)
-        .gte('created_at', buckets[0].start.toISOString()),
+        .gte('created_at', buckets[0].start.toISOString())),
       supabase.from('lead_stages').select('id, name, sequence_order').eq('is_deleted', false).order('sequence_order'),
     ]);
     if (eventsRes.error) throw eventsRes.error;
@@ -128,16 +132,18 @@ export function createTrendsService(supabase) {
     // deals!inner keeps this an inner join so a lender filter actually
     // restricts rows. deals.lender_id is the only FK to lenders, so this
     // embed is unambiguous (no PGRST201 risk).
-    let eventsQuery = supabase
-      .from('deal_events')
-      .select('to_stage_id, created_at, deals!inner ( lender_id )')
-      .not('to_stage_id', 'is', null)
-      .eq('is_deleted', false)
-      .gte('created_at', buckets[0].start.toISOString());
-    if (lenderId) eventsQuery = eventsQuery.eq('deals.lender_id', lenderId);
+    const eventsQuery = () => {
+      const query = supabase
+        .from('deal_events')
+        .select('to_stage_id, created_at, deals!inner ( lender_id )')
+        .not('to_stage_id', 'is', null)
+        .eq('is_deleted', false)
+        .gte('created_at', buckets[0].start.toISOString());
+      return lenderId ? query.eq('deals.lender_id', lenderId) : query;
+    };
 
     const [eventsRes, stagesRes] = await Promise.all([
-      eventsQuery,
+      fetchAllResult(eventsQuery), // paged, for the same reason as lead trends
       supabase.from('deal_stages').select('id, name, sequence_order').eq('is_deleted', false).order('sequence_order'),
     ]);
     if (eventsRes.error) throw eventsRes.error;

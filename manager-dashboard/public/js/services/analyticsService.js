@@ -19,14 +19,23 @@ import { getTatThresholds } from '../../../../shared/js/tatThresholds.js';
 // re-declared so the two lists can never drift apart.
 import { CALL_STATUS_OPTIONS, CONNECTED_DISPOSITIONS } from '../../../../lead-management/public/js/services/leadService.js';
 
-export async function getTeamFunnel() {
+/**
+ * @param {object} period  from shared/js/periodPicker.js. The funnel is a
+ *   cohort: the leads CREATED in the period, and how far each has got since.
+ */
+export async function getTeamFunnel(period) {
   // Paged: PostgREST's 1000-row cap made every stage count in this funnel
   // under-report once the team passed 1000 leads.
   const data = await fetchAll(
-    () => supabase
-      .from('leads')
-      .select('id, lost_reason_id, login_date, sanction_date, pf_date, disbursed_date, lead_stages ( name, sequence_order )')
-      .eq('is_deleted', false)
+    () => {
+      let query = supabase
+        .from('leads')
+        .select('id, lost_reason_id, login_date, sanction_date, pf_date, disbursed_date, lead_stages ( name, sequence_order )')
+        .eq('is_deleted', false);
+      if (period?.fromTs) query = query.gte('created_at', period.fromTs);
+      if (period?.toTs) query = query.lte('created_at', period.toTs);
+      return query;
+    }
   );
   // Reached, not current: see shared/js/leadFunnel.js.
   return leadFunnel(data);
@@ -73,26 +82,6 @@ export async function getRmPerformance(from = null, to = null, groupBy = 'owner'
   }));
 }
 
-/**
- * Start/end for the period pills. `all` returns nulls, which the RPC reads as
- * "no bound" rather than as a zero-length window.
- */
-export function periodRange(period) {
-  // Formatted from LOCAL date parts, not toISOString(). toISOString() converts
-  // to UTC first, so local midnight on 1 August in IST (UTC+5:30) becomes
-  // 31 July 18:30Z and the month silently starts a day early — every
-  // "this month" number would have quietly included the previous day.
-  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const today = new Date();
-  if (period === 'day') return { from: iso(today), to: iso(today) };
-  if (period === 'week') return { from: iso(startOfWeek()), to: iso(today) };
-  if (period === 'month') {
-    const first = new Date(today.getFullYear(), today.getMonth(), 1);
-    return { from: iso(first), to: iso(today) };
-  }
-  return { from: null, to: null };
-}
-
 // Calendar week starting Monday 00:00 local time — duplicated per app
 // rather than shared, matching this codebase's existing pattern of each
 // app owning its own copy of small date-window helpers.
@@ -106,22 +95,32 @@ export function startOfWeek() {
 }
 
 /**
- * Per-RM call volume + connect rate for the current calendar week, keyed
+ * Per-RM call volume + connect rate for the period, keyed
  * by the user id who logged the call (created_by) — i.e. whose activity
  * it actually is, not just whichever RM the lead happens to be assigned
  * to. RLS's lead_events_select policy (can_view_lead) already scopes
  * visible rows to leads this manager's team can see, so no extra
  * team-membership filtering is needed client-side.
+ *
+ * "All time" falls back to the current calendar week: every call ever logged
+ * is tens of thousands of rows to page through for one column, and a
+ * lifetime call count says nothing about how someone is working now.
  */
-export async function getRmCallStats() {
-  const since = startOfWeek();
+export async function getRmCallStats(period) {
+  const bounded = period && !period.isAll;
+  const since = bounded ? period.fromTs : startOfWeek().toISOString();
+  const until = bounded ? period.toTs : null;
   const data = await fetchAll(
-    () => supabase
-      .from('lead_events')
-      .select('id, event_type, created_by')
-      .in('event_type', CALL_STATUS_OPTIONS)
-      .eq('is_deleted', false)
-      .gte('created_at', since.toISOString())
+    () => {
+      let query = supabase
+        .from('lead_events')
+        .select('id, event_type, created_by')
+        .in('event_type', CALL_STATUS_OPTIONS)
+        .eq('is_deleted', false);
+      if (since) query = query.gte('created_at', since);
+      if (until) query = query.lte('created_at', until);
+      return query;
+    }
   );
 
   const byRm = {};
@@ -152,6 +151,56 @@ export async function getLenderBreakdown() {
       open: Number(r.open_cases), declined: Number(r.declined), disbursedAmount: Number(r.disbursed_amount),
     }))
     .sort((a, b) => b.login - a.login || b.cases - a.cases);
+}
+
+/**
+ * What each lender did IN a period: cases opened, and logins, sanctions, PF
+ * and disbursements dated inside it. This is activity, not a funnel — a
+ * sanction in September may belong to a case that logged in during August —
+ * so the stages are not shares of one another the way lender_funnel()'s are.
+ *
+ * Milestones come from v_stage_milestones, the same rows milestone_counts()
+ * adds up, so the "All lenders" row here equals the headline figures for the
+ * same period.
+ */
+export async function getLenderActivity(period) {
+  const [milestones, deals] = await Promise.all([
+    fetchAll(
+      () => {
+        let query = supabase.from('v_stage_milestones').select('deal_id, lender, milestone, amount');
+        if (period.from) query = query.gte('event_date', period.from);
+        if (period.to) query = query.lte('event_date', period.to);
+        return query.order('milestone', { ascending: true });
+      },
+      { tiebreak: 'deal_id' }
+    ),
+    fetchAll(
+      () => {
+        let query = supabase.from('deals').select('id, lenders ( name )').eq('is_deleted', false);
+        if (period.fromTs) query = query.gte('created_at', period.fromTs);
+        if (period.toTs) query = query.lte('created_at', period.toTs);
+        return query;
+      }
+    ),
+  ]);
+
+  const byLender = new Map();
+  const row = (name) => {
+    const key = name || '(no lender)';
+    if (!byLender.has(key)) {
+      byLender.set(key, { name: key, cases: 0, login: 0, sanction: 0, pf: 0, disbursement: 0, declined: null, disbursedAmount: 0 });
+    }
+    return byLender.get(key);
+  };
+  deals.forEach((d) => { row(d.lenders?.name).cases += 1; });
+  milestones.forEach((m) => {
+    const r = row(m.lender);
+    if (m.milestone === 'Login') r.login += 1;
+    else if (m.milestone === 'Sanction') r.sanction += 1;
+    else if (m.milestone.startsWith('PF')) r.pf += 1;
+    else if (m.milestone === 'Disbursement') { r.disbursement += 1; r.disbursedAmount += Number(m.amount || 0); }
+  });
+  return [...byLender.values()].sort((a, b) => b.login - a.login || b.cases - a.cases);
 }
 
 /**
@@ -240,8 +289,14 @@ export async function getAttentionSummary() {
  * deal_events timestamps (every stage change is already logged there —
  * no new tracking needed). Returns per-transition averages plus the
  * slowest individual transitions, each with its remarks if one was left.
+ *
+ * A transition belongs to the period it COMPLETED in. The previous event is
+ * still needed to time it, so every event is read and the filter is applied
+ * to the finished transitions rather than to the query.
+ *
+ * @param {?(value: string) => boolean} inPeriod  from periodTester()
  */
-export async function getTatAnalysis() {
+export async function getTatAnalysis(inPeriod = null) {
   const { data, error } = await fetchAllResult(() => supabase
     .from('deal_events')
     .select('deal_id, to_stage_id, created_at, remarks, to_stage:deal_stages!deal_events_to_stage_id_fkey(name), deals(leads(student_name))')
@@ -258,6 +313,7 @@ export async function getTatAnalysis() {
     for (let i = 1; i < events.length; i++) {
       const prev = events[i - 1];
       const curr = events[i];
+      if (inPeriod && !inPeriod(curr.created_at)) continue;
       const days = (new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime()) / (24 * 60 * 60 * 1000);
       transitions.push({
         label: `${prev.to_stage?.name || '–'} → ${curr.to_stage?.name || '–'}`,

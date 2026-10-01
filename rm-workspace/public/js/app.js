@@ -19,6 +19,7 @@ import { mountOrgPerformance } from '../../../shared/js/orgPerformanceView.js';
 import { attachDuplicatePhoneCheck } from '../../../shared/js/duplicatePhone.js';
 import { leadFunnel, leadFunnelRowsHtml } from '../../../shared/js/leadFunnel.js';
 import { supabase } from './config/supabaseClient.js';
+import { mountPeriodPicker } from '../../../shared/js/periodPicker.js';
 
 let currentUser;
 let leadDrawer;
@@ -176,7 +177,9 @@ async function refreshTasks() {
   });
 }
 
-let callsPeriod = 'today';
+// The Calls screen opens on today — it is a work log — and is not tied to
+// the period remembered for the dashboards.
+let callsPeriod;
 
 function truncate(text, max) {
   if (!text) return '–';
@@ -184,7 +187,6 @@ function truncate(text, max) {
 }
 
 async function renderCallsView() {
-  const periodLabel = callsPeriod === 'week' ? 'this week' : 'today';
   const body = document.getElementById('callsListBody');
   body.innerHTML = '<tr><td class="empty-state">Loading…</td></tr>';
   let calls;
@@ -200,13 +202,13 @@ async function renderCallsView() {
   const rate = calls.length ? Math.round((connected / calls.length) * 100) : 0;
 
   document.getElementById('callsStats').innerHTML = [
-    [calls.length, `Calls ${periodLabel}`, 'fa-phone', 'var(--accent)'],
-    [connected, `Connected ${periodLabel}`, 'fa-phone-volume', 'var(--success)'],
-    [`${rate}%`, `Connect rate ${periodLabel}`, 'fa-chart-simple', 'var(--warning)'],
+    [calls.length, 'Calls', 'fa-phone', 'var(--accent)'],
+    [connected, 'Connected', 'fa-phone-volume', 'var(--success)'],
+    [`${rate}%`, 'Connect rate', 'fa-chart-simple', 'var(--warning)'],
   ].map(([value, label, icon, accent]) => `<div class="stat-card" style="--stat-accent:${accent};"><div class="stat-icon"><i class="fa-solid ${icon}"></i></div><div class="amount" style="color:${accent};">${value}</div><div class="stat-label">${label}</div></div>`).join('');
 
   if (calls.length === 0) {
-    body.innerHTML = `<tr><td colspan="4">${emptyState('fa-phone-slash', 'No calls logged yet', callsPeriod === 'week' ? "You haven't logged any calls this week." : "You haven't logged any calls today.")}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="4">${emptyState('fa-phone-slash', 'No calls logged', callsPeriod.isAll ? "You haven't logged any calls yet." : `You logged no calls ${callsPeriod.id === 'today' ? 'today' : `in this period (${callsPeriod.text})`}.`)}</td></tr>`;
     return;
   }
   body.innerHTML = calls.map((c) => `
@@ -230,15 +232,13 @@ function initDashboardLinks() {
   });
 }
 
-function initCallsPeriodToggle() {
-  document.querySelectorAll('#callsPeriodToggle .pill-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (btn.dataset.period === callsPeriod) return;
-      callsPeriod = btn.dataset.period;
-      document.querySelectorAll('#callsPeriodToggle .pill-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      await renderCallsView();
-    });
-  });
+function initCallsPeriodPicker() {
+  callsPeriod = mountPeriodPicker({
+    host: document.getElementById('callsPeriodPicker'),
+    defaultId: 'today',
+    storageKey: null,
+    onChange: (value) => { callsPeriod = value; renderCallsView(); },
+  }).get();
 }
 
 // =========================================================
@@ -565,7 +565,7 @@ async function bootstrap() {
     el.addEventListener('click', (e) => { e.preventDefault(); loadView(el.dataset.view); });
   });
   initLeadModal();
-  initCallsPeriodToggle();
+  initCallsPeriodPicker();
   initDashboardLinks();
   mountOrgPerformance({ host: document.getElementById('rmSourcePerf'), supabase, scope: 'rm', userId: currentUser.id });
   initRowNavigation();

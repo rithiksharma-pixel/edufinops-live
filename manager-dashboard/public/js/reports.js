@@ -15,6 +15,7 @@ import { emptyState } from '../../../shared/js/emptyState.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { downloadCsv } from '../../../authentication/public/js/services/exportImportService.js';
 import { renderInsights, paretoInsight, topNInsight, outlierInsight, shareInsight } from '../../../shared/js/insights.js';
+import { mountPeriodPicker } from '../../../shared/js/periodPicker.js';
 import {
   getConsultancyReport, getConsultancyLeads, getBdReport, getBdLeads, getConsultancyBdMap,
   conversionRates, toCsv, downloadText, buildPartnerReportHtml, REPORT_DATE_FIELDS,
@@ -709,20 +710,24 @@ async function bootstrap() {
   wireSorting('bdTable', 'bd', renderBd);
 
   document.getElementById('repDateField').addEventListener('change', (e) => { state.dateField = e.target.value; loadActive(); });
-  document.getElementById('repFrom').addEventListener('change', (e) => { state.from = e.target.value; loadActive(); });
-  document.getElementById('repTo').addEventListener('change', (e) => { state.to = e.target.value; loadActive(); });
+  // The same picker, and the same remembered period, as the dashboards.
+  const applyPeriod = (value) => { state.from = value.from || ''; state.to = value.to || ''; };
+  const picker = mountPeriodPicker({
+    host: document.getElementById('repPeriod'),
+    onChange: (value) => { applyPeriod(value); loadActive(); },
+  });
+  applyPeriod(picker.get());
   document.getElementById('repConsultancy').addEventListener('change', (e) => { state.consultancy = e.target.value; render(); });
   document.getElementById('repBd').addEventListener('change', (e) => { state.bd = e.target.value; renderBd(); });
   document.getElementById('repMin').addEventListener('input', (e) => { state.min = Number(e.target.value) || 0; renderActive(); });
   document.getElementById('repClear').addEventListener('click', () => {
-    state.from = ''; state.to = ''; state.consultancy = ''; state.bd = ''; state.min = 0; state.dateField = 'created_at';
+    state.consultancy = ''; state.bd = ''; state.min = 0; state.dateField = 'created_at';
     document.getElementById('repDateField').value = 'created_at';
-    document.getElementById('repFrom').value = '';
-    document.getElementById('repTo').value = '';
     document.getElementById('repConsultancy').value = '';
     document.getElementById('repBd').value = '';
     document.getElementById('repMin').value = '0';
-    loadActive();
+    // Clearing the period means all time; set() reloads the report.
+    picker.set('all');
   });
   document.getElementById('repExportAll').addEventListener('click', () => {
     if (state.tab === 'bd') {

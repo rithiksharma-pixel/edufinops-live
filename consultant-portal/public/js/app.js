@@ -11,6 +11,7 @@ import { validateLeadForm, formatDateTime } from './utils/validation.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
 import { leadFunnel, leadFunnelRowsHtml } from '../../../shared/js/leadFunnel.js';
 import { renderInsights, funnelDropInsight } from '../../../shared/js/insights.js';
+import { mountPeriodPicker, periodTester } from '../../../shared/js/periodPicker.js';
 
 let currentUser;
 
@@ -23,7 +24,10 @@ const DISBURSED_ORDER = 70;
 const QUIET_DAYS = 30;
 const PAGE = 100;
 
-const state = { rows: [], tab: 'all', search: '', shown: PAGE };
+// `all` is every student the firm has referred; `rows` is the ones referred
+// in the chosen period, and is what every figure, tab and list on the page is
+// drawn from, so they always agree with one another.
+const state = { all: [], rows: [], tab: 'all', search: '', shown: PAGE, period: null };
 
 const daysSince = (d) => Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
 const isOpen = (r) => !r.is_lost && (r.stage_order ?? 0) < DISBURSED_ORDER;
@@ -75,6 +79,7 @@ function renderStats() {
   const rows = state.rows;
   const total = rows.length;
   const pct = (n) => (total ? `${((n / total) * 100).toFixed(1)}% of referred` : '');
+  const inPeriod = state.period.isAll ? '' : `Referred ${state.period.text}`;
   const login = rows.filter((r) => !r.is_lost && r.stage_order >= LOGIN_ORDER).length;
   const sanctioned = rows.filter((r) => !r.is_lost && r.stage_order >= SANCTION_ORDER).length;
   const quiet = rows.filter(isQuiet).length;
@@ -82,7 +87,7 @@ function renderStats() {
 
   const stat = (label, value, sub, tone = '') => `<div class="pp-stat ${tone}"><div class="pp-stat-label">${label}</div><div class="pp-stat-value">${value}</div>${sub ? `<div class="pp-stat-sub">${sub}</div>` : ''}</div>`;
   document.getElementById('cpDashStats').innerHTML = [
-    stat('Students referred', fmtInt(total), mine && mine !== total ? `${fmtInt(mine)} added by you` : ''),
+    stat('Students referred', fmtInt(total), [inPeriod, mine && mine !== total ? `${fmtInt(mine)} added by you` : ''].filter(Boolean).join(' · ')),
     stat('Reached bank login', fmtInt(login), pct(login)),
     stat('Sanctioned', fmtInt(sanctioned), pct(sanctioned), sanctioned ? 'good' : ''),
     stat(`No update ${QUIET_DAYS}+ days`, fmtInt(quiet), quiet ? 'Still open, nothing recorded' : 'Everyone is moving', quiet ? 'warn' : 'good'),
@@ -94,7 +99,9 @@ function renderFunnel() {
   // each step's rate shows where the firm's students drop out.
   const lost = state.rows.filter((r) => r.is_lost).length;
   document.getElementById('cpFunnel').innerHTML = state.rows.length === 0
-    ? emptyState('fa-user-graduate', 'No students yet', 'Add your first student to start tracking their loan.')
+    ? (state.all.length
+      ? emptyState('fa-user-graduate', 'No students referred in this period', 'Choose a wider period to see earlier students.')
+      : emptyState('fa-user-graduate', 'No students yet', 'Add your first student to start tracking their loan.'))
     : leadFunnelRowsHtml(leadFunnel(state.rows), escapeHtml) +
       `<div class="pp-funnel-row" style="margin-top:6px;color:var(--ink-500);"><span>Did not proceed</span><span></span><span class="pp-num">${fmtInt(lost)}</span></div>`;
 }
@@ -117,7 +124,9 @@ function renderRows() {
   const rows = visibleRows();
   if (rows.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5">${state.rows.length === 0
-      ? emptyState('fa-user-graduate', 'No students submitted yet', 'Use "Add student" to refer your first one.')
+      ? (state.all.length
+        ? emptyState('fa-calendar', 'No students referred in this period', `Nothing referred ${state.period.text}. Choose a wider period to see earlier students.`)
+        : emptyState('fa-user-graduate', 'No students submitted yet', 'Use "Add student" to refer your first one.'))
       : emptyState('fa-magnifying-glass', 'No matches', state.search ? 'Try a different name or phone number.' : 'No students in this view right now.')}</td></tr>`;
     more.hidden = true;
     return;
@@ -163,13 +172,21 @@ function renderStudentInsights() {
   ], { title: 'What your students’ progress shows' });
 }
 
-async function refreshLeads() {
-  state.rows = await listMyStudents();
+/** Redraws everything from the students referred in the chosen period. */
+function renderAll() {
+  const inPeriod = periodTester(state.period);
+  state.rows = state.all.filter((r) => inPeriod(r.created_at));
+  state.shown = PAGE;
   renderStats();
   renderStudentInsights();
   renderFunnel();
   renderTabs();
   renderRows();
+}
+
+async function refreshLeads() {
+  state.all = await listMyStudents();
+  renderAll();
 }
 
 async function openDrawer(leadId) {
@@ -330,6 +347,15 @@ async function bootstrap() {
     document.getElementById('cpBlurb').textContent =
       'Students you have added, and where each one has reached. Ask your Zolve contact to link this login to your firm to see all of its students.';
   }
+
+  // A partner's first look should be their whole book, so this opens on All
+  // time and remembers its own choice, separately from the staff dashboards.
+  state.period = mountPeriodPicker({
+    host: document.getElementById('cpPeriod'),
+    defaultId: 'all',
+    storageKey: 'zt-period-partner',
+    onChange: (value) => { state.period = value; renderAll(); },
+  }).get();
 
   initTabs();
   initDrawerClose();
