@@ -4,6 +4,7 @@
 // services to components. Components never import each other directly.
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
@@ -384,7 +385,7 @@ async function bootstrap() {
   // which surface they are looking at.
   if (!guardDestination(state.currentUser, 'lead-management')) return;
   applyNavPermissions(state.currentUser.role);
-  mountTopbar({ app: 'lead-management', user: state.currentUser });
+  mountTopbar({ app: 'lead-management', user: state.currentUser, supabase });
 
   const [stages, sources, rms] = await Promise.all([
     getLeadStages(),

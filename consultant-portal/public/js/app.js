@@ -1,4 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
 import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
@@ -336,7 +337,7 @@ async function bootstrap() {
   // which surface they are looking at.
   if (!guardDestination(currentUser, 'consultant-portal')) return;
   applyNavPermissions(currentUser.role);
-  mountTopbar({ app: 'consultant-portal', user: currentUser });
+  mountTopbar({ app: 'consultant-portal', user: currentUser, supabase });
 
   const [stages, sources, context] = await Promise.all([getLeadStages(), getLeadSources(), getPortalContext()]);
   if (context.consultancy_name) {

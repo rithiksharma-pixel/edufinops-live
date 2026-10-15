@@ -457,7 +457,7 @@ async function bootstrap() {
   $('avatar').textContent = (me.full_name || '?').charAt(0).toUpperCase();
   if (!guardDestination(me, 'activity-forms')) return;
   applyNavPermissions(me.role);
-  mountTopbar({ app: 'admin-dashboard', user: { ...me, fullName: me.full_name } });
+  mountTopbar({ app: 'admin-dashboard', user: { ...me, fullName: me.full_name }, supabase });
 
   if (!['Admin', 'Manager'].includes(me.role)) {
     document.querySelector('.af-layout').innerHTML =

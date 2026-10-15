@@ -1,4 +1,5 @@
 import { getCurrentUser } from './services/authService.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
@@ -648,7 +649,7 @@ async function bootstrap() {
   // which surface they are looking at.
   if (!guardDestination(currentUser, 'lender-pipeline')) return;
   applyNavPermissions(currentUser.role);
-  mountTopbar({ app: 'lender-pipeline', user: currentUser });
+  mountTopbar({ app: 'lender-pipeline', user: currentUser, supabase });
 
   document.getElementById('lpTitle').textContent = currentUser.lenderOrgName;
   document.getElementById('lpBlurb').textContent =
@@ -659,6 +660,15 @@ async function bootstrap() {
   initProfileForm();
   initPipelineControls();
   await showView('pipeline');
+
+  // ?openDeal=<uuid> opens one case straight away. This is where the shared
+  // search box sends a Lender: a bank officer searching their own login ID
+  // has no Lead Management to be sent to, so the hit has to land on the
+  // case itself. openDrawer reads through the same RLS-scoped calls as a
+  // click in the list, so a hand-typed id for someone else's case shows
+  // nothing rather than leaking.
+  const openDealId = new URLSearchParams(window.location.search).get('openDeal');
+  if (openDealId) await openDrawer(openDealId);
 }
 
 function initPipelineControls() {

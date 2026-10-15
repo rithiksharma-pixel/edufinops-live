@@ -613,7 +613,7 @@ async function bootstrap() {
   // surface they are looking at.
   if (!guardDestination(user, 'manager-dashboard')) return;
   applyNavPermissions(user.role);
-  mountTopbar({ app: 'manager-dashboard', user });
+  mountTopbar({ app: 'manager-dashboard', user, supabase });
 
   leadDrawer = initLeadDrawer({
     showToast,

@@ -553,7 +553,7 @@ async function bootstrap() {
   // which surface they are looking at.
   if (!guardDestination(currentUser, 'rm-workspace')) return;
   applyNavPermissions(currentUser.role);
-  mountTopbar({ app: 'rm-workspace', user: currentUser });
+  mountTopbar({ app: 'rm-workspace', user: currentUser, supabase });
 
   leadDrawer = initLeadDrawer({
     showToast,

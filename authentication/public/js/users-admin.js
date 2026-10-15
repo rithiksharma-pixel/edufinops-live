@@ -1,5 +1,6 @@
 import { getCurrentUser } from './services/authService.js';
 import { escapeHtml, EMAIL_REGEX } from '../../../shared/js/utils.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { emptyState } from '../../../shared/js/emptyState.js';
@@ -613,7 +614,7 @@ async function bootstrap() {
     return;
   }
 
-  mountTopbar({ app: 'user-management', user: currentUserProfile });
+  mountTopbar({ app: 'user-management', user: currentUserProfile, supabase });
 
   const isAdmin = currentUserProfile.role === 'Admin';
 

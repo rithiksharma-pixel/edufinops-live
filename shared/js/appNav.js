@@ -30,11 +30,16 @@ import { getHomeRouteForRole } from '../../authentication/public/js/config/roleR
 // The destination catalog and its role rules live in one place now, so the
 // switcher, each app's own sidebar, and the page guards cannot disagree.
 import { navDestinations, destination } from './roleAccess.js';
+// The search box lives in this bar so that every page gets it from one
+// place. It needs a Supabase client, and this module deliberately has none
+// — each app's client sits at a different relative path — so the caller
+// hands one in through mountTopbar.
+import { mountGlobalSearch } from './globalSearch.js';
 
 const SUPABASE_REF = 'wgzgqbfankdbqxxcesci';
 const LOGIN_PATH = '/authentication/public/login.html';
 
-const state = { app: null, user: null, crumbs: [] };
+const state = { app: null, user: null, crumbs: [], supabase: null };
 
 // Kept as a named function so the call sites below read unchanged; the
 // catalog itself now lives in roleAccess.js.
@@ -48,12 +53,18 @@ function initials(name) {
 
 /**
  * Mount / refresh the top chrome bar.
- * @param {{app:string, user:{fullName?:string,email?:string,role:string}, crumbs?:Array}} opts
+ * `supabase` is optional and only powers the search box: a page that does
+ * not pass one simply renders without it, rather than failing to mount.
+ *
+ * @param {{app:string, user:{fullName?:string,email?:string,role:string}, crumbs?:Array, supabase?:object}} opts
  */
-export function mountTopbar({ app, user, crumbs }) {
+export function mountTopbar({ app, user, crumbs, supabase }) {
   state.app = app;
   state.user = user || null;
   if (crumbs) state.crumbs = crumbs;
+  // Kept once set: setBreadcrumb() re-renders through this same path and
+  // must not drop the client the search box is using.
+  if (supabase) state.supabase = supabase;
   render();
 }
 
@@ -259,6 +270,7 @@ function render() {
       <nav class="zt-crumbs" aria-label="Breadcrumb">${crumbHtml}</nav>
     </div>
     <div class="zt-topbar-right">
+      ${state.user && state.supabase ? '<div class="zt-search" id="ztSearchHost"></div>' : ''}
       ${state.user ? `
         <div class="zt-usermenu">
           <button type="button" class="zt-user-btn" aria-haspopup="true" aria-expanded="false" title="Account">
@@ -278,6 +290,11 @@ function render() {
   wireEvents(host);
   wireBrandHome();
   wireSidebarUserMenu();
+
+  const searchHost = host.querySelector('#ztSearchHost');
+  if (searchHost && state.supabase) {
+    mountGlobalSearch(searchHost, { supabase: state.supabase, role: state.user?.role });
+  }
 }
 
 /**

@@ -210,3 +210,96 @@
   .zt-signout { padding: 7px 10px; }
   .zt-crumbs { display: none; }
 }
+
+/* ---------------------------------------------------------
+   GLOBAL SEARCH (shared/js/globalSearch.js)
+
+   Sits left of the account menu in the top bar, so it is on every page
+   without any page knowing about it. Collapses to an icon-width field
+   under 860px, where the bar is the primary navigation and a wide input
+   would push the account menu off screen; it still expands on focus.
+   --------------------------------------------------------- */
+/* The top bar is the positioning context the results panel falls back to
+   on narrow screens; see the media query at the end of this block. */
+.zt-topbar { position: relative; }
+
+.zt-search { position: relative; flex-shrink: 1; min-width: 0; }
+
+.zt-search-field { position: relative; display: flex; align-items: center; }
+
+.zt-search-icon {
+  position: absolute; left: 10px; font-size: 12px; color: var(--ink-500); pointer-events: none;
+}
+
+.zt-search-input {
+  width: 260px; max-width: 100%; padding: 7px 30px 7px 30px;
+  font: inherit; font-size: 13px; color: var(--ink-900);
+  background: var(--paper-sunken); border: 1px solid var(--border); border-radius: 8px;
+  transition: width .15s ease, border-color .15s ease, background .15s ease;
+}
+.zt-search-input::placeholder { color: var(--ink-500); }
+.zt-search-input:focus {
+  width: 340px; outline: none; background: var(--paper-raised);
+  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+/* The native clear affordance duplicates Escape and crowds the hint key. */
+.zt-search-input::-webkit-search-cancel-button { display: none; }
+
+.zt-search-hint {
+  position: absolute; right: 9px; font-size: 10.5px; line-height: 1;
+  padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--ink-500); background: var(--paper-raised); pointer-events: none;
+}
+.zt-search-input:focus ~ .zt-search-hint { display: none; }
+
+.zt-search-results {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(70vh, 520px); overflow-y: auto;
+  background: var(--paper-raised); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-md); padding: 6px;
+}
+
+.zt-search-note { padding: 10px 10px 11px; font-size: 12.5px; color: var(--ink-500); }
+.zt-search-note.err { color: var(--danger-soft-ink); }
+
+.zt-search-row {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 8px 10px; border-radius: 7px; border: 0; background: none;
+}
+.zt-search-row:hover { background: var(--bg-hover); }
+.zt-search-row:focus-visible, .zt-search-row:focus { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--bg-hover); }
+
+.zt-search-row-top { display: flex; align-items: center; gap: 7px; }
+.zt-search-row-top strong {
+  font-size: 13.5px; font-weight: 600; color: var(--ink-900);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.zt-search-stage { margin-left: auto; font-size: 11px; color: var(--ink-500); flex-shrink: 0; }
+
+.zt-search-badge {
+  flex-shrink: 0; font-size: 10px; letter-spacing: .02em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-soft-ink);
+}
+
+.zt-search-row-sub {
+  margin-top: 2px; font-size: 11.5px; color: var(--ink-500);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.zt-search-row-sub code {
+  font-size: 11.5px; padding: 1px 4px; border-radius: 4px;
+  background: var(--paper-sunken); color: var(--ink-900);
+}
+
+/* The results panel hangs off the right of the field. On a phone the field
+   itself is only an icon's width, so anchoring to it puts the panel half
+   off-screen. Dropping the field's positioning context lets the panel
+   resolve against the top bar instead and span its full width. */
+@media (max-width: 860px) {
+  .zt-search { position: static; }
+  .zt-search-input { width: 36px; padding-right: 10px; }
+  .zt-search-input:focus { width: min(60vw, 280px); }
+  .zt-search-hint { display: none; }
+  .zt-search-results { left: 0; right: 0; width: auto; max-width: none; }
+}

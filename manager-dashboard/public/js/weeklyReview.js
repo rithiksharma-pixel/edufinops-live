@@ -610,7 +610,7 @@ async function bootstrap() {
   $('avatar').textContent = (currentUser.full_name || '?').charAt(0).toUpperCase();
   if (!guardDestination(currentUser, 'weekly-review')) return;
   applyNavPermissions(currentUser.role);
-  mountTopbar({ app: 'manager-dashboard', user: currentUser });
+  mountTopbar({ app: 'manager-dashboard', user: currentUser, supabase });
 
   $('wrWeekEnd').value = new Date().toISOString().slice(0, 10);
   $('btnGenerate').addEventListener('click', generate);

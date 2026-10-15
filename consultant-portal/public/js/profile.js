@@ -1,4 +1,5 @@
 import { getCurrentUser, updateMyProfile } from './services/authService.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar, setBreadcrumb } from '../../../shared/js/appNav.js';
 import { showToast } from '../../../shared/js/toast.js';
 import { guardBootstrap } from '../../../shared/js/bootstrapGuard.js';
@@ -12,7 +13,7 @@ async function bootstrap() {
     return;
   }
 
-  mountTopbar({ app: 'consultant-portal', user });
+  mountTopbar({ app: 'consultant-portal', user, supabase });
   setBreadcrumb(['Profile']);
 
   const form = document.getElementById('profileForm');

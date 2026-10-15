@@ -7,6 +7,7 @@
 // for a text search would be slower and no more correct.
 // =========================================================
 import { getCurrentUser } from './services/authService.js';
+import { supabase } from './config/supabaseClient.js';
 import { mountTopbar } from '../../../shared/js/appNav.js';
 import { guardDestination, applyNavPermissions } from '../../../shared/js/roleAccess.js';
 import { escapeHtml } from '../../../shared/js/utils.js';
@@ -692,7 +693,7 @@ async function bootstrap() {
   document.getElementById('avatar').textContent = (user.full_name || '?').charAt(0).toUpperCase();
   if (!guardDestination(user, 'partner-reports')) return;
   applyNavPermissions(user.role);
-  mountTopbar({ app: 'manager-dashboard', user });
+  mountTopbar({ app: 'manager-dashboard', user, supabase });
 
   // Said plainly rather than buried: disbursed value is near-zero across the
   // board because the imported book has stage labels with no lender deal
