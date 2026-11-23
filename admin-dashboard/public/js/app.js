@@ -691,6 +691,7 @@ const DOCUMENT_CATEGORIES = ['KYC', 'Academics', 'Financials', 'Other'];
 const settings = {
   tab: 'consultancies', consultancies: [], branches: [], lenders: [],
   consSearch: '', consFilter: 'all', consShown: 100, branchSearch: '', wired: false,
+  formLinks: [], formSearch: '',
 };
 
 function wireSettingsChrome() {
@@ -708,6 +709,79 @@ function wireSettingsChrome() {
   $('setSearchBranches').addEventListener('input', (e) => {
     clearTimeout(t2); t2 = setTimeout(() => { settings.branchSearch = e.target.value.trim().toLowerCase(); renderBranches(); }, 120);
   });
+  let t3;
+  $('setSearchForms').addEventListener('input', (e) => {
+    clearTimeout(t3); t3 = setTimeout(() => { settings.formSearch = e.target.value.trim().toLowerCase(); renderFormLinks(); }, 120);
+  });
+  $('formLinkForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const id = f.get('consultancy_id');
+    if (!id) return;
+    const { error } = await supabase.rpc('create_partner_lead_link', {
+      p_consultancy_id: id, p_label: (f.get('label') || '').trim() || null,
+    });
+    if (error) return showToast(error.message, true);
+    e.target.reset();
+    showToast('Link created. Copy it and send it to the partner.');
+    loadFormLinks();
+  });
+}
+
+/** The public URL a partner opens. Built from where the admin console is
+ *  served, so it is right in local dev and on the deployed site without a
+ *  second place to configure. */
+function partnerFormUrl(token) {
+  return `${window.location.origin}/partner-form/public/index.html?t=${encodeURIComponent(token)}`;
+}
+
+async function loadFormLinks() {
+  const { data, error } = await supabase.rpc('partner_lead_links');
+  if (error) { showToast(error.message, true); return; }
+  settings.formLinks = data || [];
+  $('setCountForms').textContent = settings.formLinks.filter((l) => l.is_active).length;
+  renderFormLinks();
+}
+
+function renderFormLinks() {
+  const q = settings.formSearch;
+  const rows = settings.formLinks.filter((l) => !q
+    || l.consultancy_name.toLowerCase().includes(q) || (l.label || '').toLowerCase().includes(q));
+
+  $('formLinksList').innerHTML = rows.length
+    ? rows.map((l) => `<tr${l.is_active ? '' : ' class="set-row-off"'}>
+        <td class="strong">${esc(l.consultancy_name)}${l.label ? `<span class="set-sub">${esc(l.label)}</span>` : ''}</td>
+        <td>${l.is_active
+          ? `<button type="button" class="btn btn-ghost btn-sm" data-copy-link="${esc(l.token)}">Copy link</button>`
+          : '<span class="set-missing">Revoked</span>'}</td>
+        <td class="r">${Number(l.leads_created).toLocaleString('en-IN')}</td>
+        <td class="r">${Number(l.duplicates).toLocaleString('en-IN')}</td>
+        <td>${l.last_submitted_at ? new Date(l.last_submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '–'}</td>
+        <td class="r">${l.is_active ? `<button type="button" class="btn btn-ghost btn-sm" data-revoke-link="${l.id}">Revoke</button>` : ''}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="6">${emptyState('fa-link', 'No partner form links yet', 'Choose a partner above and create one, then send them the link.')}</td></tr>`;
+
+  document.querySelectorAll('[data-copy-link]').forEach((b) => b.addEventListener('click', async () => {
+    const url = partnerFormUrl(b.dataset.copyLink);
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('Link copied.');
+    } catch {
+      // Clipboard needs a secure context and permission; falling back to
+      // showing the URL beats a button that silently does nothing.
+      window.prompt('Copy this link and send it to the partner:', url);
+    }
+  }));
+
+  document.querySelectorAll('[data-revoke-link]').forEach((b) => b.addEventListener('click', async () => {
+    if (!window.confirm('Revoke this link? The partner will no longer be able to send leads with it. Leads already sent are unaffected.')) return;
+    const { error } = await supabase.rpc('revoke_partner_lead_link', { p_link_id: b.dataset.revokeLink });
+    if (error) return showToast(error.message, true);
+    showToast('Link revoked.');
+    loadFormLinks();
+  }));
+
+  $('setFormsFoot').innerHTML = `<span>${rows.length.toLocaleString('en-IN')} ${rows.length === 1 ? 'link' : 'links'}</span>`;
 }
 
 function renderConsultancies() {
@@ -798,6 +872,12 @@ async function loadSettings() {
   settings.consultancies = consultancies.data;
   $('setCountConsultancies').textContent = consultancies.data.length.toLocaleString('en-IN');
   renderConsultancies();
+
+  // ---- Partner form links
+  $('formLinkConsultancy').innerHTML = '<option value="">Choose a partner…</option>'
+    + consultancies.data.filter((c) => c.is_active !== false)
+        .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  await loadFormLinks();
 
   // ---- Lender branches
   settings.lenders = lenders.data;

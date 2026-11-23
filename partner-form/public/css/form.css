@@ -1,0 +1,135 @@
+/* =========================================================
+   PARTNER LEAD FORM — the one page in the product with no sign-in.
+
+   Written for a phone held one-handed in a consultancy's office, which is
+   where almost every one of these will be filled in: a single column, 16px
+   inputs so iOS does not zoom on focus, and a submit button that stays
+   reachable with a thumb. It borrows the design tokens so it looks like
+   Zolve, but none of the app chrome — there is no nav to offer someone who
+   cannot sign in.
+   ========================================================= */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg-page);
+  color: var(--ink-900);
+  font-family: var(--font-ui), system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+.pf-wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 28px 16px 64px;
+}
+
+/* ---------- Header ---------- */
+.pf-head { margin-bottom: 18px; }
+
+.pf-brand {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 15px; font-weight: 560; letter-spacing: .01em;
+  color: var(--accent); margin-bottom: 14px;
+}
+
+.pf-head h1 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 26px; font-weight: 560; line-height: 1.2; margin: 0 0 6px;
+}
+
+.pf-sub { margin: 0; font-size: 14px; color: var(--ink-500); }
+.pf-sub strong { color: var(--ink-900); font-weight: 600; }
+
+/* ---------- Card ---------- */
+.pf-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 14px);
+  padding: 20px 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---------- Fields ---------- */
+.pf-field { margin-bottom: 16px; }
+
+.pf-field label {
+  display: block; font-size: 13px; font-weight: 600;
+  color: var(--ink-700); margin-bottom: 6px;
+}
+.pf-field label span { color: var(--danger); }
+
+.pf-field input,
+.pf-field select {
+  width: 100%;
+  /* 16px exactly: anything smaller makes iOS Safari zoom the page in on
+     focus, and the zoom does not come back out. */
+  font: inherit; font-size: 16px;
+  padding: 11px 12px;
+  color: var(--ink-900);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  appearance: none;
+}
+.pf-field select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath fill='%23888' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+.pf-field input:focus,
+.pf-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.pf-field input[aria-invalid="true"] { border-color: var(--danger); }
+
+.pf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 420px) { .pf-row { grid-template-columns: 1fr; gap: 0; } }
+
+.pf-hint { margin: 5px 0 0; font-size: 12px; color: var(--ink-500); min-height: 1em; }
+.pf-err  { margin: 5px 0 0; font-size: 12.5px; color: var(--danger); }
+.pf-err:empty { margin: 0; }
+.pf-err-top { margin-bottom: 10px; }
+
+.pf-note { margin: 0 0 12px; font-size: 13px; color: var(--ink-500); }
+
+/* ---------- Button ---------- */
+.pf-btn {
+  width: 100%;
+  font: inherit; font-size: 15px; font-weight: 600;
+  padding: 13px 16px;
+  color: #fff; background: var(--accent);
+  border: 0; border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+}
+.pf-btn:hover { filter: brightness(1.06); }
+.pf-btn:active { transform: translateY(1px); }
+.pf-btn:disabled { opacity: .6; cursor: progress; }
+
+.pf-btn-ghost {
+  color: var(--accent); background: none; border: 1px solid var(--border);
+  margin-top: 14px;
+}
+.pf-btn-ghost:hover { background: var(--bg-hover); filter: none; }
+
+.pf-privacy {
+  margin: 14px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-500);
+}
+
+/* ---------- Result states ---------- */
+.pf-done, .pf-closed { text-align: center; padding: 32px 20px; }
+.pf-done h2, .pf-closed h2 { font-size: 19px; margin: 0 0 8px; }
+.pf-done p, .pf-closed p { margin: 0; font-size: 14px; color: var(--ink-500); line-height: 1.5; }
+
+.pf-tick {
+  width: 46px; height: 46px; margin: 0 auto 14px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; font-size: 22px;
+  background: var(--success-soft); color: var(--success-soft-ink);
+}
+.pf-done.is-dup .pf-tick { background: var(--amber-soft); color: var(--amber-soft-ink); }
+.pf-closed h2 { color: var(--danger-soft-ink); }

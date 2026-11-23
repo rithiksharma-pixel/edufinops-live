@@ -18,6 +18,7 @@
   <button type="button" class="set-tab" data-set-tab="teams">Teams <span class="n" id="setCountTeams">–</span></button>
   <button type="button" class="set-tab" data-set-tab="tat">Turnaround times</button>
   <button type="button" class="set-tab" data-set-tab="documents">Document types <span class="n" id="setCountDocs">–</span></button>
+  <button type="button" class="set-tab" data-set-tab="forms">Partner forms <span class="n" id="setCountForms">–</span></button>
 </nav>
 
 <section class="set-panel" data-set-panel="consultancies">
@@ -71,6 +72,19 @@
     <form id="documentTypeForm" class="set-add"><input name="name" required placeholder="New type, e.g. Visa copy" aria-label="Document type name" /><select name="applies_to" aria-label="Applies to"><option>Student</option><option>Co-applicant</option><option>Both</option></select><select name="category" aria-label="Category"><option>KYC</option><option>Academics</option><option>Financials</option><option>Other</option></select><label class="set-check"><input name="is_required" type="checkbox" /> Required</label><button class="btn btn-secondary">Add type</button></form>
   </div>
   <div class="set-table-wrap"><table class="set-table"><thead><tr><th>Document</th><th>For</th><th>Required</th><th>Category</th></tr></thead><tbody id="documentTypesList"></tbody></table></div>
+</section>
+<section class="set-panel" data-set-panel="forms" hidden>
+  <header class="set-head"><div><h2>Partner forms</h2><p>A link a partner can open and fill in without signing in. The link decides who the lead is credited to, so each partner gets their own — and revoking one does not affect anybody else's.</p></div></header>
+  <div class="set-toolbar">
+    <form id="formLinkForm" class="set-add">
+      <select name="consultancy_id" id="formLinkConsultancy" required aria-label="Consultancy"><option value="">Choose a partner…</option></select>
+      <input name="label" placeholder="Label (optional, e.g. Hyderabad desk)" aria-label="Label" />
+      <button class="btn btn-secondary">Create link</button>
+    </form>
+    <input type="search" id="setSearchForms" class="set-search" placeholder="Search partner" />
+  </div>
+  <div class="set-table-wrap"><table class="set-table"><thead><tr><th>Partner</th><th>Link</th><th class="r">Leads in</th><th class="r">Already had</th><th>Last used</th><th></th></tr></thead><tbody id="formLinksList"></tbody></table></div>
+  <div class="set-foot" id="setFormsFoot"></div>
 </section>
 </section></main></div>
 <!-- ============ LEAD DETAIL DRAWER — shared with lead-management, see shared/css/lead-drawer.css ============ -->
